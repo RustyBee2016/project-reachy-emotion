@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.windsurf/
+.temp/
+.DS_Store
+.vscode/
+.idea/
+
+# Data & artifacts (per scaffold)
+videos/
+mlruns/
+jetson/engines/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Ignore any generated data
+temp/

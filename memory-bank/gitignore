@@ -1,0 +1,21 @@
+# Memory Bank .gitignore
+
+# Local scratchpads and private notes
+local/
+*.private.md
+*.scratch.md
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo

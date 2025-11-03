@@ -1,0 +1,38 @@
+Challenges Faced and Resolved in Step 4
+[MEMORY BANK: ACTIVE]
+Service wrapper vs. real cluster – systemctl start postgresql only touched the stub unit, so
+the 16‑main cluster never came up. Switching to the versioned service (systemctl start
+postgresql@16-main) brought the actual server online.
+Data directory permissions – PostgreSQL refused to start because
+/media/rusty_admin/postgres_db/pgdata was too permissive (wanted 0700/0750).
+Resetting ownership to postgres:postgres and chmod 0700 let the cluster boot.
+Async driver missing – Uvicorn fell back to sync psycopg and errored with
+ModuleNotFoundError: asyncpg. Installing asyncpg into /home/rusty_admin/venvs/tao
+resolved the driver mismatch.
+UUID vs. VARCHAR (video_id) – Production schema stores video.video_id as VARCHAR, so
+equality on UUID columns failed. Casting the ORM column before filtering fixed it
+@apps/api/app/repositories/video_repository.py#63-86.
+Promotion tables absent – The live database lacked training_run, training_selection, and
+promotion_log, triggering UndefinedTable. Recreated them with matching VARCHAR
+UUIDs and stamped Alembic to the current head.
+Psycopg missing for migrations – Alembic couldn’t connect via the synchronous driver until
+psycopg[binary] was installed in the same environment.
+Duplicate/typed tables – Initial migration rollback hit “relation exists” and UUID/VARCHAR
+mismatches. Dropping the partial tables and recreating them consistently with the live
+schema cleared those conflicts.
+Wrong Alembic DSN user – The default alembic.ini still pointed at reachy_app, causing
+peer-auth failures. Updating it to reachy_dev (the real service user) aligned the tooling
+DSN.
+UUID vs. VARCHAR (run_id) – training_selection.run_id comparisons still mixed types.
+Casting both video_id and run_id before filtering eliminated the final UUID/VARCHAR error
+@apps/api/app/repositories/video_repository.py#97-111.
+Cluster restarted for smoke tests – Once fixes were deployed, we verified the DB was
+actually running with postgresql@16-main before re-running curl checks.
+
+Table privileges – The reachy_dev role lacked privileges on the new tables, yielding
+permission denied. Granting SELECT/INSERT/UPDATE/DELETE plus sequence usage
+unlocked the sampling endpoint.
+After those steps, both /promote/stage and /promote/sample returned HTTP 202,
+confirming the end-to-end promotion flow is operational.
+
+

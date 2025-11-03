@@ -1,0 +1,92 @@
+diff --git a/docs/requirements.md b/docs/requirements.md
+index abcdef0..9999999 100644
+--- a/docs/requirements.md
++++ b/docs/requirements.md
+@@ -999,0 +1000,213 @@
++
++---
++
++# Reachy_Local_08.3 — Requirements Addendum v0.08.3.3 (2025-10-06)
++
++This appendix documents updates introduced since v0.08.3.2.
++It does **not** alter prior content; treat it as an incremental layer until full merge.
++
++## 1. Summary of Changes
++- Pinned TAO Toolkit container to `nvcr.io/nvidia/tao/tao-toolkit:6.25.9-pyt`
++- Defined workspace mounts and environment variables (`~/.tao_mounts.json`)
++- Canonicalized video storage path on Ubuntu 1 (`/media/rusty_admin/project_data/reachy_emotion/videos`)
++- Added endpoint map for Ubuntu 1 (10.0.4.130) and Ubuntu 2 (10.0.4.140)
++- Clarified ActionRecognitionNet schema (`model.sample_length` deprecated)
++- Confirmed Media Mover FastAPI runs on Ubuntu 1
++
++## 2. Storage and Mounts
++**Physical root:** `/media/rusty_admin/project_data/reachy_emotion/videos`
++**Logical root:** `/videos/{temp,train,test,thumbs,manifests}`
++
++Example `~/.tao_mounts.json` file:
++```json
++{
++  "Mounts": [
++    { "source": "/media/rusty_admin/project_data/reachy_emotion", "destination": "/workspace/reachy" },
++    { "source": "/home/rusty_admin/tao_specs", "destination": "/workspace/specs" },
++    { "source": "/home/rusty_admin/tao_output", "destination": "/workspace/output" }
++  ],
++  "Envs": [
++    { "variable": "PROJECT_ROOT", "value": "/workspace/reachy" },
++    { "variable": "VIDEOS_ROOT",  "value": "/workspace/reachy/videos" }
++  ]
++}
++```
++
++## 3. Component Roles
++- **Ubuntu 1 (10.0.4.130):** Media Mover API, Nginx static media, PostgreSQL, TAO training, MLflow (optional)
++- **Ubuntu 2 (10.0.4.140):** Gateway API + Web frontend; proxies to Ubuntu 1; WebSocket bridge to Jetson client.
++
++## 4. Service Endpoints
++**Ubuntu 1** (`http://10.0.4.130`)
++- Media Mover FastAPI → `:8081`
++    - `GET /api/videos/list?split={temp|train|test}`
++    - `POST /api/manifest/rebuild` → returns `dataset_hash`
++- MLflow UI → `:5000`
++- PostgreSQL → `:5432`
++- LM Studio (local LLM) → `:1234/v1/chat/completions`
++
++**Ubuntu 2** (`https://10.0.4.140`)
++- Gateway API → `/api/*` (proxies to Ubuntu 1)
++- WebSocket cues → `/ws/cues/{device_id}`
++
++## 5. Schema Notes
++If training fails with:
++```
++Error merging 'ar_train.yaml' with schema
++Key 'sample_length' not in 'ARModelConfig'
++```
++Remove the `model.sample_length` entry and set clip/window controls under dataset settings supported by your TAO AR schema.
++
++## 6. Security and Transport
++- JWT authentication for mutating endpoints between Ubuntu 2 → Ubuntu 1
++- Idempotency header (`Idempotency-Key`) on POST requests
++- Firewall allow-list for Ubuntu 1 ports: `8081, 5432, 1234, 80, 443`
++
++## 7. Quick Verification
++```bash
++curl -s "http://10.0.4.130:8081/api/videos/list?split=temp&limit=3" | jq .
++curl -s -X POST "http://10.0.4.130:8081/api/manifest/rebuild" \
++    -H "Authorization: Bearer <TOKEN>" | jq .
++```
++
++## 8. Nginx Mapping Example
++```nginx
++location /thumbs/ {
++  alias /media/rusty_admin/project_data/reachy_emotion/videos/thumbs/;
++  add_header Cache-Control "public, max-age=3600";
++}
++location /videos/ {
++  alias /media/rusty_admin/project_data/reachy_emotion/videos/;
++  internal;
++}
++```
++
++---
++
++# End of Addendum v0.08.3.3

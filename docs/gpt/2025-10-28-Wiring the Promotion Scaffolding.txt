@@ -1,0 +1,109 @@
+Wiring the Promotion Scaffolding
+Intial Codex effort:
+
+[MEMORY BANK: ACTIVE]
+Summary
+•
+
+Added Media Mover app scaffold under apps/api/app/, including package init, cached
+dataclass settings, SQLAlchemy dependency wiring, and FastAPI factory with lifespan +
+CORS (settings.py, deps.py, main.py). @apps/api/app/settings.py#1-55
+@apps/api/app/deps.py#1-39 @apps/api/app/main.py#1-45
+
+•
+
+Introduced promotion service stubs with structured result dataclasses and exported them
+for future implementation. @apps/api/app/services/promote_service.py#1-43
+@apps/api/app/services/init.py#1-4
+
+•
+
+Created promotion router with stage/sample endpoints returning structured responses
+and wired it into the app. @apps/api/app/routers/promote.py#1-53
+@apps/api/app/main.py#30-41
+
+Next steps
+1. Implement the real logic inside PromoteService.stage_to_dataset_all and .sample_split,
+handling filesystem/DB sync.
+2. Add request/response schemas and validation (e.g., pydantic models) for the new router
+endpoints.
+3. Create regression tests covering staging, sampling, and error paths before integrating with
+the gateway.
+
+-------------------- -
+
+Part 2 - Implement the real logic
+Prompt: how do you recommend implementing the real logic in a systematic manner?
+
+Reply:
+[MEMORY BANK: ACTIVE]
+Here’s a systematic path for filling in the real promotion logic.
+1. Align persistence model first
+a. Ensure Alembic migrations/tables for training_run and training_selection match the new
+requirements (schema currently captured in @memorybank/requirements_08.4.2.md#323-369).
+b. Confirm SQLAlchemy models (or create them) so the service can work with typed
+metadata instead of raw SQL.
+2. Introduce dedicated repository helpers
+a. Add a small module (e.g., app/services/repository.py) that wraps common queries: fetch
+video rows by ID, verify splits/labels, insert promotion log, create sampling selections.
+b. This keeps PromoteService (stubbed in @apps/api/app/services/promote_service.py#143) focused on orchestration logic.
+3. Implement stage_to_dataset_all step-by-step
+(@apps/api/app/services/promote_service.py#25-33)
+a. Load candidate videos via repo helper, checking they currently live in temp.
+b. Validate label policy (non-empty for staging) and guard against duplicates already in
+dataset_all.
+c. For each valid clip:
+i. Move the file on disk (temp/clip.mp4 → dataset_all/clip.mp4) using atomic rename within
+the same filesystem.
+ii. Update the DB row: set split='dataset_all', persist label, record promotion metadata.
+
+d. Wrap the DB work in a transaction so a failure rolls back both metadata and file move
+(consider a two-phase approach with temp rename + rollback handler).
+e. Return StageResult with promoted vs skipped IDs.
+4. Implement sample_split (@apps/api/app/services/promote_service.py#35-43)
+a. Validate target_split ∈ {train, test} and that a corresponding training_run exists (create if
+not).
+b. Fetch eligible candidates from dataset_all, filtering by label policy (test requires unlabeled
+copies: drop label in DB).
+c. Apply sampling strategy (balanced_random): group by label, compute counts using
+sample_fraction, seed a random.Random.
+d. Copy (not move) selected files into videos/train or videos/test, ensuring unique filenames.
+e. For each copy, insert/update DB rows in the video table (split change plus new metadata),
+and record entries in training_selection.
+f. Emit manifest or schedule rebuild trigger when finished.
+g. Return SampleResult with copied/skipped IDs; raise PromotionError for policy violations or
+insufficient clips.
+5. Standardize errors & logging
+a. Expand PromotionError to carry code, message, optional fields; log at structured points
+inside both methods.
+b. Ensure router catches these and returns consistent payloads via HTTPException.
+6. Define Pydantic request/response models
+a. Replace bare parameters in @apps/api/app/routers/promote.py#12-52 with input DTOs
+(e.g., StageRequest, SampleRequest) and typed responses.
+b. Validate numeric bounds (0 < sample_fraction ≤ 1, allowed strategies, etc.).
+7. Add observability hooks
+a. Emit structured logs for staging/sampling, including run IDs, counts, duration.
+b. Optionally integrate Prometheus counters for promoted/copied clips per label.
+8. Testing discipline
+
+a. Unit-test repository helpers and PromoteService using an in-memory or temporary
+Postgres (e.g., pytest-asyncio + fixtures).
+b. Add filesystem fixtures (tmp directories) to verify rename/copy behavior and rollback
+paths.
+c. Extend API tests (TestClient) to cover success + PromotionError translations, dry-run
+previews, and sampling edge cases.
+Following this sequence keeps separation of concerns clear and lets you iterate safely:
+schema → repo → service methods → router contracts → instrumentation → tests.
+__________________
+Prompt:
+Remember, I want to test at every opportunity before moving forward.
+
+Response:
+[MEMORY BANK: ACTIVE] Absolutely—I'll treat testing as a first-class step. For each slice
+of implementation (e.g., repo helpers, staging logic, sampling logic, router contracts) I’ll
+add tests before moving on: unit tests around the service/repo, filesystem/DB fixtures for
+side effects, and TestClient coverage for the API layer. I’ll call out the planned tests as
+soon as I start each piece so you can review before we proceed further.
+_________________________
+
+

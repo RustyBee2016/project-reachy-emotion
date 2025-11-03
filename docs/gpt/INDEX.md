@@ -1,0 +1,231 @@
+Step 5 Progress Report for Implementing observability and metrics
+2025-11-03
+Designed and implemented the observability wiring plan including instrumentation design, service integration (PromoteService), API layer adjustments, Prometheus endpoint verification, and deployment notes.
+
+Step 4 Progress report for deliverables
+2025-11-03
+Completed deliverables include the production tree matching the updated router/schemas, OpenAPI on the running Uvicorn service advertising /api/media/promote/{stage,sample} via root_path, local smoke tests returning HTTP 202 with the new contracts, and pytest tests/apps/api/routers/test_promote_router.py -q passing to lock in regression coverage. 
+
+Current Status and Next Steps
+2025-11-03
+Summary of current status and next steps for project Reachy_Local_08.4.2.
+
+Postgres and Promotion Challenges and Resolutions
+2025-11-02
+Complete list of challenges configuring Postgres to accomodate the promotion system.
+
+Summarizing the Restoration of the live promotion pipeline 
+2025-11-02
+Summary of tasks completed in step 4 including PostgreSQL availability, promotion table schema, type casting fixes, driver and service sync, permissions, and validation,
+
+Routing Issues Explained_Project Config vs. Original Uvicorn 
+2025-11-02
+Summarized the routing issues involving the project environment vs. the original uvicorn configuration and their resolution.
+
+Promotion API surface layer, proper Pydantic contracts and validation 
+2025-11-02
+Hardened the promotion API surface layers with a proper schema, including proper Pydantic contracts, validation, and updated router endpoints.
+
+Adding repository helper layer around PromoteService 
+2025-11-02
+Planned and patched the repository helper layer, completed PromoteService, exported new error classes, and introduced async integration tests.
+
+Promotion System_Summary of steps 1-3
+2025-11-01
+Summary of steps 1-3 completing the promotion system, next steps 4-6, and operational polish.
+
+01_Wiring the Promotion Scaffolding
+2025-10-28
+Initial, systematic path for filling in the real promotion logic.
+
+Adding Staging Area_ dataset_all
+2025-10-28
+Staging labeled videos in /videos/dataset_all/ as the stable, ever-growing labeled corpus provides maximal variability for fine-tuning.
+
+Directories Available to Windsurf
+2025-10-28
+Detailed list of local directories with permissions to write and execute code.
+
+Root path api_forward-slash_media_ RESOLVED
+2025-10-28
+Detailed explanation of the shared .env root path which keeps the Web gateway and Media Mover in sync without changing how routes are coded. 
+
+Detailed review of media_paths.py
+2025-10-28
+Review of the media_paths.py file which address the same concerns: mapping logical concepts (temp, train, test) to concrete filesystem paths, enforcing file hygiene rules, and preparing API-friendly metadata. 
+
+Backend completion plan_01
+2025-10-28
+Codex plan to complete the back-end services on Ubuntu 1
+
+Project Status_10-24-25
+2025-10-24
+Current state of affairs regarding project Reachy_Local_08.4.2 including remaining steps to complete the backend services on Ubuntu 1.
+
+Clearing ports 8000 & 8081
+2025-10-22
+This separation (unit on 8000, manual dev on 8081) removes the port tug-of-war and the import path confusion.
+
+Streamlit tests Backend connectivity
+025-10-22
+Tests to determine how well the frontend (Streamlit web app) interacts with the backend services.
+
+Refactored scaffold - Frontend and Backend 
+2025-10-21 
+Project Reachy_Local once we refactored it to host both the backend (FastAPI + Postgres + TAO) and the frontend (Streamlit web app) 
+
+Pydantic in Reachy_Local_08.4.2
+2025-10-21
+Within Reachy_Local_08.4.2, Pydantic sits at the heart of the backend validation layer—essentially acting as the schema enforcer and data contract between your FastAPI services, n8n agents, and PostgreSQL layer.
+Here’s its specific purpose in this project.
+
+Alembic migration overview
+2025-10-21
+Continue the process of system configuration using SQLAlchemy
+
+Updated requirements_08.4.2.md
+2025-10-21
+Consider the chat titled 'Pydantic v2 migration fix' and update the requirements_08.4.2.md document
+
+Routes by AI agents_10-21-25
+2025-10-21
+Up-to-date map of all routes by AI agent (1–10) for project Reachy_Local_08.4.2, combining what’s in requirements_08.4.2.md, AGENTS_08.4.2.md, and recent backend progress.
+
+Pydantic v2 migration result
+2025-10-21
+Result of the long grind in the chat titled “Pydantic v2 migration fix” 
+
+Pydantic trifecta
+2025-10-21
+Pydantic problems solved resulting in Uvicorn bound where we expect (127.0.0.1:8000), Nginx config valid and reloaded, and both probes return {"status":"ok"} (direct and via /api/media/…) 
+
+main.py project usage
+2025-10-21
+Explanation defining the purpose of the main.py file in project Reachy_Local_08.4.2
+
+FastAPI configuration review
+2025-10-21
+Tests to confirm FastAPI is rock solid before configuring SQLAlchemy
+
+FastAPI URL storage process
+2025-10-21
+Explanation of the entire URL generation process each time a video is received from the video generation model
+
+FastAPI SQLAlchemy config checks
+2025-10-21
+Tests to determine whether FastAPI/Media-Mover is fully in lock-step with the SQLAlchemy setup
+
+Media Mover Endpoint Document Updates
+2025-10-21
+Explanation of the endpoint for the Media Mover/FastAPI service
+
+SQLAlchemy config guide_01
+2025-10-21
+Explaining the purpose  of SQLAlchemy in project Reachy_Local_08.4.2 including part 1 of a step-by-step guide to configure SQLAlchemy on Ubuntu 1.
+
+SQLAlchemy config guide_02
+2025-10-20
+Explaining the purpose  of SQLAlchemy in project Reachy_Local_08.4.2 including part 2 of a step-by-step guide to configure SQLAlchemy on Ubuntu 1.
+
+SQLAlchemy config guide_03
+2025-10-19
+Explaining the purpose  of SQLAlchemy in project Reachy_Local_08.4.2 including part 3 of a step-by-step guide to configure SQLAlchemy on Ubuntu 1.
+
+Media Mover configuration
+2025-10-17
+Media Mover installation and configuration
+
+Postgres video URL & metadata setup
+2025-10-16
+Explanation of the Postgres metadata and URL process based on three parts working together: (1) a Postgres schema that treats the DB as the source of truth for labels/splits and stores a path to the clip, (2) a filesystem layout that never changes its root, and (3) a tiny Media Mover API that atomically moves files and keeps DB + manifests in lock-step.
+
+Video labeling 50/50 & project file updates
+2025-10-16
+Explaining the 50/50 mixture (sad/happy emotions) of unlabeled videos stored at the path videos/test/.
+
+Video labeling workflow
+2025-10-15
+Explanation of the video labeling workflow 
+
+DeepStream emotion classification
+2025-10-15
+Explanation of the DeepStream emotion classification process on the NVIDIA Jetson (edge) device
+
+NVIDIA TAO Toolkit versions for Reachy 08.4
+2025-10-15
+Explanation of the NVIDIA TAO Toolkit versions required for Reachy 08.4
+
+Train EmotionNet for SAD
+2025-10-15
+Explanation of the EmotionNet training process for the SAD emotion
+
+LM Studio endpoint configurations
+2025-10-15
+Explanation of the correct endpoint configurations for the LM Studio
+
+01_Ingest Agent n8n development
+2025-10-11
+Explanation of the Ingest agent, the first agent in the agentic AI system which receives new video URLs/callbacks, authenticates and normalizes them, instructs Media Mover to pull and fingerprint the file (ffprobe + thumbnail), writes the resulting metadata to the app/DB, and returns a clear status to the caller.
+
+02_Labeling Agent development
+2025-10-11
+Explanation of the Labeling agent, the second agent in the agentic AI system, which serves as the “human-in-the-loop glue”: taking a label event from the web app, validates it, committing it to Postgres, optionally hitting Media-Mover for /relabel or /promote, and handing a clean response back to the UI. 
+
+03_Promotion Curation Agent setup
+2025-10-11
+Explanation of the Promotion Curation agent, the third agent in the agentic AI system, which serves as the agent responsible for turning a user-labeled clip into a traceable, reversible, and boring-reliable dataset.
+
+04_Develop Reconciler Agent
+2025-10-11
+Explanation of the Reconciler agent, the fourth agent in the agentic AI system, which serves as the cop who walks the beat at night: finding drift between DB ↔ filesystem ↔ manifests, files tickets, and only fixing what it’s allowed to fix.
+
+05_Training Orchestrator AI Setup
+2025-10-11
+Explanation of the Training Orchestrator AI agent, the fifth agent in the agentic AI system which serves as the 'heartbeat,' turning a promoted dataset into a fresh EmotionNet run (TAO), tracking it in MLflow, enforcing Gate A metrics, and (if green) exporting a TRT engine for downstream evaluation.
+
+06_Evaluation Agent Development
+2025-10-11
+Explanation of the Evaluation agent, the sixth agent in the agentic AI system, which sits in the middle of your gates (A/B/C), pulls metrics from training, checks them against the thresholds in requirements, and decides what’s safe to promote next.
+
+07_Deployment Agent
+2025-10-11
+Explanation of the Deployment agent, the seventh agent in the agentic AI system which turns a “good” engine into a “safe” rollout on the Jetson—clean hand-offs, approvals, and fast rollback.
+
+08_Privacy Retention Agent
+2025-10-11
+Explanation of the Privacy Retention AI agent, the eighth agent in the agentic AI system which serves as the project’s broom and shredder: it enforces TTLs, handles DSAR “forget me” requests, and keeps derived artifacts aligned with deletion rules—without touching raw video unless policy says so. Below is a concrete, n8n-first design wired to your specs (TTL on /videos/temp, DSAR/right-to-be-forgotten, manifests as derived views, MLflow lineage via dataset_hash, NAS mirroring)
+
+09_Observability / Telemetry Agent
+2025-10-11
+Explanation of the Observability/Telemetry AI agent, the ninth agent in the agentic AI system, which serves as the “eyes & ears” to (1) expose platform health, (2) turn errors into actionable incidents, and (3) watch your SLAs so it barks before things break.
+
+10_TAO alongside Gap-Fill agent_intro
+2025-10-11
+Explanation of the Gap-Fill agent, which focuses on data acquisition and optional synthesis—never on training.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

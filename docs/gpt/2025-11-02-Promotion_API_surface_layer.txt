@@ -1,0 +1,128 @@
+Promotion API surface layer, proper Pydantic contracts and
+validation
+
+Part 4.A
+[MEMORY BANK: ACTIVE]
+Step 4A focus: harden the promotion API surface with proper Pydantic contracts and
+validation.
+
+Proposed schema additions
+1. Create apps/api/app/schemas/promote.py with:
+a. StageRequest (video_ids: conlist(uuid.UUID, min_length=1,
+max_length=200), label: Literal["happy","sad"]; accept string input but use
+UUID/enum coercion).
+b. StageResponse (status, promoted_ids, skipped_ids, failed_ids).
+c. SampleRequest (run_id: UUID, target_split: Literal["train","test"],
+sample_fraction: condecimal(gt=0, le=1, max_digits=4, decimal_places=3),
+strategy: Literal["balanced_random"], optional seed: conint(ge=0, le=2**311)).
+d. SampleResponse mirroring SampleResult.
+Embed ConfigDict(from_attributes=True) so service dataclasses map cleanly.
+
+2. Update router endpoints to use these models:
+a. Accept request bodies (StageRequest, SampleRequest) via dependency
+injection, return typed responses (StageResponse, SampleResponse).
+b. Drop unused settings injection unless required elsewhere; current handlers
+ignore it (@apps/api/app/routers/promote.py#19-85).
+c. Centralize exception translation to ensure validation surfaces 422s with
+structured payloads.
+
+3. Expose schemas from a package init (e.g.,
+apps/api/app/schemas/__init__.py) for reuse by other routers or docs.
+
+Validation/serialization considerations
+•
+
+Rely on Pydantic to normalize UUIDs/labels rather than manual checks currently
+inside PromoteService, keeping both layers consistent
+(@apps/api/app/services/promote_service.py#75-273).
+
+•
+
+Ensure OpenAPI docs show detailed request/response shapes, aiding UI
+integration.
+
+Test plan
+1. New API tests under tests/apps/api/routers/test_promote_router.py:
+a. Happy paths for POST /api/media/promote/stage and /promote/sample,
+using async TestClient with patched service returning known
+StageResult/SampleResult.
+b. Input validation failures: empty video_ids, invalid UUID, sample fraction ≤0,
+unsupported label/split/strategy → expect 422 responses.
+2. Update/extend existing service tests only if schema changes require adjustments
+(current coverage already exercises core logic
+@tests/apps/api/services/test_promote_service.py#27-442).
+Once you approve this schema + test plan, I’ll implement the models, router updates, and
+accompanying tests.
+
+______________________ _
+
+Proceed with the recommended schema + test plan. Implement the models, router
+updates, and accompanying tests as described.
+Big problems testing the promotion routes (test vs. FastAPI )
+
+Summary of issue and how it was resolved:
+[MEMORY BANK: ACTIVE]
+Promotion router issue – what went wrong and how we fixed it
+•
+
+The FastAPI app is created with root_path="/api/media" (see create_app).
+
+•
+
+The promotion router used to declare APIRouter(prefix="/api/media") and its
+endpoints as "/promote/stage" and "/promote/sample".
+
+•
+
+FastAPI composes the public URL as root_path + router prefix + route path, so the
+real path became /api/media/api/media/promote/stage.
+
+•
+
+In tests (and any client) we were calling /api/media/promote/stage, which didn’t
+match the doubled prefix, hence every request returned 404.
+
+•
+
+Fix: keep the app’s root_path at /api/media, but change the promotion router prefix
+to "/promote" and the route paths to "/stage" / "/sample". Now FastAPI assembles
+/api/media/promote/stage and /api/media/promote/sample—the intended URLs.
+Once that was adjusted, the ASGI tests passed.
+
+About the pytest warnings
+DeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use
+'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+FastAPI (and Starlette) renamed the 422 constant. We currently use
+status.HTTP_422_UNPROCESSABLE_ENTITY in the router. Two options:
+1. Update those status codes to status.HTTP_422_UNPROCESSABLE_CONTENT
+(preferred, keeps everything modern and silences the warning).
+2. Suppress the warning in pytest if we need to stay on the old name temporarily (not
+recommended long-term).
+Let me know if you’d like me to apply the constant change now. After that, we can proceed
+with the live FastAPI endpoint checks.
+---------------------------- --
+
+Next: proceed with the live FastAPI endpoint checks.
+
+[MEMORY BANK: ACTIVE]
+Promotion router now exposes /promote/stage and /promote/sample, so—combined with
+the app’s root_path="/api/media"—the public URLs are /api/media/promote/stage and
+/api/media/promote/sample as intended. Tests succeeded (pytest
+tests/apps/api/routers/test_promote_router.py) after updating the router prefix and
+replacing deprecated 422 constants with HTTP_422_UNPROCESSABLE_CONTENT
+@apps/api/app/routers/promote.py#17-80. The deprecation warnings are gone.
+Live FastAPI check (next step)
+1. Start the service (example): uvicorn apps.api.app.main:app --reload --port 8000
+2. Hit the endpoints (adjust host/port as needed): curl -X POST
+http://localhost:8000/api/media/promote/stage \
+-H "Content-Type: application/json" \
+-d '{"video_ids":["550e8400-e29b-41d4-a716-446655440000"],"label":"happy"}'
+curl -X POST http://localhost:8000/api/media/promote/sample \
+-H "Content-Type: application/json" \
+-d '{"run_id":"313fad80-e652-4ec8-bc6b248ccb89d96e","target_split":"train","sample_fraction":0.5,"strategy":"balanced_ra
+ndom"}'
+Expect 202 responses matching the schema models; errors propagate with
+422/409/400 codes per service exceptions.
+Let me know the results of those live calls or if you’d prefer scripted checks.
+
+
