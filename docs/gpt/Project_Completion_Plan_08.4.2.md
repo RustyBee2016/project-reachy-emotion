@@ -28,7 +28,7 @@ Reachy_Local_08.4.2 is a privacy-first robotic emotion recognition system combin
 
 ## Current State Assessment
 
-### ✅ **Completed Components** (90% Backend Infrastructure)
+### Completed Components (90% Backend Infrastructure)
 1. **Ubuntu 1 (Model Host) - Backend Services**
    - PostgreSQL 16 database schema with video metadata tables
    - FastAPI Media Mover service (`/api/media/*` endpoints)
@@ -50,7 +50,7 @@ Reachy_Local_08.4.2 is a privacy-first robotic emotion recognition system combin
    - Memory-bank system for persistent context
    - Decision records and runbook templates
 
-### 🚧 **Partially Completed** (40% Implementation)
+### In-Progress Components (40% Implementation)
 1. **Web Application (Streamlit)**
    - Basic UI structure with landing page
    - Video upload/generation interface design
@@ -62,7 +62,7 @@ Reachy_Local_08.4.2 is a privacy-first robotic emotion recognition system combin
    - Pydantic v2 schemas created
    - **Missing**: Live connections between UI and backend services
 
-### ❌ **Not Started** (0% Implementation)
+### Not Started Components (0% Implementation)
 1. **Machine Learning Pipeline**
    - TAO Toolkit environment setup
    - EmotionNet model fine-tuning workflow
@@ -97,36 +97,35 @@ Reachy_Local_08.4.2 is a privacy-first robotic emotion recognition system combin
 
 ### **Current Network Topology**
 ```
-┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
-│   Ubuntu 1 (130)    │────▶│   Ubuntu 2 (140)    │◀────│  Jetson NX (150)   │
-│   Model Host        │     │   App Gateway       │     │   Edge Device      │
-├─────────────────────┤     ├─────────────────────┤     ├─────────────────────┤
-│ • PostgreSQL DB     │     │ • Nginx Proxy       │     │ • DeepStream       │
-│ • Media Mover API   │     │ • FastAPI Gateway   │     │ • TensorRT         │
-│ • TAO Training      │     │ • Streamlit UI      │     │ • Camera Input     │
-│ • LM Studio (LLM)   │     │ • n8n Orchestrator  │     │ • WebSocket Client │
-│ • Video Storage     │     │ • WebSocket Server  │     │ • Emotion Engine   │
-│ • MLflow Tracking   │     │                     │     │                    │
-└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
++----------------------+     +----------------------+     +----------------------+
+| Ubuntu 1 (130)       | --> | Ubuntu 2 (140)       | <-- | Jetson NX (150)      |
+| Model Host           |     | App Gateway          |     | Edge Device          |
+| - PostgreSQL DB      |     | - Nginx Proxy        |     | - DeepStream         |
+| - Media Mover API    |     | - FastAPI Gateway    |     | - TensorRT           |
+| - TAO Training       |     | - Streamlit UI       |     | - Camera Input       |
+| - LM Studio (LLM)    |     | - n8n Orchestrator   |     | - WebSocket Client   |
+| - Video Storage      |     | - WebSocket Server   |     | - Emotion Engine     |
+| - MLflow Tracking    |     |                      |     |                      |
++----------------------+     +----------------------+     +----------------------+
 ```
 
 ### **Data Flow Architecture**
 ```
-1. Video Generation → Ingest → Label → Promote → Dataset_all
-2. Dataset_all → Random Sample → Train/Test Splits → TAO Training
-3. Model → TensorRT Export → DeepStream Deploy → Jetson Inference
-4. Live Camera → Emotion Detection → LLM Adaptation → User Response
+1. Video Generation -> Ingest -> Label -> Promote -> Dataset_all
+2. Dataset_all -> Random Sample -> Train/Test Splits -> TAO Training
+3. Model -> TensorRT Export -> DeepStream Deploy -> Jetson Inference
+4. Live Camera -> Emotion Detection -> LLM Adaptation -> User Response
 ```
 
 ### **Storage Layout** (`/media/project_data/reachy_emotion/videos/`)
 ```
 videos/
-├── temp/           # Unlabeled incoming videos (7-14 day TTL)
-├── dataset_all/    # Canonical labeled corpus (permanent)
-├── train/          # Per-run training subset (70% random sample)
-├── test/           # Per-run test subset (30% random sample, unlabeled)
-├── thumbs/         # Video thumbnails (JPEG)
-└── manifests/      # JSONL manifests with run_id tracking
+|- temp/           # Unlabeled incoming videos (7-14 day TTL)
+|- dataset_all/    # Canonical labeled corpus (permanent)
+|- train/          # Per-run training subset (70% random sample)
+|- test/           # Per-run test subset (30% random sample, unlabeled)
+|- thumbs/         # Video thumbnails (JPEG)
+\- manifests/      # JSONL manifests with run_id tracking
 ```
 
 ---
@@ -300,8 +299,8 @@ videos/
   - Sub-task: Link dataset_hash
 
 - [ ] **Task 2.2.3**: Implement validation gates
-  - Sub-task: Gate A - Offline validation (F1 ≥ 0.84)
-  - Sub-task: Gate B - Shadow mode (latency ≤ 250ms)
+  - Sub-task: Gate A - Offline validation (F1 >= 0.84)
+  - Sub-task: Gate B - Shadow mode (latency <= 250ms)
   - Sub-task: Gate C - User rollout (complaints < 1%)
 
 ### **Week 6-7: Edge Deployment**
@@ -521,39 +520,39 @@ videos/
 ## Success Criteria
 
 ### **Phase 1 Success Metrics**
-- ✅ All backend APIs return 200 status
-- ✅ Web UI can upload and label videos
-- ✅ Database contains > 100 labeled videos
-- ✅ Promotion workflow moves files correctly
-- ✅ Manifests rebuild within 2 minutes
+- [x] All backend APIs return 200 status
+- [x] Web UI can upload and label videos
+- [x] Database contains > 100 labeled videos
+- [x] Promotion workflow moves files correctly
+- [x] Manifests rebuild within 2 minutes
 
 ### **Phase 2 Success Metrics**
-- ✅ TAO training completes successfully
-- ✅ Model achieves > 84% F1 score
-- ✅ MLflow tracks all experiments
-- ✅ TensorRT engine exports correctly
-- ✅ Validation gates pass automatically
+- [x] TAO training completes successfully
+- [x] Model achieves > 84% F1 score
+- [x] MLflow tracks all experiments
+- [x] TensorRT engine exports correctly
+- [x] Validation gates pass automatically
 
 ### **Phase 3 Success Metrics**
-- ✅ DeepStream runs at 30 FPS
-- ✅ Inference latency < 100ms (p50)
-- ✅ WebSocket events stream reliably
-- ✅ Emotion detection accuracy > 85%
-- ✅ System runs 24 hours without crash
+- [x] DeepStream runs at 30 FPS
+- [x] Inference latency < 100ms (p50)
+- [x] WebSocket events stream reliably
+- [x] Emotion detection accuracy > 85%
+- [x] System runs 24 hours without crash
 
 ### **Phase 4 Success Metrics**
-- ✅ All 9 agents operational in n8n
-- ✅ Video generation produces 50 clips/day
-- ✅ Class balance maintained at 50/50 ±5%
-- ✅ Automated training triggers work
-- ✅ End-to-end pipeline < 10 min/video
+- [x] All 9 agents operational in n8n
+- [x] Video generation produces 50 clips/day
+- [x] Class balance maintained at 50/50 +/-5%
+- [x] Automated training triggers work
+- [x] End-to-end pipeline < 10 min/video
 
 ### **Phase 5 Success Metrics**
-- ✅ 99.9% uptime over 7 days
-- ✅ All dashboards populated with data
-- ✅ Alerts fire correctly on issues
-- ✅ Security audit passes
-- ✅ Documentation complete
+- [x] 99.9% uptime over 7 days
+- [x] All dashboards populated with data
+- [x] Alerts fire correctly on issues
+- [x] Security audit passes
+- [x] Documentation complete
 
 ---
 

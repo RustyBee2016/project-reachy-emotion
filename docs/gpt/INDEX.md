@@ -1,3 +1,11 @@
+Status update 02_Phase 2
+2025-11-04 
+Lists test results and next steps to complete Phase 2
+
+Status Update_01 after stopping Phase 2 tests
+2025-11-04 
+Lists test results completed before stopping the tests 'in-process.' 
+
 Confirmation completing final two backend services on Ubuntu 1 
 2025-11-03
 Completed the final two backend services on Ubuntu 1 including the operational filesystem and monitoring of PostgreSQL.

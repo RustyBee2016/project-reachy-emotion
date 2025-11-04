@@ -1,0 +1,33 @@
+[Unit]
+Description=Reachy Emotion Detection Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reachy
+Group=reachy
+WorkingDirectory=/home/reachy/reachy_emotion
+ExecStart=/usr/bin/python3 /home/reachy/reachy_emotion/jetson/emotion_main.py --config /home/reachy/reachy_emotion/jetson/deepstream/emotion_pipeline.txt --gateway http://10.0.4.140:8000
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Resource limits
+MemoryLimit=2G
+CPUQuota=400%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=reachy-emotion
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+Environment="CUDA_VISIBLE_DEVICES=0"
+
+[Install]
+WantedBy=multi-user.target

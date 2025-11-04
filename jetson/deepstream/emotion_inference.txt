@@ -1,0 +1,36 @@
+# nvinfer Configuration for EmotionNet TensorRT Engine
+# Optimized for real-time inference on Jetson Xavier NX
+
+[property]
+gpu-id=0
+batch-size=1
+network-mode=2
+model-engine-file=../engines/emotionnet_fp16.engine
+labelfile-path=emotion_labels.txt
+int8-calib-file=../engines/emotionnet_cal.bin
+network-input-order=0
+model-color-format=0
+network-type=100
+num-detected-classes=2
+interval=0
+gie-unique-id=1
+process-mode=1
+infer-dims=3;224;224
+maintain-aspect-ratio=0
+symmetric-padding=1
+output-blob-names=dense_2/Softmax
+output-tensor-meta=1
+offsets=123.675;116.28;103.53
+net-scale-factor=0.0171247538316637
+workspace-size=2048
+cluster-mode=2
+
+[class-attrs-all]
+pre-cluster-threshold=0.5
+topk=1
+
+[class-attrs-0]
+threshold=0.5
+
+[class-attrs-1]
+threshold=0.5

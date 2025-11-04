@@ -3,8 +3,23 @@
 Local-first, LAN-contained pipeline for real-time emotion recognition on the Reachy Mini robot, powered by an on-device EmotionNet classifier (TensorRT) and an on-prem LLM for empathetic dialogue. Synthetic video generation and human-in-the-loop curation feed a continuous fine-tuning loop.
 
 - Target platform: `Reachy Mini (Jetson Xavier NX 16GB)`
-- Primary language: `Python 3.8+`
+- Primary language: `Python 3.12+`
 - Core stack: DeepStream 6.x + TensorRT 8.6+ (Jetson), FastAPI + Nginx (Ubuntu 2), LM Studio (Ubuntu 1), PostgreSQL (metadata only)
+
+## 📊 Implementation Status
+
+**Phases Completed**: 3 of 5 (60%)  
+**Tests Created**: 151  
+**Test Pass Rate**: 137+ passing (90%+)
+
+✅ **Phase 1**: Web UI & Foundation (43 tests)  
+✅ **Phase 2**: ML Pipeline (62 tests)  
+✅ **Phase 3**: Edge Deployment (46 tests)  
+⏳ **Phase 4**: n8n Orchestration (Pending)  
+⏳ **Phase 5**: Production Hardening (Pending)
+
+**See**: `IMPLEMENTATION_STATUS.md` for detailed status  
+**Quick Reference**: `QUICK_REFERENCE.md` for common commands
 
 ## Quick Start
 

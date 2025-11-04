@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # TAO 4.x for training EmotionNet
+  tao-train:
+    image: nvcr.io/nvidia/tao/tao-toolkit:4.0.0-tf2.11.0
+    container_name: reachy-tao-train
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - TF_CPP_MIN_LOG_LEVEL=2
+    volumes:
+      # Dataset volumes
+      - /media/project_data/reachy_emotion/videos:/workspace/data:ro
+      - /media/project_data/reachy_emotion/videos/manifests:/workspace/manifests:ro
+      
+      # Training specs and configs
+      - ./specs:/workspace/specs:ro
+      
+      # Experiments output (models, checkpoints, logs)
+      - ./experiments:/workspace/experiments:rw
+      
+      # MLflow artifacts
+      - ../../mlruns:/workspace/mlruns:rw
+      
+      # Scripts
+      - ../:/workspace/trainer:ro
+    working_dir: /workspace
+    command: tail -f /dev/null  # Keep container running
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - reachy-net
+    healthcheck:
+      test: ["CMD", "nvidia-smi"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # TAO 5.3 for TensorRT export
+  tao-export:
+    image: nvcr.io/nvidia/tao/tao-toolkit:5.3.0-pyt
+    container_name: reachy-tao-export
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      # Trained models from experiments
+      - ./experiments:/workspace/experiments:ro
+      
+      # TensorRT engines output
+      - ../../jetson/engines:/workspace/engines:rw
+      
+      # Calibration data for INT8
+      - /media/project_data/reachy_emotion/videos/test:/workspace/calibration:ro
+    working_dir: /workspace
+    command: tail -f /dev/null
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - reachy-net
+    healthcheck:
+      test: ["CMD", "nvidia-smi"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  reachy-net:
+    driver: bridge
