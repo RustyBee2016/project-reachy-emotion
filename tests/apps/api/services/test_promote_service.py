@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import cast
 
 import pytest
 from alembic import command
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.app.db import models
 from apps.api.app.db.session import get_async_engine, get_async_sessionmaker
@@ -19,6 +21,17 @@ from apps.api.app.services import (
 )
 from tests.apps.api.db.test_migrations import _alembic_config
 
+class _StubManifestBackend:
+    def __init__(self) -> None:
+        self.schedule_calls: list[tuple[str, str | None]] = []
+        self.reset_calls: list[tuple[str, str | None]] = []
+
+    def schedule_rebuild(self, *, reason: str, run_id: str | None) -> None:
+        self.schedule_calls.append((reason, run_id))
+
+    def reset(self, *, reason: str, run_id: str | None) -> None:
+        self.reset_calls.append((reason, run_id))
+
 
 @pytest.fixture(autouse=True)
 def _reset_metrics() -> None:
@@ -30,9 +43,11 @@ def _write_file(path: Path, content: bytes = b"data") -> None:
     path.write_bytes(content)
 
 
-def _make_service(session, root: Path) -> PromoteService:
+def _make_service(session, root: Path) -> tuple[PromoteService, _StubManifestBackend]:
     root.mkdir(parents=True, exist_ok=True)
-    return PromoteService(session, file_mover=FileMover(root))
+    manifest_backend = _StubManifestBackend()
+    service = PromoteService(session, file_mover=FileMover(root), manifest_backend=manifest_backend)
+    return service, manifest_backend
 
 
 @pytest.mark.asyncio
@@ -59,7 +74,7 @@ async def test_stage_to_dataset_all_promotes_and_logs(tmp_path: Path) -> None:
 
         _write_file(videos_root / "temp" / "clip_stage.mp4")
 
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.stage_to_dataset_all([str(video.video_id)], label="happy")
         await session.commit()
 
@@ -72,6 +87,8 @@ async def test_stage_to_dataset_all_promotes_and_logs(tmp_path: Path) -> None:
         assert result.failed_ids == ()
 
         assert (videos_root / "dataset_all" / "clip_stage.mp4").exists()
+
+        assert backend.schedule_calls == [("stage_to_dataset_all", None)]
 
         promotions = (
             await session.execute(
@@ -118,7 +135,7 @@ async def test_stage_filesystem_failure_increments_metrics(tmp_path: Path) -> No
         session.add(video)
         await session.flush()
 
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionError):
             await service.stage_to_dataset_all([str(video.video_id)], label="happy")
 
@@ -130,6 +147,7 @@ async def test_stage_filesystem_failure_increments_metrics(tmp_path: Path) -> No
             "promotion_filesystem_failures_total",
             {"action": "stage"},
         ) == 1.0
+        assert backend.schedule_calls == []
 
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()
@@ -168,7 +186,7 @@ async def test_stage_skips_non_temp_and_duplicates(tmp_path: Path) -> None:
         _write_file(videos_root / "temp" / "clip_temp.mp4", b"temp")
         _write_file(videos_root / "dataset_all" / "clip_existing.mp4", b"dataset")
 
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.stage_to_dataset_all(
             [str(temp_video.video_id), str(dataset_video.video_id), str(temp_video.video_id)],
             label="sad",
@@ -190,6 +208,8 @@ async def test_stage_skips_non_temp_and_duplicates(tmp_path: Path) -> None:
 
         assert (videos_root / "dataset_all" / "clip_temp.mp4").exists()
         assert (videos_root / "dataset_all" / "clip_existing.mp4").exists()
+
+        assert backend.schedule_calls == [("stage_to_dataset_all", None)]
 
         logs = (
             await session.execute(select(models.PromotionLog))
@@ -214,7 +234,7 @@ async def test_stage_rejects_invalid_uuid(tmp_path: Path) -> None:
 
     videos_root = tmp_path / "videos"
     async with sessionmaker() as session:
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError):
             await service.stage_to_dataset_all(["not-a-uuid"], label="happy")
 
@@ -247,13 +267,15 @@ async def test_stage_skips_when_no_eligible_videos(tmp_path: Path) -> None:
 
         _write_file(videos_root / "dataset_all" / "clip_exists.mp4")
 
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.stage_to_dataset_all([str(video.video_id)], label="happy")
         await session.commit()
 
         assert result.promoted_ids == ()
         assert result.skipped_ids == (str(video.video_id),)
         assert result.failed_ids == ()
+
+        assert backend.schedule_calls == []
 
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()
@@ -272,7 +294,7 @@ async def test_stage_returns_skipped_for_missing_ids(tmp_path: Path) -> None:
 
     videos_root = tmp_path / "videos"
     async with sessionmaker() as session:
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.stage_to_dataset_all([str(uuid.uuid4())], label="happy")
         assert result.promoted_ids == ()
         assert len(result.skipped_ids) == 1
@@ -282,6 +304,8 @@ async def test_stage_returns_skipped_for_missing_ids(tmp_path: Path) -> None:
             "promotion_operations_total",
             {"action": "stage", "outcome": "success"},
         ) == 1.0
+
+        assert backend.schedule_calls == []
 
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()
@@ -317,7 +341,7 @@ async def test_sample_fraction_greater_than_one_selects_all(tmp_path: Path) -> N
             _write_file(videos_root / "dataset_all" / f"clip_{idx}.mp4", bytes([idx]))
 
         run_id = uuid.uuid4()
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.sample_split(
             run_id=str(run_id),
             target_split="train",
@@ -377,7 +401,7 @@ async def test_sample_into_test_clears_labels(tmp_path: Path) -> None:
         _write_file(videos_root / "dataset_all" / "clip_test.mp4")
 
         run_id = uuid.uuid4()
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.sample_split(
             run_id=str(run_id),
             target_split="test",
@@ -407,9 +431,19 @@ async def test_sample_into_test_clears_labels(tmp_path: Path) -> None:
         assert (videos_root / "dataset_all" / "clip_test.mp4").exists()
         assert (videos_root / "test" / str(run_id) / "clip_test.mp4").exists()
 
+        assert backend.schedule_calls == [("sample_split", str(run_id))]
+
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()
     command.downgrade(cfg, "base")
+
+
+def test_reset_manifest_invokes_backend() -> None:
+    backend = _StubManifestBackend()
+    service = PromoteService(cast(AsyncSession, object()), manifest_backend=backend)
+
+    service.reset_manifest(reason="manual_reset", run_id="abc123")
+    assert backend.reset_calls == [("manual_reset", "abc123")]
 
 
 @pytest.mark.asyncio
@@ -433,7 +467,8 @@ async def test_stage_requires_label(tmp_path: Path) -> None:
         session.add(video)
         await session.flush()
 
-        service = PromoteService(session)
+        backend = _StubManifestBackend()
+        service = PromoteService(session, manifest_backend=backend)
         with pytest.raises(PromotionValidationError):
             await service.stage_to_dataset_all([str(video.video_id)], label=None)
 
@@ -441,6 +476,8 @@ async def test_stage_requires_label(tmp_path: Path) -> None:
             "promotion_operations_total",
             {"action": "stage", "outcome": "error"},
         ) == 1.0
+
+        assert backend.schedule_calls == []
 
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()
@@ -476,7 +513,7 @@ async def test_sample_split_creates_training_selection(tmp_path: Path) -> None:
             _write_file(videos_root / "dataset_all" / f"clip_{idx}.mp4", bytes([idx]))
 
         run_id = uuid.uuid4()
-        service = _make_service(session, videos_root)
+        service, backend = _make_service(session, videos_root)
         result = await service.sample_split(
             run_id=str(run_id),
             target_split="train",
@@ -514,6 +551,8 @@ async def test_sample_split_creates_training_selection(tmp_path: Path) -> None:
         for selection in selections:
             clip_name = Path(next(v.file_path for v in videos if v.video_id == selection.video_id)).name
             assert (videos_root / "train" / str(run_id) / clip_name).exists()
+
+        assert backend.schedule_calls == [("sample_split", str(run_id))]
 
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()

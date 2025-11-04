@@ -7,7 +7,14 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from ..deps import get_promote_service
-from ..schemas import SampleRequest, SampleResponse, StageRequest, StageResponse
+from ..schemas import (
+    ResetManifestRequest,
+    ResetManifestResponse,
+    SampleRequest,
+    SampleResponse,
+    StageRequest,
+    StageResponse,
+)
 from ..services import (
     PromoteService,
     PromotionConflictError,
@@ -77,6 +84,28 @@ async def stage_videos(  # noqa: D401
             detail=_error_detail(str(exc), correlation_id),
             headers={CORRELATION_ID_HEADER: correlation_id},
         ) from exc
+
+
+@router.post(
+    "/reset-manifest",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ResetManifestResponse,
+)
+async def reset_manifest(  # noqa: D401
+    payload: ResetManifestRequest,
+    request_ctx: Request,
+    response: Response,
+    service: PromoteService = Depends(get_promote_service),
+):
+    """Reset manifest state for training orchestrators."""
+
+    correlation_id = _resolve_correlation_id(request_ctx)
+    service.set_correlation_id(correlation_id)
+    run_id = str(payload.run_id) if payload.run_id is not None else None
+    service.reset_manifest(reason=payload.reason, run_id=run_id)
+    await service.commit()
+    response.headers[CORRELATION_ID_HEADER] = correlation_id
+    return ResetManifestResponse.from_request(request=payload)
 
 
 @router.post(

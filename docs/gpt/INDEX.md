@@ -1,3 +1,15 @@
+Confirmation completing final two backend services on Ubuntu 1 
+2025-11-03
+Completed the final two backend services on Ubuntu 1 including the operational filesystem and monitoring of PostgreSQL.
+
+Step 6.B-Progress Report_Integrations - Dry-Runs of Postgres & File system + Manifest Rebuild
+2025-11-03
+Completed the integration of the promotion system with the database and the file system, including honor dry-run semantics, add httpx end‑to‑end tests that cover Postgres + filesystem effects, and prep manifest rebuild/reset hooks for training orchestration.
+
+Step 6.A-Progress Report_Integrations - Dry-Runs of Postgres & File system + Manifest Rebuild 
+2025-11-03
+Plan and partial integration including honor dry-run semantics, add httpx end‑to‑end tests that cover Postgres + filesystem effects, and prep manifest rebuild/reset hooks for training orchestration.
+
 Step 5 Progress Report for Implementing observability and metrics
 2025-11-03
 Designed and implemented the observability wiring plan including instrumentation design, service integration (PromoteService), API layer adjustments, Prometheus endpoint verification, and deployment notes.

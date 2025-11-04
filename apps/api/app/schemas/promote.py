@@ -137,3 +137,45 @@ class SampleResponse(BaseModel):
             failed_ids=list(result.failed_ids),
             dry_run=result.dry_run,
         )
+
+
+class ResetManifestRequest(BaseModel):
+    """Request body for resetting manifest state."""
+
+    reason: str = Field(
+        ...,
+        description="Human-readable reason for triggering a manifest reset.",
+    )
+    run_id: UUID4 | None = Field(
+        default=None,
+        description="Optional training run identifier scoped to the reset.",
+    )
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("reason must not be empty")
+        return normalized
+
+
+class ResetManifestResponse(BaseModel):
+    """Response payload after invoking a manifest reset."""
+
+    status: Literal["accepted", "error"] = "accepted"
+    reason: str
+    run_id: str | None = None
+
+    @classmethod
+    def from_request(
+        cls,
+        *,
+        request: ResetManifestRequest,
+    ) -> "ResetManifestResponse":
+        run_id = str(request.run_id) if request.run_id is not None else None
+        return cls(
+            status="accepted",
+            reason=request.reason,
+            run_id=run_id,
+        )
