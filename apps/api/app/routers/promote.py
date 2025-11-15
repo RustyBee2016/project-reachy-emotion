@@ -22,7 +22,7 @@ from ..services import (
     PromotionValidationError,
 )
 
-router = APIRouter(prefix="/promote", tags=["promote"])
+router = APIRouter(prefix="/api/v1/promote", tags=["promote"])
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
 

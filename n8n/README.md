@@ -78,15 +78,15 @@ Create `/home/node/.n8n/.env` (or set in Docker Compose):
 N8N_METRICS=true
 GENERIC_TIMEZONE=America/New_York
 N8N_BASIC_AUTH_ACTIVE=true
-N8N_BASIC_AUTH_USER=admin
-N8N_BASIC_AUTH_PASSWORD=<SECURE_PASSWORD>
+N8N_BASIC_AUTH_USER=default_admin
+N8N_BASIC_AUTH_PASSWORD=<your_password>
 
 # Project-Specific
 MEDIA_MOVER_BASE_URL=http://10.0.4.130:8081/api
 GATEWAY_BASE_URL=http://10.0.4.140:8000
 MLFLOW_URL=http://10.0.4.130:5000
 MLFLOW_EXPERIMENT_ID=0
-INGEST_TOKEN=<SECURE_RANDOM_TOKEN>
+INGEST_TOKEN=<your_password>
 ```
 
 ### 4. Import Workflows

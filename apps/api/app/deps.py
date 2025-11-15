@@ -13,40 +13,40 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from .fs import FileMover
 from .manifest import ManifestBackend, get_default_backend
 from .services import PromoteService
-from .settings import Settings, get_settings
+from .config import AppConfig, get_config
 
 _engine = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def _get_engine(settings: Settings):
+def _get_engine(config: AppConfig):
     global _engine
     if _engine is None:
-        _engine = create_async_engine(settings.database_url, echo=False)
+        _engine = create_async_engine(config.database_url, echo=False)
     return _engine
 
 
-def _get_session_factory(settings: Settings) -> async_sessionmaker[AsyncSession]:
+def _get_session_factory(config: AppConfig) -> async_sessionmaker[AsyncSession]:
     global _session_factory
     if _session_factory is None:
-        _session_factory = get_async_sessionmaker(settings.database_url)
+        _session_factory = get_async_sessionmaker(config.database_url)
     return _session_factory
     
 
 async def get_db(  # noqa: D401
-    settings: Settings = Depends(get_settings),
+    config: AppConfig = Depends(get_config),
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield an async SQLAlchemy session tied to the application engine."""
 
-    session_factory = _get_session_factory(settings)
+    session_factory = _get_session_factory(config)
     async with session_factory() as session:
         yield session
 
 
-def get_settings_dep() -> Settings:
-    """Expose settings as a dependency so submodules can override in tests."""
+def get_config_dep() -> AppConfig:
+    """Expose config as a dependency so submodules can override in tests."""
 
-    return get_settings()
+    return get_config()
 
 
 def get_manifest_backend() -> ManifestBackend:
@@ -55,10 +55,10 @@ def get_manifest_backend() -> ManifestBackend:
     return get_default_backend()
 
 
-def get_file_mover(settings: Settings = Depends(get_settings_dep)) -> FileMover:
+def get_file_mover(config: AppConfig = Depends(get_config_dep)) -> FileMover:
     """Construct a FileMover rooted at the configured videos directory."""
 
-    return FileMover(Path(settings.videos_root))
+    return FileMover(config.videos_root)
 
 
 def get_promote_service(

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pythonjsonlogger.json import JsonFormatter
+
+from ..app.config import AppConfig, get_config
 
 router = APIRouter()
 
@@ -18,11 +19,9 @@ _formatter = JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s")
 _handler.setFormatter(_formatter)
 logger.addHandler(_handler)
 
-VIDEOS_ROOT = Path(os.getenv("MEDIA_VIDEOS_ROOT", "/media/project_data/reachy_emotion/videos"))
-
 
 @router.post("/api/media/promote")
-async def promote(request: Request) -> JSONResponse:
+async def promote(request: Request, config: AppConfig = Depends(get_config)) -> JSONResponse:
     body: Dict[str, Any] = await request.json()
 
     payload = body
@@ -88,8 +87,8 @@ async def promote(request: Request) -> JSONResponse:
         )
 
     clip = payload["clip"]
-    src = VIDEOS_ROOT / "temp" / clip
-    dst = VIDEOS_ROOT / payload["target"] / clip
+    src = config.videos_root / "temp" / clip
+    dst = config.videos_root / payload["target"] / clip
     dry_run = bool(payload.get("dry_run", body.get("dry_run", False)))
 
     logger.info(
@@ -134,6 +133,7 @@ async def _list_videos_impl(
     split: str = Query(..., pattern="^(temp|train|test)$"),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    config: AppConfig = Depends(get_config),
 ) -> JSONResponse:
     """List videos from the filesystem under /videos/{split}.
     This is a lightweight, read-only implementation to support the web UI.
@@ -141,7 +141,7 @@ async def _list_videos_impl(
     if split not in {"temp", "train", "test"}:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "invalid split"})
 
-    root = VIDEOS_ROOT / split
+    root = config.videos_root / split
     if not root.exists() or not root.is_dir():
         return JSONResponse(status_code=200, content={"items": [], "total": 0})
 
@@ -152,7 +152,7 @@ async def _list_videos_impl(
                 continue
             try:
                 st = p.stat()
-                rel = p.relative_to(VIDEOS_ROOT)
+                rel = p.relative_to(config.videos_root)
                 entries.append(
                     {
                         "video_id": p.stem,
@@ -180,8 +180,9 @@ async def list_videos(
     split: str = Query(..., pattern="^(temp|train|test)$"),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    config: AppConfig = Depends(get_config),
 ) -> JSONResponse:
-    return await _list_videos_impl(split=split, limit=limit, offset=offset)
+    return await _list_videos_impl(split=split, limit=limit, offset=offset, config=config)
 
 
 @router.get("/api/media/videos/list")
@@ -189,5 +190,6 @@ async def list_videos_compat(
     split: str = Query(..., pattern="^(temp|train|test)$"),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    config: AppConfig = Depends(get_config),
 ) -> JSONResponse:
-    return await _list_videos_impl(split=split, limit=limit, offset=offset)
+    return await _list_videos_impl(split=split, limit=limit, offset=offset, config=config)

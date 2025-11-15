@@ -1,3 +1,31 @@
+Linking AI agents in n8n
+2025-11-10
+Linking AI agents in n8n to Orchestrate Project Reachy_Local_08.4.2
+
+Luma AI Python SDK Reference Scripts
+2025-11-10
+Detailed information regarding the Luma AI Python SDK and scripts to generate videos 
+
+Luma AI API Reference Scripts
+2025-11-10
+Detailed information regarding the Luma AI API and scripts to generate videos 
+
+Luma AI API & Python SDK in Project Reachy
+2025-11-10
+Explanation of the Luma API and Python SDK in Project Reachy
+
+Overall Approach to Project Completion_01
+2025-11-10
+Agent-by-Agent Sequential Implementation as the recommended approach to complete project Reachy_Local_08.4.2
+
+n8n orchestration 
+2025-11-10
+Explanation of how n8n is used to orchestrate the entire Reachy_Local_08.4.2 project
+
+Agent AI system_01
+2025-11-10
+Overview of the 9-agent agentic AI orchestration system for project Reachy_Local_08.4.2
+
 Phase 4 Handoff and Summary Phases 1-3
 2025-11-05
 Handoff checklist for Phase 4 and breakdown of Phases 1-3
