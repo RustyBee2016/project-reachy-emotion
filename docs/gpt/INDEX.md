@@ -1,3 +1,7 @@
+Port-to-service mapping
+2025-11-18
+Port numbers matching each service including Media Mover API, Nginx static server, Gateway API, PostgreSQL, and n8n
+
 Linking AI agents in n8n
 2025-11-10
 Linking AI agents in n8n to Orchestrate Project Reachy_Local_08.4.2
