@@ -101,8 +101,70 @@ All routes reverse-proxied through Nginx (`/api/...`).
 
 ---
 
+## Ubuntu 1 — LM Studio Dialogue API (Port 8081, v1)
+
+### Dialogue Generation (Emotion-Conditioned)
+| Method | Route | Description |
+|:--|:--|:--|
+| `POST` | `/api/v1/dialogue/generate` | Generate emotion-aware dialogue via LM Studio. |
+| `GET`  | `/api/v1/dialogue/health` | Health check for dialogue service. |
+
+**Example Request**:
+```json
+POST /api/v1/dialogue/generate
+{
+  "emotion": "sad",
+  "confidence": 0.87,
+  "user_message": "I'm having a rough day.",
+  "device_id": "reachy-mini-01"
+}
+```
+
+**Example Response**:
+```json
+{
+  "status": "success",
+  "data": {
+    "text": "I'm here with you. How's your day going?...",
+    "gesture": "head_tilt_sympathetic",
+    "tone": "gentle_supportive",
+    "emotion": "sad",
+    "confidence": 0.87
+  },
+  "meta": {
+    "correlation_id": "uuid-here",
+    "timestamp": "2025-11-17T20:15:00Z"
+  }
+}
+```
+
+### WebSocket Cue Streaming
+| Protocol | Route | Description |
+|:--|:--|:--|
+| `WS` | `/ws/cues/{device_id}` | Stream dialogue cues (text, gesture, tone) to robot. |
+
+**Protocol**:
+- Server → Client: JSON cue messages (`type`, `text`, `gesture_id`, `tone`, `correlation_id`, `expires_at`)
+- Client → Server: Acknowledgments (`type: "ack"`, `correlation_id`)
+- Heartbeat: Client sends `{"type": "ping"}` every 30s, server responds with `{"type": "pong"}`
+
+**Example Cue Message**:
+```json
+{
+  "type": "combined",
+  "text": "I'm here to help!",
+  "gesture_id": "open_hands_reassuring",
+  "tone": "reassuring_calm",
+  "correlation_id": "dialogue-uuid-123",
+  "expires_at": "2025-11-17T20:20:30Z",
+  "timestamp": "2025-11-17T20:20:00Z"
+}
+```
+
+---
+
 ## Ubuntu 1 — LM Studio API (Port 1234)
-`POST /v1/chat/completions` — OpenAI-compatible endpoint used by Gateway `/api/llm/chat`.
+`POST /v1/chat/completions` — OpenAI-compatible endpoint called internally by `/api/v1/dialogue/generate`.
 
 ---
 
