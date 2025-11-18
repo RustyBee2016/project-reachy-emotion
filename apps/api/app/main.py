@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Load environment variables from .env file
+env_file = Path(__file__).parent.parent / ".env"
+if env_file.exists():
+    load_dotenv(env_file)
+    logging.getLogger(__name__).info(f"Loaded environment from {env_file}")
 
 from ..routers import media
 from .routers import dialogue, health, legacy, media_v1, metrics, promote, websocket_cues

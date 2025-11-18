@@ -139,9 +139,8 @@ class DialogueData(BaseModel):
     }
 
 
+# Import SuccessResponse first to avoid NameError
+from .responses import SuccessResponse
+
 # Type alias for the full response
 DialogueResponse = SuccessResponse[DialogueData]  # type: ignore
-
-
-# Import after defining DialogueData to avoid circular import
-from .responses import SuccessResponse  # noqa: E402

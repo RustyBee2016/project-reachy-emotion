@@ -30,10 +30,10 @@ except ImportError:  # pragma: no cover
 class Video(TimestampMixin, Base):
     __tablename__ = "video"
 
-    video_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    video_id: Mapped[str] = mapped_column(
+        String(36),
         primary_key=True,
-        default=uuid.uuid4,
+        default=lambda: str(uuid.uuid4()),
     )
     file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     split: Mapped[str] = mapped_column(SplitEnum, nullable=False, default="temp")
@@ -74,10 +74,10 @@ class Video(TimestampMixin, Base):
 class TrainingRun(TimestampMixin, Base):
     __tablename__ = "training_run"
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    run_id: Mapped[str] = mapped_column(
+        String(36),
         primary_key=True,
-        default=uuid.uuid4,
+        default=lambda: str(uuid.uuid4()),
     )
     strategy: Mapped[str] = mapped_column(String(64), nullable=False)
     train_fraction: Mapped[float] = mapped_column(Float, nullable=False)
@@ -94,13 +94,13 @@ class TrainingRun(TimestampMixin, Base):
 class TrainingSelection(TimestampMixin, Base):
     __tablename__ = "training_selection"
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    run_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("training_run.run_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    video_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    video_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("video.video_id", ondelete="CASCADE"),
         primary_key=True,
     )
@@ -117,8 +117,8 @@ class PromotionLog(TimestampMixin, Base):
     __tablename__ = "promotion_log"
 
     promotion_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    video_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    video_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("video.video_id", ondelete="CASCADE"),
         nullable=False,
     )
