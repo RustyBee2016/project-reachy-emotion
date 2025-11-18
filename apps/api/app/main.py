@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..routers import media
-from .routers import metrics, promote, media_v1, health, legacy
+from .routers import dialogue, health, legacy, media_v1, metrics, promote, websocket_cues
 from .config import load_and_validate_config
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(media_v1.router)
     app.include_router(promote.router)
+    app.include_router(dialogue.router)
+    app.include_router(websocket_cues.router)
     app.include_router(metrics.router)
     
     # Register legacy routers for backward compatibility

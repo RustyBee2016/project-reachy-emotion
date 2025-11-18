@@ -1,5 +1,10 @@
 """API schema exports for the Media Mover service."""
 
+from .dialogue import (
+    DialogueData,
+    DialogueRequest,
+    DialogueResponse,
+)
 from .promote import (
     ResetManifestRequest,
     ResetManifestResponse,
@@ -28,6 +33,10 @@ from .responses import (
 )
 
 __all__ = [
+    # Dialogue schemas
+    "DialogueRequest",
+    "DialogueResponse",
+    "DialogueData",
     # Promote schemas
     "StageRequest",
     "StageResponse",

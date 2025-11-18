@@ -1,3 +1,19 @@
+LM Studio-Customized Interaction    
+2025-11-17
+Detailed explanation of LM Studio's role in customizing Human-Robot Interaction (HRI) based on the emotion type predicted by the machine learning model (EmotionNet).
+
+LM Studio Usage_Excluding Tailored Interaction with User    
+2025-11-17
+Detailed explanation of LM Studio's role in project Project Reachy_Local_08.4.2, excluding the HRI component involving customized interaction.
+
+Development Plan to Complete Project Reachy
+2025-11-15
+Development plan to complete Phase 4 (n8n Orchestration) and Phase 5 (Production Hardening)
+
+API Endpoint Reference
+2025-11-15
+Complete API Endpoint reference to all of the updated endpoints.
+
 Linking AI agents in n8n
 2025-11-10
 Linking AI agents in n8n to Orchestrate Project Reachy_Local_08.4.2
