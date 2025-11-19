@@ -1,6 +1,10 @@
-Endpoint Test results_01
+Endpoint Test Plan_02
 2025-11-18
-Endpoint test results include a health check, dialogue health, promotion stage, and media list successes.
+Test plan for final testing of the entire endpoint system
+
+Endpoint Test entire results_01
+2025-11-18
+Endpoint tests include a health check, dialogue health, promotion stage, and media list successes.
 
 Endpoint Test Plan_01
 2025-11-18
