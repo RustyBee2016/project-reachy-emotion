@@ -20,13 +20,18 @@ if env_file.exists():
 from ..routers import media
 from .routers import dialogue, health, legacy, media_v1, metrics, promote, websocket_cues
 from .config import load_and_validate_config
+from .services.thumbnail_watcher import ThumbnailWatcherService
 
 logger = logging.getLogger(__name__)
+
+# Global thumbnail watcher instance
+_thumbnail_watcher: ThumbnailWatcherService | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Perform setup/teardown for the FastAPI application."""
+    global _thumbnail_watcher
 
     # Load and validate configuration on startup
     try:
@@ -41,9 +46,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.error(f"Configuration validation failed: {e}")
         raise
     
-    # Future: initialize DB connections, background tasks, etc.
+    # Start thumbnail watcher service
+    try:
+        _thumbnail_watcher = ThumbnailWatcherService(
+            videos_root=config.videos_root,
+            watch_splits=["temp"],
+            poll_interval=5.0,
+        )
+        await _thumbnail_watcher.start()
+        logger.info("Thumbnail watcher service started")
+    except Exception as e:
+        logger.error(f"Failed to start thumbnail watcher: {e}", exc_info=True)
+        # Don't fail startup if thumbnail watcher fails
+    
     yield
-    # Cleanup hooks can be added here when needed.
+    
+    # Cleanup: stop thumbnail watcher
+    if _thumbnail_watcher:
+        try:
+            await _thumbnail_watcher.stop()
+            logger.info("Thumbnail watcher service stopped")
+        except Exception as e:
+            logger.error(f"Error stopping thumbnail watcher: {e}", exc_info=True)
 
 
 def create_app() -> FastAPI:

@@ -182,7 +182,7 @@ async def generate_dialogue(
     )
     
     # Prepare LM Studio request
-    lm_studio_url = f"http://{config.gateway_host}:1234/v1/chat/completions"
+    lm_studio_url = f"http://{config.lm_studio_host}:{config.lm_studio_port}/v1/chat/completions"
     lm_studio_payload = {
         "model": "local-model",  # LM Studio uses this as default
         "messages": messages,

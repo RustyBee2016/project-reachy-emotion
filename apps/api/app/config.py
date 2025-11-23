@@ -162,6 +162,14 @@ class AppConfig:
     gateway_port: int = field(
         default_factory=lambda: _env_int("REACHY_GATEWAY_PORT", 8000)
     )
+
+    lm_studio_host: str = field(
+        default_factory=lambda: os.getenv("REACHY_LM_STUDIO_HOST", "10.0.4.130")
+    )
+
+    lm_studio_port: int = field(
+        default_factory=lambda: _env_int("REACHY_LM_STUDIO_PORT", 1234)
+    )    
     
     # =========================================================================
     # Feature Flags
