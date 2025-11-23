@@ -95,7 +95,7 @@ class AppConfig:
         default_factory=lambda: Path(
             os.getenv(
                 "REACHY_VIDEOS_ROOT",
-                "/media/rusty_admin/project_data/reachy_emotion/videos"
+                "/mnt/videos"
             )
         )
     )

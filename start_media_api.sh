@@ -17,7 +17,7 @@ WORKERS="${MEDIA_MOVER_WORKERS:-1}"
 export MEDIA_MOVER_DATABASE_URL="${MEDIA_MOVER_DATABASE_URL:-postgresql+psycopg2://reachy_app:reachy_app@localhost:5432/reachy_local}"
 
 # Video storage root
-export MEDIA_MOVER_VIDEOS_ROOT="${MEDIA_MOVER_VIDEOS_ROOT:-/media/rusty_admin/project_data/reachy_emotion/videos}"
+export MEDIA_MOVER_VIDEOS_ROOT="${MEDIA_MOVER_VIDEOS_ROOT:-/mnt/videos}"
 
 # Enable CORS for web UI
 export MEDIA_MOVER_ENABLE_CORS="${MEDIA_MOVER_ENABLE_CORS:-true}"
