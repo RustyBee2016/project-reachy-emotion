@@ -1,0 +1,42 @@
+[Unit]
+Description=Reachy Gateway API Service (Ubuntu 2)
+Documentation=https://github.com/RustyBee2016/project-reachy-emotion
+After=network.target
+
+[Service]
+Type=simple
+User=rusty_admin
+Group=rusty_admin
+WorkingDirectory=/home/rusty_admin/projects/reachy_08.4.2
+
+# Load environment variables from gateway .env file
+EnvironmentFile=-/home/rusty_admin/projects/reachy_08.4.2/apps/gateway/.env
+
+# Start the gateway using the startup script
+ExecStart=/home/rusty_admin/projects/reachy_08.4.2/start_gateway.sh
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=300s
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=65536
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=reachy-gateway
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Health check (optional - requires systemd 240+)
+# Uncomment if your systemd version supports it
+# ExecStartPost=/bin/sleep 5
+# ExecStartPost=/usr/bin/curl -f http://localhost:8000/health || exit 1
+
+[Install]
+WantedBy=multi-user.target

@@ -38,5 +38,5 @@ uvicorn apps.api.app.main:app \
     --host "$HOST" \
     --port "$PORT" \
     --workers "$WORKERS" \
-    --log-level info \
+    --log-level info \a
     --access-log

@@ -18,7 +18,16 @@ if env_file.exists():
     logging.getLogger(__name__).info(f"Loaded environment from {env_file}")
 
 from ..routers import media
-from .routers import dialogue, health, legacy, media_v1, metrics, promote, websocket_cues
+from .routers import (
+    dialogue,
+    gateway_upstream,
+    health,
+    legacy,
+    media_v1,
+    metrics,
+    promote,
+    websocket_cues,
+)
 from .config import load_and_validate_config
 from .services.thumbnail_watcher import ThumbnailWatcherService
 
@@ -99,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(dialogue.router)
     app.include_router(websocket_cues.router)
     app.include_router(metrics.router)
+    app.include_router(gateway_upstream.router)
     
     # Register legacy routers for backward compatibility
     if config.enable_legacy_endpoints:
