@@ -12,15 +12,18 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, validator
+from sqlalchemy import select, func, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
 from ..db import models
 from ..manifest import ManifestBackend
 from ..deps import get_db, get_manifest_backend
+from ..services.video_query_service import VideoQueryService
+from ..schemas.video import EnhancedVideoMetadataPayload
 _default_emotions = {"neutral", "happy", "sad", "angry", "surprise"}
 _env_emotions = os.getenv("MEDIA_MOVER_EMOTIONS")
 if _env_emotions:
@@ -119,39 +122,244 @@ def _find_video_file(video_identifier: str, config: AppConfig) -> tuple[Path, st
 async def get_video_metadata(
     video_identifier: str,
     config: AppConfig = Depends(get_config),
+    session: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
-    """Return metadata for the requested video file."""
-
-    video_path, split = _find_video_file(video_identifier, config)
+    """Return metadata for the requested video file.
+    
+    Accepts either UUID or filename. Returns canonical UUID from database.
+    """
+    
+    # Try database first
+    query_service = VideoQueryService(session, config)
+    video_model, lookup_method = await query_service.get_video_by_identifier(video_identifier)
+    
+    if video_model:
+        # Found in database - return full metadata
+        video_path = config.videos_root / video_model.file_path
+        
+        # Verify file still exists
+        if not video_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "file_missing",
+                    "message": f"Video record exists but file not found: {video_model.file_path}",
+                    "video_id": video_model.video_id,
+                },
+            )
+        
+        stat_info = video_path.stat()
+        payload = EnhancedVideoMetadataPayload(
+            video_id=video_model.video_id,
+            file_name=video_path.name,
+            file_path=video_model.file_path,
+            split=video_model.split.value if hasattr(video_model.split, 'value') else str(video_model.split),
+            label=video_model.label.value if video_model.label and hasattr(video_model.label, 'value') else video_model.label,
+            size_bytes=video_model.size_bytes,
+            duration_sec=video_model.duration_sec,
+            fps=video_model.fps,
+            width=video_model.width,
+            height=video_model.height,
+            sha256=video_model.sha256,
+            mtime=stat_info.st_mtime,
+            created_at=video_model.created_at.isoformat() if video_model.created_at else None,
+            updated_at=video_model.updated_at.isoformat() if video_model.updated_at else None,
+            lookup_method=lookup_method,
+        )
+        return {"status": "ok", "video": payload.dict()}
+    
+    # Fallback to filesystem-only lookup (legacy support)
+    try:
+        video_path, split = _find_video_file(video_identifier, config)
+    except HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "not_found",
+                "message": f"Video not found in database or filesystem: {video_identifier}",
+            },
+        )
+    
+    # Return filesystem-only metadata with warning
     stat_info = video_path.stat()
     relative_path = video_path.relative_to(config.videos_root)
     payload = VideoMetadataPayload(
-        video_id=Path(video_path).stem,
+        video_id=Path(video_path).stem,  # Filename stem (not UUID)
         file_name=video_path.name,
         split=split,
         file_path=str(relative_path),
         size_bytes=stat_info.st_size,
         mtime=stat_info.st_mtime,
     )
-    return {"status": "ok", "video": payload.dict()}
+    
+    return {
+        "status": "ok",
+        "video": payload.dict(),
+        "warning": "Video found in filesystem but not in database. UUID is filename stem, not canonical ID.",
+    }
 
 
 @router.get("/api/videos/{video_identifier:path}/thumb")
 async def get_video_thumbnail(
     video_identifier: str,
     config: AppConfig = Depends(get_config),
+    session: AsyncSession = Depends(get_db),
 ) -> Response:
-    """Return the thumbnail image for a given video."""
-
-    video_stem = Path(video_identifier).stem
+    """Return the thumbnail image for a given video.
+    
+    Checks database for video existence before serving thumbnail.
+    """
+    # Verify video exists in database
+    query_service = VideoQueryService(session, config)
+    video_model, _ = await query_service.get_video_by_identifier(video_identifier)
+    
+    if not video_model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "not_found", "message": f"Video not found: {video_identifier}"},
+        )
+    
+    # Get thumbnail path
+    video_stem = Path(video_model.file_path).stem
     thumb_path = config.thumbs_path / f"{video_stem}.jpg"
+    
     if not thumb_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "not_found", "message": f"Thumbnail not found for video: {video_identifier}"},
+            detail={
+                "error": "thumbnail_not_found",
+                "message": f"Thumbnail not found for video: {video_model.video_id}",
+                "video_id": video_model.video_id,
+            },
         )
-
+    
     return FileResponse(thumb_path, media_type="image/jpeg")
+
+
+@router.get("/api/videos/{video_identifier:path}/url")
+async def get_video_url(
+    video_identifier: str,
+    config: AppConfig = Depends(get_config),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    """Generate streaming URL for video.
+    
+    Returns URLs for video streaming and thumbnail.
+    """
+    # Get video from database
+    query_service = VideoQueryService(session, config)
+    video_model, lookup_method = await query_service.get_video_by_identifier(video_identifier)
+    
+    if not video_model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "not_found", "message": f"Video not found: {video_identifier}"},
+        )
+    
+    # Generate URLs
+    stream_url = f"/videos/{video_model.file_path}"
+    thumbnail_url = f"/thumbs/{Path(video_model.file_path).stem}.jpg"
+    
+    return {
+        "status": "ok",
+        "video_id": video_model.video_id,
+        "stream_url": stream_url,
+        "thumbnail_url": thumbnail_url,
+        "expires_at": None,  # No expiration for now
+    }
+
+
+@router.get("/api/videos/list")
+async def list_videos(
+    split: Optional[str] = None,
+    label: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    order_by: str = Query(default="created_at", regex="^(created_at|updated_at|size_bytes)$"),
+    order: str = Query(default="desc", regex="^(asc|desc)$"),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    """List videos with filtering and pagination.
+    
+    Query Parameters:
+        split: Filter by split (temp, dataset_all, train, test)
+        label: Filter by emotion label
+        limit: Number of results (1-500, default 50)
+        offset: Pagination offset (default 0)
+        order_by: Sort field (created_at, updated_at, size_bytes)
+        order: Sort direction (asc, desc)
+    """
+    # Validate split
+    if split and split not in ("temp", "dataset_all", "train", "test"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_split", "message": f"Invalid split: {split}"},
+        )
+    
+    # Validate label
+    if label and label not in VALID_EMOTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_label", "message": f"Invalid label: {label}"},
+        )
+    
+    # Build query
+    stmt = select(models.Video)
+    
+    if split:
+        stmt = stmt.where(models.Video.split == split)
+    if label:
+        stmt = stmt.where(models.Video.label == label)
+    
+    # Get total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = await session.scalar(count_stmt) or 0
+    
+    # Apply sorting
+    order_col = getattr(models.Video, order_by)
+    if order == "desc":
+        stmt = stmt.order_by(desc(order_col))
+    else:
+        stmt = stmt.order_by(asc(order_col))
+    
+    # Apply pagination
+    stmt = stmt.limit(limit).offset(offset)
+    
+    # Execute query
+    result = await session.execute(stmt)
+    videos = result.scalars().all()
+    
+    # Build response
+    video_summaries = []
+    for video in videos:
+        video_summaries.append({
+            "video_id": video.video_id,
+            "file_name": Path(video.file_path).name,
+            "file_path": video.file_path,
+            "split": video.split.value if hasattr(video.split, 'value') else str(video.split),
+            "label": video.label.value if video.label and hasattr(video.label, 'value') else video.label,
+            "size_bytes": video.size_bytes,
+            "duration_sec": video.duration_sec,
+            "fps": video.fps,
+            "width": video.width,
+            "height": video.height,
+            "sha256": video.sha256,
+            "created_at": video.created_at.isoformat() if video.created_at else None,
+            "updated_at": video.updated_at.isoformat() if video.updated_at else None,
+        })
+    
+    has_more = (offset + limit) < total
+    
+    return {
+        "status": "ok",
+        "videos": video_summaries,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "has_more": has_more,
+        },
+    }
 
 
 class RelabelRequest(BaseModel):
