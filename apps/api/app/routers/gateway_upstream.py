@@ -115,7 +115,7 @@ def _find_video_file(video_identifier: str, config: AppConfig) -> tuple[Path, st
     )
 
 
-@router.get("/api/videos/{video_identifier}")
+@router.get("/api/videos/{video_identifier:path}")
 async def get_video_metadata(
     video_identifier: str,
     config: AppConfig = Depends(get_config),
@@ -136,7 +136,7 @@ async def get_video_metadata(
     return {"status": "ok", "video": payload.dict()}
 
 
-@router.get("/api/videos/{video_identifier}/thumb")
+@router.get("/api/videos/{video_identifier:path}/thumb")
 async def get_video_thumbnail(
     video_identifier: str,
     config: AppConfig = Depends(get_config),
