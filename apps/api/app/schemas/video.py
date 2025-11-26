@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -62,7 +62,7 @@ class VideoListResponse(BaseModel):
     """Response for video listing endpoint."""
     
     status: str = "ok"
-    videos: list[VideoSummary]
+    videos: List[VideoSummary]
     pagination: PaginationInfo
 
 

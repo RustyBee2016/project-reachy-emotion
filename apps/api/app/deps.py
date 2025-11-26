@@ -49,6 +49,10 @@ def get_config_dep() -> AppConfig:
     return get_config()
 
 
+# Alias for backward compatibility with existing tests
+get_settings_dep = get_config_dep
+
+
 def get_manifest_backend() -> ManifestBackend:
     """Provide the manifest backend used by promotion workflows."""
 

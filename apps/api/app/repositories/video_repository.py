@@ -24,7 +24,7 @@ class VideoRecord:
     size_bytes: int
 
 
-@dataclass(slots=True)
+@dataclass
 class StageMutation:
     """Requested transition from temp to dataset_all for a video."""
 
@@ -36,7 +36,7 @@ class StageMutation:
     new_file_path: str
 
 
-@dataclass(slots=True)
+@dataclass
 class SamplingMutation:
     """Requested transition when selecting clips into train/test splits."""
 

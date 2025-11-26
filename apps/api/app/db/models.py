@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -45,11 +45,11 @@ class Video(TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    promotions: Mapped[list["PromotionLog"]] = relationship(
+    promotions: Mapped[List["PromotionLog"]] = relationship(
         back_populates="video",
         cascade="all, delete-orphan",
     )
-    selections: Mapped[list["TrainingSelection"]] = relationship(
+    selections: Mapped[List["TrainingSelection"]] = relationship(
         back_populates="video",
         cascade="all, delete-orphan",
     )
@@ -85,7 +85,7 @@ class TrainingRun(TimestampMixin, Base):
     seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
 
-    selections: Mapped[list["TrainingSelection"]] = relationship(
+    selections: Mapped[List["TrainingSelection"]] = relationship(
         back_populates="training_run",
         cascade="all, delete-orphan",
     )

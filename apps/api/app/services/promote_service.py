@@ -38,7 +38,7 @@ class PromotionConflictError(PromotionError):
     """Raised when the requested operation violates current state."""
 
 
-@dataclass(slots=True)
+@dataclass
 class StageResult:
     """Outcome summary when staging clips into dataset_all."""
 
@@ -48,7 +48,7 @@ class StageResult:
     dry_run: bool = False
 
 
-@dataclass(slots=True)
+@dataclass
 class SampleResult:
     """Outcome summary when sampling clips into train/test splits."""
 

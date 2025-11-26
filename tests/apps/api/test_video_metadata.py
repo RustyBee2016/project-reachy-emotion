@@ -20,13 +20,19 @@ class TestVideoMetadataByUUID:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test successful retrieval of video metadata using UUID."""
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "temp/test_video.mp4"
+        
+        # Create physical file
+        create_test_video_file(file_path)
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/test_video.mp4",
+            file_path=file_path,
             split="temp",
             size_bytes=1048576,
             sha256="abc123def456",
@@ -61,13 +67,16 @@ class TestVideoMetadataByUUID:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test video metadata includes label when present."""
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "dataset_all/happy_video.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="dataset_all/happy_video.mp4",
+            file_path=file_path,
             split="dataset_all",
             label="happy",
             size_bytes=2097152,
@@ -75,6 +84,9 @@ class TestVideoMetadataByUUID:
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path)
 
         # Act
         response = await client.get(f"/api/videos/{video_id}")
@@ -109,19 +121,25 @@ class TestVideoMetadataByFilename:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test getting video metadata using filename (legacy support)."""
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "temp/luma_1.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/luma_1.mp4",
+            file_path=file_path,
             split="temp",
             size_bytes=1048576,
             sha256="luma_sha",
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path)
 
         # Act - Use filename instead of UUID
         response = await client.get("/api/videos/luma_1.mp4")
@@ -137,19 +155,25 @@ class TestVideoMetadataByFilename:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test getting video metadata using filename stem (no extension)."""
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "temp/my_video.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/my_video.mp4",
+            file_path=file_path,
             split="temp",
             size_bytes=512000,
             sha256="stem_sha",
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path)
 
         # Act - Use stem without extension
         response = await client.get("/api/videos/my_video")
@@ -187,13 +211,16 @@ class TestVideoMetadataEdgeCases:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test video with minimal metadata (null optional fields)."""
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "temp/minimal.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/minimal.mp4",
+            file_path=file_path,
             split="temp",
             size_bytes=1024,
             sha256="minimal_sha",
@@ -201,6 +228,9 @@ class TestVideoMetadataEdgeCases:
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path)
 
         # Act
         response = await client.get(f"/api/videos/{video_id}")
@@ -218,19 +248,25 @@ class TestVideoMetadataEdgeCases:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test video with special characters in file path."""
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "temp/video with spaces & special-chars_123.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/video with spaces & special-chars_123.mp4",
+            file_path=file_path,
             split="temp",
             size_bytes=2048,
             sha256="special_sha",
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path)
 
         # Act
         response = await client.get(f"/api/videos/{video_id}")
@@ -249,21 +285,27 @@ class TestVideoMetadataPerformance:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test that metadata retrieval is fast (< 100ms)."""
         import time
 
         # Arrange
         video_id = str(uuid.uuid4())
+        file_path = "temp/perf_test.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/perf_test.mp4",
+            file_path=file_path,
             split="temp",
             size_bytes=1048576,
             sha256="perf_sha",
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path)
 
         # Act
         start = time.time()
@@ -279,6 +321,7 @@ class TestVideoMetadataPerformance:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test handling of concurrent metadata requests."""
         import asyncio
@@ -287,15 +330,21 @@ class TestVideoMetadataPerformance:
         video_ids = []
         for i in range(10):
             video_id = str(uuid.uuid4())
+            file_path = f"temp/concurrent_{i}.mp4"
+            
             video = models.Video(
                 video_id=video_id,
-                file_path=f"temp/concurrent_{i}.mp4",
+                file_path=file_path,
                 split="temp",
                 size_bytes=1024 * i,
                 sha256=f"concurrent_sha_{i}",
             )
             db_session.add(video)
             video_ids.append(video_id)
+            
+            # Create physical file for each video
+            create_test_video_file(file_path)
+            
         await db_session.commit()
 
         # Act - Make 10 concurrent requests
@@ -315,38 +364,52 @@ class TestVideoMetadataIntegration:
         self,
         client: AsyncClient,
         db_session: AsyncSession,
+        create_test_video_file,
     ):
         """Test that metadata reflects changes after video promotion."""
         # Arrange - Create video in temp
         video_id = str(uuid.uuid4())
+        file_path_temp = "temp/to_promote.mp4"
+        
         video = models.Video(
             video_id=video_id,
-            file_path="temp/to_promote.mp4",
+            file_path=file_path_temp,
             split="temp",
             size_bytes=1048576,
             sha256="promote_sha",
         )
         db_session.add(video)
         await db_session.commit()
+        
+        # Create physical file
+        create_test_video_file(file_path_temp)
 
         # Act 1 - Get initial metadata
         response1 = await client.get(f"/api/videos/{video_id}")
-        assert response1.json()["video"]["split"] == "temp"
-        assert response1.json()["video"]["label"] is None
+        assert response1.status_code == 200
+        data1 = response1.json()
+        assert data1["video"]["split"] == "temp"
+        assert data1["video"]["label"] is None
 
         # Act 2 - Simulate promotion (update DB directly for test)
         video.split = "dataset_all"
         video.label = "happy"
-        video.file_path = "dataset_all/to_promote.mp4"
+        file_path_promoted = "dataset_all/to_promote.mp4"
+        video.file_path = file_path_promoted
         await db_session.commit()
+        
+        # Create physical file in new location
+        create_test_video_file(file_path_promoted)
 
         # Act 3 - Get updated metadata
         response2 = await client.get(f"/api/videos/{video_id}")
 
         # Assert - Metadata should reflect promotion
-        assert response2.json()["video"]["split"] == "dataset_all"
-        assert response2.json()["video"]["label"] == "happy"
-        assert "dataset_all" in response2.json()["video"]["file_path"]
+        assert response2.status_code == 200
+        data2 = response2.json()
+        assert data2["video"]["split"] == "dataset_all"
+        assert data2["video"]["label"] == "happy"
+        assert "dataset_all" in data2["video"]["file_path"]
 
 
 # Pytest fixtures would be defined in conftest.py

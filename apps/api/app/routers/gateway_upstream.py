@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from fastapi.responses import FileResponse
@@ -39,7 +39,7 @@ _SPLITS = ("temp", "dataset_all", "train", "test")
 
 
 @router.get("/api/upstream/health")
-async def upstream_health() -> dict[str, str]:
+async def upstream_health() -> Dict[str, str]:
     """Confirm the upstream router is loaded and responding."""
     return {"status": "ok", "router": "gateway_upstream"}
 
@@ -54,7 +54,7 @@ class VideoMetadataPayload(BaseModel):
     mtime: float
 
 
-def _find_video_file(video_identifier: str, config: AppConfig) -> tuple[Path, str]:
+def _find_video_file(video_identifier: str, config: AppConfig) -> Tuple[Path, str]:
     """Find a video file across known splits.
 
     Args:
@@ -118,12 +118,105 @@ def _find_video_file(video_identifier: str, config: AppConfig) -> tuple[Path, st
     )
 
 
+@router.get("/api/videos/list")
+async def list_videos(
+    split: Optional[str] = None,
+    label: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    order_by: str = Query(default="created_at", regex="^(created_at|updated_at|size_bytes)$"),
+    order: str = Query(default="desc", regex="^(asc|desc)$"),
+    session: AsyncSession = Depends(get_db),
+) -> Dict[str, object]:
+    """List videos with filtering and pagination.
+    
+    Query Parameters:
+        split: Filter by split (temp, dataset_all, train, test)
+        label: Filter by emotion label
+        limit: Number of results (1-500, default 50)
+        offset: Pagination offset (default 0)
+        order_by: Sort field (created_at, updated_at, size_bytes)
+        order: Sort direction (asc, desc)
+    """
+    # Validate split
+    if split and split not in ("temp", "dataset_all", "train", "test"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_split", "message": f"Invalid split: {split}"},
+        )
+    
+    # Validate label
+    if label and label not in VALID_EMOTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_label", "message": f"Invalid label: {label}"},
+        )
+    
+    # Build query
+    stmt = select(models.Video)
+    
+    if split:
+        stmt = stmt.where(models.Video.split == split)
+    if label:
+        stmt = stmt.where(models.Video.label == label)
+    
+    # Get total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = await session.scalar(count_stmt) or 0
+    
+    # Apply sorting
+    order_col = getattr(models.Video, order_by)
+    if order == "desc":
+        stmt = stmt.order_by(desc(order_col))
+    else:
+        stmt = stmt.order_by(asc(order_col))
+    
+    # Apply pagination
+    stmt = stmt.limit(limit).offset(offset)
+    
+    # Execute query
+    result = await session.execute(stmt)
+    videos = result.scalars().all()
+    
+    # Build response
+    video_summaries = []
+    for video in videos:
+        video_summaries.append({
+            "video_id": video.video_id,
+            "file_name": Path(video.file_path).name,
+            "file_path": video.file_path,
+            "split": video.split.value if hasattr(video.split, 'value') else str(video.split),
+            "label": video.label.value if video.label and hasattr(video.label, 'value') else video.label,
+            "size_bytes": video.size_bytes,
+            "duration_sec": video.duration_sec,
+            "fps": video.fps,
+            "width": video.width,
+            "height": video.height,
+            "sha256": video.sha256,
+            "created_at": video.created_at.isoformat() if video.created_at else None,
+            "updated_at": video.updated_at.isoformat() if video.updated_at else None,
+        })
+    
+    has_more = (offset + limit) < total
+    
+    return {
+        "status": "ok",
+        "videos": video_summaries,
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total,
+            "has_more": has_more,
+        },
+    }
+
+
 @router.get("/api/videos/{video_identifier:path}")
 async def get_video_metadata(
     video_identifier: str,
     config: AppConfig = Depends(get_config),
     session: AsyncSession = Depends(get_db),
-) -> dict[str, object]:
+) -> Dict[str, object]:
     """Return metadata for the requested video file.
     
     Accepts either UUID or filename. Returns canonical UUID from database.
@@ -241,7 +334,7 @@ async def get_video_url(
     video_identifier: str,
     config: AppConfig = Depends(get_config),
     session: AsyncSession = Depends(get_db),
-) -> dict[str, object]:
+) -> Dict[str, object]:
     """Generate streaming URL for video.
     
     Returns URLs for video streaming and thumbnail.
@@ -269,99 +362,6 @@ async def get_video_url(
     }
 
 
-@router.get("/api/videos/list")
-async def list_videos(
-    split: Optional[str] = None,
-    label: Optional[str] = None,
-    limit: int = Query(default=50, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    order_by: str = Query(default="created_at", regex="^(created_at|updated_at|size_bytes)$"),
-    order: str = Query(default="desc", regex="^(asc|desc)$"),
-    session: AsyncSession = Depends(get_db),
-) -> dict[str, object]:
-    """List videos with filtering and pagination.
-    
-    Query Parameters:
-        split: Filter by split (temp, dataset_all, train, test)
-        label: Filter by emotion label
-        limit: Number of results (1-500, default 50)
-        offset: Pagination offset (default 0)
-        order_by: Sort field (created_at, updated_at, size_bytes)
-        order: Sort direction (asc, desc)
-    """
-    # Validate split
-    if split and split not in ("temp", "dataset_all", "train", "test"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_split", "message": f"Invalid split: {split}"},
-        )
-    
-    # Validate label
-    if label and label not in VALID_EMOTIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_label", "message": f"Invalid label: {label}"},
-        )
-    
-    # Build query
-    stmt = select(models.Video)
-    
-    if split:
-        stmt = stmt.where(models.Video.split == split)
-    if label:
-        stmt = stmt.where(models.Video.label == label)
-    
-    # Get total count
-    count_stmt = select(func.count()).select_from(stmt.subquery())
-    total = await session.scalar(count_stmt) or 0
-    
-    # Apply sorting
-    order_col = getattr(models.Video, order_by)
-    if order == "desc":
-        stmt = stmt.order_by(desc(order_col))
-    else:
-        stmt = stmt.order_by(asc(order_col))
-    
-    # Apply pagination
-    stmt = stmt.limit(limit).offset(offset)
-    
-    # Execute query
-    result = await session.execute(stmt)
-    videos = result.scalars().all()
-    
-    # Build response
-    video_summaries = []
-    for video in videos:
-        video_summaries.append({
-            "video_id": video.video_id,
-            "file_name": Path(video.file_path).name,
-            "file_path": video.file_path,
-            "split": video.split.value if hasattr(video.split, 'value') else str(video.split),
-            "label": video.label.value if video.label and hasattr(video.label, 'value') else video.label,
-            "size_bytes": video.size_bytes,
-            "duration_sec": video.duration_sec,
-            "fps": video.fps,
-            "width": video.width,
-            "height": video.height,
-            "sha256": video.sha256,
-            "created_at": video.created_at.isoformat() if video.created_at else None,
-            "updated_at": video.updated_at.isoformat() if video.updated_at else None,
-        })
-    
-    has_more = (offset + limit) < total
-    
-    return {
-        "status": "ok",
-        "videos": video_summaries,
-        "pagination": {
-            "limit": limit,
-            "offset": offset,
-            "total": total,
-            "has_more": has_more,
-        },
-    }
-
-
 class RelabelRequest(BaseModel):
     schema_version: str = Field(default="v1")
     video_id: str = Field(..., description="UUID of the video")
@@ -379,7 +379,7 @@ class RelabelRequest(BaseModel):
 async def relabel_video(
     payload: RelabelRequest,
     session: AsyncSession = Depends(get_db),
-) -> dict[str, object]:
+) -> Dict[str, object]:
     """Update the label associated with a video record."""
 
     video = await session.get(models.Video, payload.video_id)
@@ -408,7 +408,7 @@ class ManifestRebuildRequest(BaseModel):
 async def trigger_manifest_rebuild(
     payload: ManifestRebuildRequest,
     manifest_backend: ManifestBackend = Depends(get_manifest_backend),
-) -> dict[str, object]:
+) -> Dict[str, object]:
     """Schedule a manifest rebuild (and optionally reset state)."""
 
     if payload.reset:

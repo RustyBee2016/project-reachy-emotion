@@ -133,7 +133,7 @@ async def test_stage_endpoint_moves_files(promote_app):
     )
 
     response = await client.post(
-        "/promote/stage",
+        "/api/v1/promote/stage",
         json={"video_ids": [str(video_id)], "label": "happy"},
     )
     assert response.status_code == 202
@@ -177,7 +177,7 @@ async def test_stage_endpoint_dry_run_preserves_state(promote_app):
     )
 
     response = await client.post(
-        "/promote/stage",
+        "/api/v1/promote/stage",
         json={"video_ids": [str(video_id)], "label": "sad", "dry_run": True},
     )
     assert response.status_code == 202
@@ -222,7 +222,7 @@ async def test_sample_endpoint_creates_training_selection(promote_app):
 
     run_id = str(uuid.uuid4())
     response = await client.post(
-        "/promote/sample",
+        "/api/v1/promote/sample",
         json={
             "run_id": run_id,
             "target_split": "train",
@@ -246,7 +246,7 @@ async def test_sample_endpoint_creates_training_selection(promote_app):
 
         selections = (
             await session.execute(
-                select(models.TrainingSelection).where(models.TrainingSelection.run_id == uuid.UUID(run_id))
+                select(models.TrainingSelection).where(models.TrainingSelection.run_id == run_id)
             )
         ).scalars().all()
         assert len(selections) == 1
@@ -280,7 +280,7 @@ async def test_sample_endpoint_dry_run_skips_mutations(promote_app):
 
     run_id = str(uuid.uuid4())
     response = await client.post(
-        "/promote/sample",
+        "/api/v1/promote/sample",
         json={
             "run_id": run_id,
             "target_split": "test",
@@ -323,7 +323,7 @@ async def test_reset_manifest_endpoint_records_reason(promote_app):
 
     run_id = uuid.uuid4()
     response = await client.post(
-        "/promote/reset-manifest",
+        "/api/v1/promote/reset-manifest",
         json={"reason": "manual_reset", "run_id": str(run_id)},
     )
     assert response.status_code == 202
