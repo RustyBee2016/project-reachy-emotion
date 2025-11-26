@@ -28,7 +28,7 @@ Conflicts between automation and policy defer to the human project owner (Russ).
 - **Robot Node (Jetson Xavier NX):**  
   Runs DeepStream + TensorRT engine for live inference.
 - **Database:**  
-  PostgreSQL 16 cluster (local). Stores metadata, video URLs, hashes, and promotion logs.  
+  PostgreSQL 16 cluster (local) at `10.0.4.130:5432` using the `reachy_dev` role against the `reachy_emotion` database. Stores metadata, video URLs, hashes, and promotion logs.  
 - **Storage:**  
   Local SSD under `/media/project_data/reachy_emotion/videos/` with subfolders:  
   `temp/`, `train/`, and `test/`.  

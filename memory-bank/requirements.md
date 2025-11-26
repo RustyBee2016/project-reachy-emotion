@@ -3,7 +3,7 @@
 ## 1. Project Overview
 - **Project Name**: Reachy_Local_08.4.2
 - **Version**: 0.08.4.2
-- **Last Updated**: 2025-10-16
+- **Last Updated**: 2025-11-26
 - **Project Type**: Robotics Control Software
 - **Target Platform**: Reachy Mini Companion Robot — Jetson Xavier NX 16GB model
 - **Primary Language**: Python 3.8+
@@ -46,6 +46,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - 99.9% system uptime during operation
 - Comprehensive test coverage (>80%)
 - Clear and accessible documentation
+- Gateway API regression suite: **59/59 tests passing** (validated 2025-11-26)
 
 ---
 
@@ -82,7 +83,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 **Hot Path (low‑latency):** Jetson/ingest → `/videos/temp` → human labeling in web UI → `POST /api/media/promote` (stage into `/videos/dataset_all`) → per-run sampling engine copies randomized subsets into `/videos/train` and `/videos/test` → rebuild manifests → training/eval → gated deploy.
 
-**Serving:** Nginx serves `/thumbs/`; mini‑FastAPI exposes `list`, `thumb`, `promote`, `relabel`, `manifest/rebuild`.
+**Serving:** Nginx serves `/thumbs/`; the Ubuntu 2 FastAPI gateway exposes `/api/videos/*`, `/api/v1/promote/*`, `/health`, `/metrics`, and WebSockets for cues, while the Ubuntu 1 Media Mover (`https://10.0.4.130/api/media`) handles filesystem mutations.
 
 **Training:** `tf.data` / TAO / DeepStream pipelines read `/videos/manifests/*.jsonl` or class folders.
 
@@ -148,7 +149,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - **API Gateway**: FastAPI **0.110+** (Pydantic v2), `orjson 3.10+`
 - **ASGI Server**: Uvicorn **0.29+** (optionally under Gunicorn)
 - **Reverse Proxy**: Nginx **1.22+** (range requests; strict MIME allow‑list)
-- **Database (metadata)**: PostgreSQL **15+**, SQLAlchemy **2.0+**, `psycopg2-binary 2.9+`, Alembic **1.13+`
+- **Database (metadata)**: PostgreSQL **16+**, SQLAlchemy **2.0+**, `psycopg2-binary 2.9+`, Alembic **1.13+**
 - **Media Tools**: FFmpeg **6+** (ffprobe on ingest); optional OpenCV **4.8+** (thumbs)
 - **Auth/Security**: `PyJWT 2.8+`, `cryptography 42+`
 - **Observability**: `prometheus-client 0.20+`, Uvicorn access logs
@@ -169,7 +170,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 ### 6.5 n8n Orchestration Environment
 - **Container orchestration**: n8n runs via Docker Compose alongside PostgreSQL. Expose ports `5678/tcp` (n8n UI/API), `5432/tcp` (Postgres), and ensure Media Mover (`8081/tcp`), FastAPI gateway (`8000/tcp`), MLflow (`5000/tcp`), and SSH (`22/tcp`) are reachable from the n8n container network.
-- **Environment variables**: Maintain the following keys in the n8n `.env` file (secrets stored outside source control). These power workflow authentication, host discovery, and feature toggles:
+- **Environment variables**: Maintain the following keys in the n8n `.env` file (secrets stored outside source control). These power workflow authentication, host discovery, and feature toggles. *Default metadata DB connection: `DB_HOST=10.0.4.130`, `DB_PORT=5432`, `DB_NAME=reachy_emotion`, `DB_USER=reachy_dev` (credentials managed via Vault).*
   - n8n core: `N8N_BASIC_AUTH_ACTIVE`, `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `N8N_METRICS`, `GENERIC_TIMEZONE`, `N8N_API_URL`, `N8N_API_KEY`, `N8N_HOST`, `WEBHOOK_URL`, `N8N_USER`, `N8N_PASSWORD`.
   - Media Mover & ingest: `MEDIA_MOVER_BASE_URL`, `MEDIA_MOVER_TOKEN`, `INGEST_TOKEN`, `MEDIA_MOVER_ENABLED`.
   - Gateway & UI: `GATEWAY_BASE_URL`, `GATEWAY_ADMIN_TOKEN`, `GATEWAY_WS_TOKEN`.
@@ -305,18 +306,26 @@ Endpoint: `POST http://10.0.4.140:1234/v1/chat/completions` (messages array with
 }
 ```
 
-### 13.4 Media Mover (Ubuntu 2 → Ubuntu 1)
+### 13.4 FastAPI Gateway (Ubuntu 2)
+- `GET https://10.0.4.140/api/videos/list` — filter/paginate/lists
+- `GET https://10.0.4.140/api/videos/{video_id}` — metadata lookup
+- `PATCH https://10.0.4.140/api/videos/{video_id}/label` — label updates (422 on validation)
+- `POST https://10.0.4.140/api/v1/promote/stage` — stage clips from `temp` → `dataset_all`
+- `POST https://10.0.4.140/api/v1/promote/sample` — sample balanced train/test selections
+- `POST https://10.0.4.140/api/v1/promote/reset-manifest` — rebuild manifests per run
+
+### 13.5 Media Mover (Ubuntu 2 → Ubuntu 1)
 `POST http://10.0.4.140/api/media/promote` → `{ clip, target, label, correlation_id, dry_run }`
 
-### 13.5 WebSocket Cues (Ubuntu 2 → Jetson)
+### 13.6 WebSocket Cues (Ubuntu 2 → Jetson)
 Server → client: `{ type: "tts|gesture", text, gesture_id, correlation_id, expires_at }`; client → server ack by `correlation_id`.
 
-### 13.6 Error Model & Retries
+### 13.7 Error Model & Retries
 - Standard error: `{ error, message, correlation_id, fields? }`
 - Retry: backoff + jitter on 5xx/network; no retry on 4xx
 - Idempotency: `Idempotency-Key` required on writes
 
-### 13.7 AuthN/AuthZ & Transport
+### 13.8 AuthN/AuthZ & Transport
 - mTLS or short‑lived JWTs for service calls; strict CORS; TLS 1.3; Nginx hardening
 
 ---
@@ -364,6 +373,8 @@ CREATE TABLE run_link (
 ```
 **Policy:** DB is the source of truth for labels/splits; manifests are derived.
 
+**Connection Defaults:** `host=10.0.4.130`, `port=5432`, `database=reachy_emotion`, `user=reachy_dev`, password via Vault secret. Application overrides use `DB_URL=postgresql+asyncpg://reachy_dev:***@10.0.4.130:5432/reachy_emotion`.
+
 CREATE TABLE training_run (
   run_id         UUID PRIMARY KEY,
   created_at     TIMESTAMPTZ DEFAULT now(),
@@ -383,33 +394,40 @@ CREATE TABLE training_selection (
 
 ---
 
-## 16. API Contract (mini‑FastAPI)
-- Base: `GET /api/media` → returns service status and version. Base URL: `https://10.0.4.130/api/media`
-- `GET /api/videos/list?split={temp|dataset_all|train|test}&limit=&offset=` → list items (paged)
-- `GET /api/videos/{video_id}` → size, mtime, split
-- `GET /api/videos/{video_id}/thumb` → file/redirect `/thumbs/{video_id}.jpg`
-- `POST /api/media/promote` (auth)
-  - **Stage mode**: `{ video_id, dest_split="dataset_all", label, dry_run?, correlation_id?, idempotency_key? }`
-  - **Sample mode**: `{ run_id, dest_split="train"|"test", sample_strategy?, sample_fraction?, seed?, dry_run?, include_labels? }` (service copies from `dataset_all`, enforces label policy, emits selection manifests)
-  - Compatibility alias: `POST /api/promote` (kept for existing clients)
-- `POST /api/media/train/reset` (auth, optional) → prune or archive existing `train/` and `test/` selections for a given `run_id`
-- `POST /api/relabel` (auth) → update label
-- `POST /api/manifest/rebuild` (auth) → regenerate JSONL manifests + return `dataset_hash`
+## 16. API Contracts
 
-All mutate endpoints require Bearer/JWT.
+### 16.1 FastAPI Gateway (Ubuntu 2)
+- Base: `https://10.0.4.140/api`
+- `/videos/list`: supports `split`, `limit`, `offset`, `label`, `order_by`, `order`
+- `/videos/{video_id}`: returns metadata + derived file status (404 if file missing)
+- `/videos/{video_id}/label`: PATCH body `{ "new_label": "happy" }`; enforces label policy
+- `/v1/promote/stage`: `{ video_ids: [], label, dry_run?, correlation_id?, idempotency_key? }`
+- `/v1/promote/sample`: `{ run_id, target_split, sample_fraction, strategy, dry_run?, seed? }`
+- `/v1/promote/reset-manifest`: resets manifests and clears cached selections for `run_id`
+- `/metrics` & `/health`: internal monitoring endpoints
+
+### 16.2 Media Mover API (Ubuntu 1)
+- Base: `https://10.0.4.130/api/media`
+- `GET /api/media`: service status/version
+- `POST /api/media/promote`: filesystem move/copy operations mirroring gateway requests
+- `POST /api/media/train/reset`: prune/archive selections for given `run_id`
+- `POST /api/relabel`: update label directly in metadata store (protected)
+- `POST /api/manifest/rebuild`: regenerate manifests + return `dataset_hash`
+
+All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests include `Idempotency-Key`; Media Mover enforces the same correlation ID for audit trails.
 
 ---
 
 ## 17. Networking, Ports, and Security
 - **Ingress**: Jetson → Ubuntu 2 only (HTTPS `:443`, WebSocket `/ws/cues/*`)
 - **Ubuntu 2 → Ubuntu 1**: LM Studio `:1234`, Media Mover `:8081` (base `https://10.0.4.130/api/media`), PostgreSQL `:5432`, Nginx media `:80/:443`, Redis `:6379` (optional)
-- **Prometheus**: internal `/metrics` (media‑mover `:9101`, gateway `:9100`)
+- **Prometheus**: internal `/metrics` (media-mover `:9101`, gateway `:9100`); FastAPI gateway exposes `/metrics` guarded behind Nginx allow-list.
 - **Prohibitions**: no Jetson↔Ubuntu 1 video streaming; DeepStream not exposed outside Jetson
 - **Edge auth**: mTLS/JWT; tokens ≤15 min; Vault‑managed keys; rotate ≤90 days
-- **Reverse proxy hardening**: range requests, strict MIME, gzip text only, cache controls, request limits, CORS allow‑list
+- **Reverse proxy hardening**: range requests, strict MIME, gzip text only, cache controls, request limits, CORS allow-list, `/api/v1/promote/*` limited to LAN subnets
 - **API hardening**: timeouts, retries, JSON logs, correlation IDs, idempotency keys; `/healthz` & `/metrics` internal only
-- **DB access**: least privilege roles; TLS if feasible; IP restrict
-- **Secrets**: no secrets in images; env‑only; short‑lived tokens
+- **DB access**: least privilege roles; TLS if feasible; IP restrict. Default metadata credentials: `reachy_dev@10.0.4.130:5432/reachy_emotion` (managed via Vault, rotated ≤90 days).
+- **Secrets**: no secrets in images; env-only; short-lived tokens; DB credentials use `reachy_dev` role scoped to metadata schema
 - **Firewall**: default‑deny; allow known subnets/ports
 
 ---
@@ -443,6 +461,7 @@ All mutate endpoints require Bearer/JWT.
 
 ### Changelog
 - [2025-10-28 21:37:00] - Added `/videos/dataset_all/` staging workflow, randomized train/test selection requirements, API/schema updates, and monitoring expectations.
+- [2025-11-26 03:55:00] - Documented `/api/v1/promote/*` gateway endpoints, refreshed DB credentials (`reachy_dev`), noted full gateway test pass, and aligned observability/networking details.
 
 ---
 
@@ -461,10 +480,11 @@ All mutate endpoints require Bearer/JWT.
 ---
 
 ## 24. Acceptance Criteria
-- Media‑mover exposes **list**, **thumb**, **promote**, **relabel**, **manifest rebuild** with auth and atomic moves
+- **Gateway+Media Mover expose** `list`, `thumb`, `promote` (stage/sample), `relabel`, `manifest rebuild`, and `reset-manifest` with auth and atomic moves
 - MLflow runs contain **dataset_hash** and (if ZFS) **snapshot_ref** with artifacts visible in UI
 - NAS sync passes nightly; quarterly restore verified
 - Nginx thumbnail latency and manifest rebuild times meet targets in §6.3
+- FastAPI gateway regression suite (59 tests) remains green before promoting config changes
 
 ---
 
