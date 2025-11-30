@@ -11,6 +11,7 @@ SplitEnum = Enum(
     "dataset_all",
     "train",
     "test",
+    "purged",
     name=VIDEO_SPLIT_ENUM_NAME,
     create_constraint=True,
     native_enum=False,

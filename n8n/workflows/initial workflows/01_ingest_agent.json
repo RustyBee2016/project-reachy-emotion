@@ -1,0 +1,402 @@
+{
+  "name": "Agent 1 — Ingest Agent (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "video_gen_hook",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "webhook_trigger",
+      "name": "Webhook: ingest.video",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-400, 300],
+      "webhookId": "ingest-video-hook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.headers['x-ingest-key']}}",
+              "operation": "equals",
+              "value2": "={{$env.INGEST_TOKEN}}"
+            }
+          ]
+        }
+      },
+      "id": "auth_check",
+      "name": "IF: auth.check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize incoming payload from various sources\nconst body = $json.body ?? $json;\nconst sourceUrl = body.source_url ?? body.url ?? body.asset?.url ?? body.data?.asset?.url;\n\nif (!sourceUrl) {\n  throw new Error('Missing source_url in request body');\n}\n\nconst label = body.label ?? body.emotion ?? null;\nconst meta = body.meta ?? { \n  generator: body.generator ?? body.source ?? 'unknown' \n};\nconst correlationId = $json.headers?.['x-correlation-id'] ?? `ingest-${Date.now()}`;\nconst idempotencyKey = $json.headers?.['idempotency-key'] ?? `idem-${Date.now()}`;\n\nreturn [\n  {\n    json: {\n      source_url: sourceUrl,\n      label,\n      meta,\n      correlation_id: correlationId,\n      idempotency_key: idempotencyKey,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "normalize_payload",
+      "name": "Code: normalize.payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/media/pull",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotency_key}}"
+            },
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source_url",
+              "value": "={{$json.source_url}}"
+            },
+            {
+              "name": "label",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "compute_thumb",
+              "value": "=true"
+            },
+            {
+              "name": "ffprobe",
+              "value": "=true"
+            },
+            {
+              "name": "dest_split",
+              "value": "=temp"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "media_pull",
+      "name": "HTTP: media.pull",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait_poll",
+      "name": "Wait: 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [400, 200],
+      "webhookId": "ingest-wait"
+    },
+    {
+      "parameters": {
+        "url": "={{$json.status_url}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "check_status",
+      "name": "HTTP: check.status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.status}}",
+              "operation": "equals",
+              "value2": "done"
+            }
+          ]
+        }
+      },
+      "id": "is_done",
+      "name": "IF: status.done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO video (video_id, file_path, split, label, duration_sec, fps, width, height, size_bytes, sha256, created_at, updated_at)\nVALUES (\n  '{{$json.video_id}}',\n  '{{$json.file_path}}',\n  'temp',\n  '{{$json.label}}',\n  {{$json.ffprobe.duration}},\n  {{$json.ffprobe.fps}},\n  {{$json.ffprobe.width}},\n  {{$json.ffprobe.height}},\n  {{$json.size_bytes}},\n  '{{$json.sha256}}',\n  NOW(),\n  NOW()\n)\nON CONFLICT (sha256, size_bytes) DO NOTHING\nRETURNING video_id;",
+        "options": {}
+      },
+      "id": "db_insert",
+      "name": "Postgres: insert.video",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1000, 100],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/ingest",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "=ingest.completed"
+            },
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "file_path",
+              "value": "={{$json.file_path}}"
+            },
+            {
+              "name": "sha256",
+              "value": "={{$json.sha256}}"
+            }
+          ]
+        }
+      },
+      "id": "emit_event",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\"status\": \"success\", \"video_id\": $json.video_id, \"correlation_id\": $json.correlation_id} }}"
+      },
+      "id": "respond_success",
+      "name": "Respond: success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1400, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\"error\": \"unauthorized\", \"message\": \"Invalid or missing X-INGEST-KEY header\"} }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond_401",
+      "name": "Respond: 401 Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-200, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Loop back to wait if not done yet\nconst maxAttempts = 20;\nconst currentAttempt = $json.attempt ?? 1;\n\nif (currentAttempt >= maxAttempts) {\n  throw new Error('Max polling attempts reached');\n}\n\nreturn [{\n  json: {\n    ...items[0].json,\n    attempt: currentAttempt + 1\n  }\n}];"
+      },
+      "id": "increment_attempt",
+      "name": "Code: increment.attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 400]
+    }
+  ],
+  "connections": {
+    "webhook_trigger": {
+      "main": [
+        [
+          {
+            "node": "auth_check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "auth_check": {
+      "main": [
+        [
+          {
+            "node": "normalize_payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "respond_401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_payload": {
+      "main": [
+        [
+          {
+            "node": "media_pull",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "media_pull": {
+      "main": [
+        [
+          {
+            "node": "wait_poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "wait_poll": {
+      "main": [
+        [
+          {
+            "node": "check_status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_status": {
+      "main": [
+        [
+          {
+            "node": "is_done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "is_done": {
+      "main": [
+        [
+          {
+            "node": "db_insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "increment_attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_insert": {
+      "main": [
+        [
+          {
+            "node": "emit_event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "emit_event": {
+      "main": [
+        [
+          {
+            "node": "respond_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "increment_attempt": {
+      "main": [
+        [
+          {
+            "node": "wait_poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error_handler"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "agent",
+      "id": "1"
+    },
+    {
+      "name": "ingest",
+      "id": "2"
+    },
+    {
+      "name": "phase4",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}
