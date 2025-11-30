@@ -15,7 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
 
-from ..app.config import AppConfig, get_config
+from app.config import AppConfig, get_config
 
 router = APIRouter()
 

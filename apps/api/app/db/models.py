@@ -239,7 +239,7 @@ class AuditLog(Base):
         default=datetime.utcnow,
         nullable=False,
     )
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+    extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict, nullable=True)
     correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (
