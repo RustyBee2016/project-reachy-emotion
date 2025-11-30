@@ -265,6 +265,134 @@ class EmotionDataset(Dataset):
         weights = weights / weights.sum() * len(self.class_names)
         
         return weights
+    
+    def validate(self, min_samples_per_class: int = 10) -> Dict[str, Any]:
+        """
+        Validate dataset integrity and readiness for training.
+        
+        Checks:
+        - Minimum samples per class
+        - Class balance
+        - File accessibility
+        - Video/image file integrity (sample check)
+        
+        Args:
+            min_samples_per_class: Minimum required samples per class
+        
+        Returns:
+            Dictionary with validation results and any issues found
+        """
+        results = {
+            'valid': True,
+            'total_samples': len(self.samples),
+            'class_counts': {},
+            'issues': [],
+            'warnings': [],
+        }
+        
+        # Check class distribution
+        for class_name in self.class_names:
+            count = sum(1 for s in self.samples if s['class_name'] == class_name)
+            results['class_counts'][class_name] = count
+            
+            if count == 0:
+                results['issues'].append(f"Class '{class_name}' has no samples")
+                results['valid'] = False
+            elif count < min_samples_per_class:
+                results['issues'].append(
+                    f"Class '{class_name}' has only {count} samples "
+                    f"(minimum: {min_samples_per_class})"
+                )
+                results['valid'] = False
+        
+        # Check class balance
+        if results['class_counts']:
+            counts = list(results['class_counts'].values())
+            max_count = max(counts)
+            min_count = min(counts)
+            if max_count > 0 and min_count / max_count < 0.5:
+                imbalance_ratio = min_count / max_count
+                results['warnings'].append(
+                    f"Class imbalance detected: ratio = {imbalance_ratio:.2f}. "
+                    f"Consider using class weights or oversampling."
+                )
+        
+        # Sample file integrity check (check first 5 files per class)
+        files_checked = 0
+        files_failed = 0
+        for class_name in self.class_names:
+            class_samples = [s for s in self.samples if s['class_name'] == class_name][:5]
+            for sample in class_samples:
+                files_checked += 1
+                try:
+                    if sample['type'] == 'video':
+                        cap = cv2.VideoCapture(str(sample['path']))
+                        if not cap.isOpened():
+                            files_failed += 1
+                            results['warnings'].append(f"Cannot open video: {sample['path']}")
+                        else:
+                            ret, _ = cap.read()
+                            if not ret:
+                                files_failed += 1
+                                results['warnings'].append(f"Cannot read frame from: {sample['path']}")
+                        cap.release()
+                    else:
+                        img = cv2.imread(str(sample['path']))
+                        if img is None:
+                            files_failed += 1
+                            results['warnings'].append(f"Cannot read image: {sample['path']}")
+                except Exception as e:
+                    files_failed += 1
+                    results['warnings'].append(f"Error reading {sample['path']}: {e}")
+        
+        results['files_checked'] = files_checked
+        results['files_failed'] = files_failed
+        
+        if files_failed > 0:
+            results['warnings'].append(
+                f"{files_failed}/{files_checked} sample files failed integrity check"
+            )
+        
+        # Log results
+        if results['valid']:
+            logger.info(f"Dataset validation PASSED: {results['total_samples']} samples")
+        else:
+            logger.error(f"Dataset validation FAILED: {results['issues']}")
+        
+        for warning in results['warnings']:
+            logger.warning(f"Dataset warning: {warning}")
+        
+        return results
+
+
+def validate_dataset(
+    data_dir: str,
+    split: str = "train",
+    class_names: Optional[List[str]] = None,
+    min_samples_per_class: int = 10,
+) -> Dict[str, Any]:
+    """
+    Convenience function to validate a dataset before training.
+    
+    Args:
+        data_dir: Root data directory
+        split: Data split to validate
+        class_names: List of expected class names
+        min_samples_per_class: Minimum samples required per class
+    
+    Returns:
+        Validation results dictionary
+    """
+    if class_names is None:
+        class_names = ["happy", "sad"]
+    
+    dataset = EmotionDataset(
+        data_dir=data_dir,
+        split=split,
+        class_names=class_names,
+    )
+    
+    return dataset.validate(min_samples_per_class=min_samples_per_class)
 
 
 def get_train_transforms(

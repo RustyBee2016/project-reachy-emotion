@@ -10,8 +10,8 @@ Model placeholder: resnet50-affectnet-raf-db
 
 from .config import TrainingConfig, ModelConfig, DataConfig
 from .model import EmotionClassifier, load_pretrained_model
-from .dataset import EmotionDataset, get_train_transforms, get_val_transforms
-from .train import Trainer
+from .dataset import EmotionDataset, get_train_transforms, get_val_transforms, validate_dataset
+from .train import Trainer, train_model
 from .evaluate import compute_metrics, expected_calibration_error
 from .export import export_to_onnx, convert_to_tensorrt
 
@@ -27,8 +27,10 @@ __all__ = [
     "EmotionDataset",
     "get_train_transforms",
     "get_val_transforms",
+    "validate_dataset",
     # Training
     "Trainer",
+    "train_model",
     # Evaluation
     "compute_metrics",
     "expected_calibration_error",

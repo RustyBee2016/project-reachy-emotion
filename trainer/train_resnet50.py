@@ -148,12 +148,15 @@ def main():
     trainer = Trainer(config)
     
     # Resume from checkpoint if specified
+    resume_epoch = 0
     if args.resume:
-        logger.info(f"Resuming from checkpoint: {args.resume}")
-        # Load checkpoint state would go here
+        if not Path(args.resume).exists():
+            logger.error(f"Checkpoint not found: {args.resume}")
+            sys.exit(1)
+        resume_epoch = trainer.load_checkpoint(args.resume)
     
     # Run training
-    results = trainer.train(run_id=args.run_id)
+    results = trainer.train(run_id=args.run_id, resume_epoch=resume_epoch)
     
     # Print results
     print("\n" + "=" * 60)

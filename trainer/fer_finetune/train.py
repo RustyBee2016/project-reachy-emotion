@@ -79,7 +79,10 @@ class Trainer:
         # Freeze backbone for Phase 1
         self.model.freeze_backbone()
         
-        # Loss function with label smoothing
+        # Class weights (computed after data loaders are created)
+        self.class_weights: Optional[torch.Tensor] = None
+        
+        # Loss function with label smoothing (weights added after data loading)
         self.criterion = nn.CrossEntropyLoss(
             label_smoothing=config.label_smoothing
         )
@@ -118,6 +121,9 @@ class Trainer:
         
         # MLflow tracking
         self.mlflow_run_id: Optional[str] = None
+        
+        # Checkpoint resume state
+        self.resumed_from: Optional[str] = None
         
         logger.info(f"Trainer initialized on device: {self.device}")
         logger.info(f"Model params: {self.model.get_total_params():,} total, "
@@ -187,6 +193,18 @@ class Trainer:
         
         logger.info(f"Data loaders created: {len(self.train_loader)} train batches, "
                    f"{len(self.val_loader)} val batches")
+        
+        # Compute class weights from training dataset
+        if hasattr(self.train_loader.dataset, 'get_class_weights'):
+            self.class_weights = self.train_loader.dataset.get_class_weights()
+            if self.class_weights is not None:
+                self.class_weights = self.class_weights.to(self.device)
+                # Recreate loss function with class weights
+                self.criterion = nn.CrossEntropyLoss(
+                    weight=self.class_weights,
+                    label_smoothing=self.config.label_smoothing
+                )
+                logger.info(f"Class weights applied: {self.class_weights.cpu().numpy()}")
     
     def _mixup_data(
         self,
@@ -264,9 +282,12 @@ class Trainer:
                         loss = self.criterion(logits, labels)
                     
                     # Multi-task VA loss (if enabled)
-                    if self.va_criterion is not None and 'va' in outputs:
-                        # Would need VA labels in dataset
-                        pass
+                    # NOTE: VA (valence/arousal) regression requires VA labels in dataset
+                    # This is a placeholder for future multi-task learning support
+                    # To enable: add 'va_labels' to dataset __getitem__ return
+                    # if self.va_criterion is not None and 'va' in outputs and 'va_labels' in batch:
+                    #     va_loss = self.va_criterion(outputs['va'], batch['va_labels'])
+                    #     loss = loss + 0.5 * va_loss  # weighted combination
                 
                 # Backward with gradient scaling
                 self.scaler.scale(loss).backward()
@@ -466,9 +487,14 @@ class Trainer:
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
+            'scaler_state_dict': self.scaler.state_dict() if self.scaler else None,
             'metrics': metrics,
             'config': self.config.to_dict(),
             'training_phase': self.training_phase,
+            'best_metric': self.best_metric,
+            'patience_counter': self.patience_counter,
+            'global_step': self.global_step,
         }
         
         # Save latest
@@ -486,12 +512,79 @@ class Trainer:
             epoch_path = checkpoint_dir / f'checkpoint_epoch_{epoch}.pth'
             torch.save(checkpoint, epoch_path)
     
-    def train(self, run_id: Optional[str] = None) -> Dict[str, Any]:
+    def load_checkpoint(self, checkpoint_path: str) -> int:
+        """
+        Load training state from checkpoint.
+        
+        Args:
+            checkpoint_path: Path to checkpoint file
+        
+        Returns:
+            Epoch number to resume from
+        """
+        logger.info(f"Loading checkpoint: {checkpoint_path}")
+        
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        
+        # Load model state
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        
+        # Restore training phase first (affects optimizer param groups)
+        self.training_phase = checkpoint.get('training_phase', 1)
+        
+        # If we're in Phase 2, unfreeze layers before loading optimizer
+        if self.training_phase == 2:
+            self.model.unfreeze_layers(self.config.model.unfreeze_layers)
+            # Recreate optimizer with differential LR
+            self.optimizer = AdamW(
+                self.model.get_param_groups(self.config.learning_rate),
+                weight_decay=self.config.weight_decay,
+            )
+        
+        # Load optimizer state
+        if 'optimizer_state_dict' in checkpoint:
+            try:
+                self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            except ValueError as e:
+                logger.warning(f"Could not load optimizer state: {e}")
+        
+        # Load scheduler state
+        if 'scheduler_state_dict' in checkpoint and checkpoint['scheduler_state_dict']:
+            try:
+                self.scheduler = self._create_scheduler()
+                self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            except Exception as e:
+                logger.warning(f"Could not load scheduler state: {e}")
+        
+        # Load scaler state (for mixed precision)
+        if 'scaler_state_dict' in checkpoint and checkpoint['scaler_state_dict'] and self.scaler:
+            try:
+                self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
+            except Exception as e:
+                logger.warning(f"Could not load scaler state: {e}")
+        
+        # Restore training state
+        self.best_metric = checkpoint.get('best_metric', 0.0)
+        self.patience_counter = checkpoint.get('patience_counter', 0)
+        self.global_step = checkpoint.get('global_step', 0)
+        
+        resume_epoch = checkpoint.get('epoch', 0)
+        self.current_epoch = resume_epoch
+        self.resumed_from = checkpoint_path
+        
+        logger.info(f"Resumed from epoch {resume_epoch}, phase {self.training_phase}")
+        logger.info(f"Best metric so far: {self.best_metric:.4f}")
+        logger.info(f"Trainable params: {self.model.get_trainable_params():,}")
+        
+        return resume_epoch
+    
+    def train(self, run_id: Optional[str] = None, resume_epoch: int = 0) -> Dict[str, Any]:
         """
         Run full training loop.
         
         Args:
             run_id: Optional run identifier
+            resume_epoch: Epoch to resume from (0 = start fresh)
         
         Returns:
             Training results dictionary
@@ -500,7 +593,10 @@ class Trainer:
             run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         logger.info("=" * 60)
-        logger.info(f"Starting training run: {run_id}")
+        if resume_epoch > 0:
+            logger.info(f"Resuming training run: {run_id} from epoch {resume_epoch + 1}")
+        else:
+            logger.info(f"Starting training run: {run_id}")
         logger.info("=" * 60)
         
         # Create data loaders if not already created
@@ -512,9 +608,15 @@ class Trainer:
             import mlflow
             mlflow.set_tracking_uri(self.config.mlflow_tracking_uri)
             mlflow.set_experiment(self.config.mlflow_experiment_name)
-            mlflow.start_run(run_name=run_id)
-            mlflow.log_params(self.config.to_dict())
-            self.mlflow_run_id = mlflow.active_run().info.run_id
+            
+            # Resume existing run or start new
+            if self.resumed_from and self.mlflow_run_id:
+                mlflow.start_run(run_id=self.mlflow_run_id)
+                logger.info(f"Resumed MLflow run: {self.mlflow_run_id}")
+            else:
+                mlflow.start_run(run_name=run_id)
+                mlflow.log_params(self.config.to_dict())
+                self.mlflow_run_id = mlflow.active_run().info.run_id
         except ImportError:
             logger.warning("MLflow not available, skipping tracking")
             mlflow = None
@@ -522,13 +624,16 @@ class Trainer:
         results = {
             'run_id': run_id,
             'status': 'running',
-            'epochs_completed': 0,
-            'best_metric': 0.0,
+            'epochs_completed': resume_epoch,
+            'best_metric': self.best_metric,
             'gate_results': {},
+            'resumed_from': self.resumed_from,
         }
         
+        start_epoch = resume_epoch + 1
+        
         try:
-            for epoch in range(1, self.config.num_epochs + 1):
+            for epoch in range(start_epoch, self.config.num_epochs + 1):
                 self.current_epoch = epoch
                 
                 # Check for phase transition
@@ -546,8 +651,11 @@ class Trainer:
                 else:
                     self.scheduler.step()
                 
+                # Get current learning rate
+                current_lr = self.optimizer.param_groups[0]['lr']
+                
                 # Log metrics
-                logger.info(f"Epoch {epoch}/{self.config.num_epochs}")
+                logger.info(f"Epoch {epoch}/{self.config.num_epochs} (LR: {current_lr:.2e})")
                 logger.info(f"  Train - Loss: {train_metrics['loss']:.4f}, "
                            f"F1: {train_metrics['f1_macro']:.4f}")
                 logger.info(f"  Val   - Loss: {val_metrics['loss']:.4f}, "
@@ -557,6 +665,8 @@ class Trainer:
                 if mlflow is not None:
                     mlflow.log_metrics({f'train_{k}': v for k, v in train_metrics.items()}, step=epoch)
                     mlflow.log_metrics({f'val_{k}': v for k, v in val_metrics.items()}, step=epoch)
+                    mlflow.log_metric('learning_rate', current_lr, step=epoch)
+                    mlflow.log_metric('training_phase', self.training_phase, step=epoch)
                 
                 # Check quality gates
                 gate_results = self._check_quality_gates(val_metrics)
