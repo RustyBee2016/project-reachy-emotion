@@ -23,7 +23,7 @@
 Reachy‑Emotion‑Recognition is an open‑source robotic platform designed for human‑robot interaction and research. This project implements a privacy‑preserving emotion recognition system with a continuous improvement loop:
 
 1. **Data Generation**: Web app for generating and classifying synthetic emotion videos.
-2. **Model Training**: Fine‑tuning of EmotionNet models with rigorous validation.
+2. **Model Training**: Fine‑tuning of ResNet-50 (AffectNet + RAF-DB pretrained) models with rigorous validation.
 3. **Deployment**: Containerized deployment to Reachy robots with staged rollout.
 4. **Inference**: Real‑time emotion classification with strict performance SLAs.
 5. **Feedback Loop**: Ongoing user‑based classifications improve future model iterations.
@@ -140,11 +140,14 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ### 6.2 Software Dependencies
 - **OS**: Ubuntu 20.04 LTS with ROS 2 Foxy
 - **Python**: 3.8+
-- **ML Framework (legacy)**: TensorFlow 2.14+ with CUDA 12 *(legacy compatibility; training uses TAO 6.x PyTorch)*
+- **ML Framework**: PyTorch 2.0+ with CUDA 12 for ResNet-50 fine-tuning
+- **ML Libraries**: `timm 0.9+` (pretrained models), `albumentations 1.3+` (augmentation), `scikit-learn 1.3+` (metrics)
 - **NVIDIA Framework Wheel**: 24.05
 - **NVIDIA JetPack**: 5.x
 - **Containerization**: Docker 20.10+ with NVIDIA Container Toolkit
-- **Deep Learning (Training, Ubuntu 1)**: NVIDIA TAO Toolkit **6.x (PyTorch)**
+- **Deep Learning (Training, Ubuntu 1)**: PyTorch + timm for ResNet-50 fine-tuning; NVIDIA TAO Toolkit **6.x** (legacy compatibility)
+- **Model**: ResNet-50 pre-trained on AffectNet + RAF-DB (placeholder: `resnet50-affectnet-raf-db`)
+- **Model Storage**: `/media/rusty_admin/project_data/ml_models/resnet50`
 - **Inference (Jetson)**: NVIDIA **DeepStream SDK 6.x** + **TensorRT 8.6+** (`gst-nvinfer`, `pyds`, GStreamer 1.22+)
 - **API Gateway**: FastAPI **0.110+** (Pydantic v2), `orjson 3.10+`
 - **ASGI Server**: Uvicorn **0.29+** (optionally under Gunicorn)
