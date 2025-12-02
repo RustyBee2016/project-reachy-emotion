@@ -125,7 +125,7 @@ UPDATE video SET label = 'happy' WHERE video_id = 'test-id-here';
 **Verification Steps**:
 
 ```bash
-curl -X POST http://10.0.4.130:8081/api/relabel \
+curl -X POST http://10.0.4.130:8083/api/relabel \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Idempotency-Key: test-relabel-001" \
@@ -161,7 +161,7 @@ curl -X POST http://10.0.4.130:8081/api/relabel \
 
 ```bash
 # First, ensure you have a video in temp split
-curl -X POST http://10.0.4.130:8081/api/promote \
+curl -X POST http://10.0.4.130:8083/api/promote \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Idempotency-Key: test-promote-001" \

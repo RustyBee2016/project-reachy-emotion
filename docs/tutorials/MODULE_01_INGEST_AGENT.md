@@ -96,14 +96,14 @@ docker-compose restart n8n
 1. Check if Media Mover is running:
 
 ```bash
-curl -X GET http://10.0.4.130:8081/api/media/health
+curl -X GET http://10.0.4.130:8083/api/media/health
 # Expected: {"status": "ok"} or similar
 ```
 
 2. Test the pull endpoint:
 
 ```bash
-curl -X POST http://10.0.4.130:8081/api/media/pull \
+curl -X POST http://10.0.4.130:8083/api/media/pull \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
@@ -125,7 +125,7 @@ curl -X POST http://10.0.4.130:8081/api/media/pull \
 
 **If test fails**, check:
 - Is the Media Mover service running? `systemctl status fastapi-media`
-- Is port 8081 open? `netstat -tlnp | grep 8081`
+- Is port 8083 open? `netstat -tlnp | grep 8083`
 - Check logs: `journalctl -u fastapi-media -n 50`
 
 **Status**: ⬜ Pending → [ ] Complete
@@ -141,7 +141,7 @@ curl -X POST http://10.0.4.130:8081/api/media/pull \
 1. Using the `job_id` from Test 3:
 
 ```bash
-curl -X GET http://10.0.4.130:8081/api/media/pull/status/YOUR_JOB_ID \
+curl -X GET http://10.0.4.130:8083/api/media/pull/status/YOUR_JOB_ID \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -276,7 +276,7 @@ async def receive_ingest_event(event: dict):
 
 4. Test by creating a simple workflow:
    - Add HTTP Request node
-   - URL: `http://10.0.4.130:8081/api/media/health`
+   - URL: `http://10.0.4.130:8083/api/media/health`
    - Authentication: Generic Credential → HTTP Header Auth
    - Credential: `Media Mover Auth`
    - Execute and verify success
@@ -1004,7 +1004,7 @@ $json.headers?.['x-ingest-key'] ?? ''
 **Cause**: Media Mover is slow or unreachable.
 
 **Fix**:
-1. Check Media Mover health: `curl http://10.0.4.130:8081/api/media/health`
+1. Check Media Mover health: `curl http://10.0.4.130:8083/api/media/health`
 2. Increase timeout in HTTP Request node (Options → Timeout)
 
 ### Problem: Postgres insert fails with constraint violation
@@ -1019,7 +1019,7 @@ $json.headers?.['x-ingest-key'] ?? ''
 
 **Fix**:
 1. Check Media Mover logs for errors
-2. Manually check status: `curl http://10.0.4.130:8081/api/media/pull/status/JOB_ID`
+2. Manually check status: `curl http://10.0.4.130:8083/api/media/pull/status/JOB_ID`
 3. Verify the video URL is accessible
 
 ---

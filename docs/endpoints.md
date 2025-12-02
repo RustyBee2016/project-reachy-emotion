@@ -28,7 +28,7 @@ Each endpoint aligns with an n8n AI Agent (1 – 10).
 
 ---
 
-## Ubuntu 1 — Backend / Media Mover API (Port 8081)
+## Ubuntu 1 — Backend / Media Mover API (Port 8083)
 
 **Base URL:** `https://10.0.4.130/api`  
 All routes reverse-proxied through Nginx (`/api/...`).
@@ -101,7 +101,7 @@ All routes reverse-proxied through Nginx (`/api/...`).
 
 ---
 
-## Ubuntu 1 — LM Studio Dialogue API (Port 8081, v1)
+## Ubuntu 1 — LM Studio Dialogue API (Port 1234, v1)
 
 ### Dialogue Generation (Emotion-Conditioned)
 | Method | Route | Description |

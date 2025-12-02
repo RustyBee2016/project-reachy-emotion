@@ -172,7 +172,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - rsync exit codes monitored; SMART monitoring on NAS
 
 ### 6.5 n8n Orchestration Environment
-- **Container orchestration**: n8n runs via Docker Compose alongside PostgreSQL. Expose ports `5678/tcp` (n8n UI/API), `5432/tcp` (Postgres), and ensure Media Mover (`8081/tcp`), FastAPI gateway (`8000/tcp`), MLflow (`5000/tcp`), and SSH (`22/tcp`) are reachable from the n8n container network.
+- **Container orchestration**: n8n runs via Docker Compose alongside PostgreSQL. Expose ports `5678/tcp` (n8n UI/API), `5432/tcp` (Postgres), and ensure Media Mover (`8083/tcp`), FastAPI gateway (`8000/tcp`), MLflow (`5000/tcp`), and SSH (`22/tcp`) are reachable from the n8n container network.
 - **Environment variables**: Maintain the following keys in the n8n `.env` file (secrets stored outside source control). These power workflow authentication, host discovery, and feature toggles. *Default metadata DB connection: `DB_HOST=10.0.4.130`, `DB_PORT=5432`, `DB_NAME=reachy_emotion`, `DB_USER=reachy_dev` (credentials managed via Vault).*
   - n8n core: `N8N_BASIC_AUTH_ACTIVE`, `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `N8N_METRICS`, `GENERIC_TIMEZONE`, `N8N_API_URL`, `N8N_API_KEY`, `N8N_HOST`, `WEBHOOK_URL`, `N8N_USER`, `N8N_PASSWORD`.
   - Media Mover & ingest: `MEDIA_MOVER_BASE_URL`, `MEDIA_MOVER_TOKEN`, `INGEST_TOKEN`, `MEDIA_MOVER_ENABLED`.
@@ -423,7 +423,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 
 ## 17. Networking, Ports, and Security
 - **Ingress**: Jetson → Ubuntu 2 only (HTTPS `:443`, WebSocket `/ws/cues/*`)
-- **Ubuntu 2 → Ubuntu 1**: LM Studio `:1234`, Media Mover `:8081` (base `https://10.0.4.130/api/media`), PostgreSQL `:5432`, Nginx media `:80/:443`, Redis `:6379` (optional)
+- **Ubuntu 2 → Ubuntu 1**: LM Studio `:1234`, Media Mover `:8083` (base `https://10.0.4.130/api/media`), PostgreSQL `:5432`, Nginx media `:80/:443`, Redis `:6379` (optional)
 - **Prometheus**: internal `/metrics` (media-mover `:9101`, gateway `:9100`); FastAPI gateway exposes `/metrics` guarded behind Nginx allow-list.
 - **Prohibitions**: no Jetson↔Ubuntu 1 video streaming; DeepStream not exposed outside Jetson
 - **Edge auth**: mTLS/JWT; tokens ≤15 min; Vault‑managed keys; rotate ≤90 days

@@ -59,7 +59,7 @@ By the end of this module, you will:
 |-----------|----------|---------|
 | n8n Instance | Ubuntu 1 (10.0.4.130:5678) | Workflow execution |
 | PostgreSQL | Ubuntu 1 (10.0.4.130:5432) | Metadata storage |
-| Media Mover API | Ubuntu 1 (10.0.4.130:8081) | File operations |
+| Media Mover API | Ubuntu 1 (10.0.4.130:8083) | File operations |
 | FastAPI Gateway | Ubuntu 2 (10.0.4.140:8000) | Web app backend |
 
 ### Exercise 0.1.1: Access Your n8n Instance
@@ -462,7 +462,7 @@ For Docker-based n8n (your setup), set env vars in `docker-compose.yml` or `.env
 services:
   n8n:
     environment:
-      - MEDIA_MOVER_BASE_URL=http://10.0.4.130:8081
+      - MEDIA_MOVER_BASE_URL=http://10.0.4.130:8083
       - GATEWAY_BASE_URL=http://10.0.4.140:8000
       - INGEST_TOKEN=your-secret-token
 ```
@@ -471,7 +471,7 @@ services:
 
 | Variable | Purpose | Example Value |
 |----------|---------|---------------|
-| `MEDIA_MOVER_BASE_URL` | Base URL for Media Mover API | `http://10.0.4.130:8081` |
+| `MEDIA_MOVER_BASE_URL` | Base URL for Media Mover API | `http://10.0.4.130:8083` |
 | `GATEWAY_BASE_URL` | Base URL for FastAPI Gateway | `http://10.0.4.140:8000` |
 | `INGEST_TOKEN` | Authentication token for webhooks | `secret-token-123` |
 | `MLFLOW_URL` | MLflow tracking server | `http://10.0.4.130:5000` |

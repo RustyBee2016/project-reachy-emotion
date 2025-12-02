@@ -219,7 +219,7 @@ Before starting, ensure you have:
 
 - [ ] n8n v1.120.0+ running on Ubuntu 1 (10.0.4.130:5678)
 - [ ] PostgreSQL 16+ with `reachy_emotion` database
-- [ ] Media Mover API running on port 8081
+- [ ] Media Mover API running on port 8083
 - [ ] FastAPI Gateway running on Ubuntu 2 (10.0.4.140:8000)
 - [ ] SSH access to Ubuntu 1 and Jetson (when available)
 
@@ -232,7 +232,7 @@ Before starting, ensure you have:
 
 ### Environment Variables (in n8n)
 
-- [ ] `MEDIA_MOVER_BASE_URL` = `http://10.0.4.130:8081`
+- [ ] `MEDIA_MOVER_BASE_URL` = `http://10.0.4.130:8083`
 - [ ] `GATEWAY_BASE_URL` = `http://10.0.4.140:8000`
 - [ ] `INGEST_TOKEN` = Your secret token
 - [ ] `MLFLOW_URL` = `http://10.0.4.130:5000`

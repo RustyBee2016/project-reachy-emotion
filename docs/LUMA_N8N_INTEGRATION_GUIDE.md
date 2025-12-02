@@ -145,7 +145,7 @@ The workflow uses these environment variables:
 ```bash
 # In n8n settings or docker-compose.yml
 INGEST_TOKEN=your_secure_token_here
-MEDIA_MOVER_BASE_URL=http://10.0.4.130:8081
+MEDIA_MOVER_BASE_URL=http://10.0.4.130:8083
 GATEWAY_BASE_URL=http://10.0.4.140:8000
 ```
 
@@ -156,7 +156,7 @@ services:
   n8n:
     environment:
       - INGEST_TOKEN=your_secure_token_here
-      - MEDIA_MOVER_BASE_URL=http://10.0.4.130:8081
+      - MEDIA_MOVER_BASE_URL=http://10.0.4.130:8083
       - GATEWAY_BASE_URL=http://10.0.4.140:8000
 ```
 

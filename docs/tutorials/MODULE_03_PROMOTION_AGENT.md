@@ -58,7 +58,7 @@ By the end of this module, you will:
 #### Test 1: Promote Endpoint (Dry-Run Mode)
 
 ```bash
-curl -X POST http://10.0.4.130:8081/api/promote \
+curl -X POST http://10.0.4.130:8083/api/promote \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Idempotency-Key: test-dryrun-001" \
@@ -88,7 +88,7 @@ curl -X POST http://10.0.4.130:8081/api/promote \
 #### Test 2: Manifest Rebuild Endpoint
 
 ```bash
-curl -X POST http://10.0.4.130:8081/api/manifest/rebuild \
+curl -X POST http://10.0.4.130:8083/api/manifest/rebuild \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
