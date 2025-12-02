@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
 
 from app.config import AppConfig, get_config
+from app.routers import health as health_router
 
 router = APIRouter()
 
@@ -129,6 +130,15 @@ async def promote(request: Request, config: AppConfig = Depends(get_config)) -> 
 @router.get("/media/health", response_class=PlainTextResponse)
 async def health() -> str:
     return "ok"
+
+
+@router.get("/api/media/health")
+async def api_media_health(
+    request: Request,
+    config: AppConfig = Depends(get_config)
+):
+    """Legacy health endpoint that mirrors /api/v1/health."""
+    return await health_router.health_check(request, config)
 
 
 @router.get("/api/media")
