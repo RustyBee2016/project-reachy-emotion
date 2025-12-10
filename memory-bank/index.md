@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2025-11-29
+**Last Updated**: 2025-12-08
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
