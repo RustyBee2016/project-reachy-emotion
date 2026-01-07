@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    DateTime,
     Float,
     ForeignKey,
     Index,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     select,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID  # type: ignore[attr-defined]
+from sqlalchemy.dialects.postgresql import INET, JSONB, UUID as PGUUID  # type: ignore[attr-defined]
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -30,10 +33,10 @@ except ImportError:  # pragma: no cover
 class Video(TimestampMixin, Base):
     __tablename__ = "video"
 
-    video_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    video_id: Mapped[str] = mapped_column(
+        String(36),
         primary_key=True,
-        default=uuid.uuid4,
+        default=lambda: str(uuid.uuid4()),
     )
     file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     split: Mapped[str] = mapped_column(SplitEnum, nullable=False, default="temp")
@@ -45,11 +48,15 @@ class Video(TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    promotions: Mapped[list["PromotionLog"]] = relationship(
+    promotions: Mapped[List["PromotionLog"]] = relationship(
         back_populates="video",
         cascade="all, delete-orphan",
     )
-    selections: Mapped[list["TrainingSelection"]] = relationship(
+    selections: Mapped[List["TrainingSelection"]] = relationship(
+        back_populates="video",
+        cascade="all, delete-orphan",
+    )
+    label_events: Mapped[List["LabelEvent"]] = relationship(
         back_populates="video",
         cascade="all, delete-orphan",
     )
@@ -59,7 +66,7 @@ class Video(TimestampMixin, Base):
         CheckConstraint(
             """
             (
-                split IN ('temp', 'test') AND label IS NULL
+                split IN ('temp', 'test', 'purged') AND label IS NULL
             ) OR (
                 split IN ('dataset_all', 'train') AND label IS NOT NULL
             )
@@ -74,10 +81,10 @@ class Video(TimestampMixin, Base):
 class TrainingRun(TimestampMixin, Base):
     __tablename__ = "training_run"
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    run_id: Mapped[str] = mapped_column(
+        String(36),
         primary_key=True,
-        default=uuid.uuid4,
+        default=lambda: str(uuid.uuid4()),
     )
     strategy: Mapped[str] = mapped_column(String(64), nullable=False)
     train_fraction: Mapped[float] = mapped_column(Float, nullable=False)
@@ -85,7 +92,7 @@ class TrainingRun(TimestampMixin, Base):
     seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
 
-    selections: Mapped[list["TrainingSelection"]] = relationship(
+    selections: Mapped[List["TrainingSelection"]] = relationship(
         back_populates="training_run",
         cascade="all, delete-orphan",
     )
@@ -94,13 +101,13 @@ class TrainingRun(TimestampMixin, Base):
 class TrainingSelection(TimestampMixin, Base):
     __tablename__ = "training_selection"
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    run_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("training_run.run_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    video_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    video_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("video.video_id", ondelete="CASCADE"),
         primary_key=True,
     )
@@ -117,8 +124,8 @@ class PromotionLog(TimestampMixin, Base):
     __tablename__ = "promotion_log"
 
     promotion_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    video_id: Mapped[uuid.UUID] = mapped_column(
-        SAUuid(as_uuid=True),
+    video_id: Mapped[str] = mapped_column(
+        String(36),
         ForeignKey("video.video_id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -132,4 +139,162 @@ class PromotionLog(TimestampMixin, Base):
 
     __table_args__ = (
         Index("ix_promotion_log_video_time", "video_id", "created_at"),
+    )
+
+
+# ============================================================================
+# New Models for n8n Agent Workflows (Phase 3)
+# ============================================================================
+
+
+class LabelEvent(Base):
+    """Audit log for labeling actions (Labeling Agent - Agent 2)."""
+    __tablename__ = "label_event"
+
+    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    video_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("video.video_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    label: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    rater_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    video: Mapped[Optional[Video]] = relationship(back_populates="label_events")
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('label_only', 'promote_train', 'promote_test', 'discard', 'relabel')",
+            name="chk_label_event_action",
+        ),
+        Index("ix_label_event_video", "video_id"),
+        Index("ix_label_event_created", "created_at"),
+        Index("ix_label_event_idempotency", "idempotency_key"),
+    )
+
+
+class DeploymentLog(Base):
+    """Tracks model deployments (Deployment Agent - Agent 7)."""
+    __tablename__ = "deployment_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    engine_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    model_version: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    target_stage: Mapped[str] = mapped_column(String(50), nullable=False)
+    deployed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    metrics: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+    rollback_from: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gate_b_passed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    fps_measured: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
+    latency_p50_ms: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    latency_p95_ms: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    gpu_memory_gb: Mapped[Optional[float]] = mapped_column(Numeric(4, 2), nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "target_stage IN ('shadow', 'canary', 'rollout')",
+            name="chk_deployment_stage",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'deploying', 'success', 'failed', 'rolled_back')",
+            name="chk_deployment_status",
+        ),
+        Index("ix_deployment_stage", "target_stage"),
+        Index("ix_deployment_status", "status"),
+        Index("ix_deployment_time", "deployed_at"),
+    )
+
+
+class AuditLog(Base):
+    """General audit log for privacy operations (Privacy Agent - Agent 8)."""
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, default="video")
+    entity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    operator: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict, nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        Index("ix_audit_action", "action"),
+        Index("ix_audit_entity", "entity_type", "entity_id"),
+        Index("ix_audit_timestamp", "timestamp"),
+    )
+
+
+class ObsSample(Base):
+    """Time-series metrics storage (Observability Agent - Agent 9)."""
+    __tablename__ = "obs_samples"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    src: Mapped[str] = mapped_column(String(100), nullable=False)
+    metric: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[Optional[float]] = mapped_column(Numeric(15, 4), nullable=True)
+    labels: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+
+    __table_args__ = (
+        Index("ix_obs_ts", "ts"),
+        Index("ix_obs_src_metric", "src", "metric"),
+    )
+
+
+class ReconcileReport(Base):
+    """Filesystem/database reconciliation reports (Reconciler Agent - Agent 4)."""
+    __tablename__ = "reconcile_report"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    orphan_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    missing_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    mismatch_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    drift_detected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_fixed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    details: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "trigger_type IN ('scheduled', 'manual', 'webhook')",
+            name="chk_reconcile_trigger",
+        ),
+        Index("ix_reconcile_time", "run_at"),
+        Index("ix_reconcile_drift", "drift_detected"),
     )

@@ -1,0 +1,159 @@
+{
+  "name": "Agent 5 — Training Orchestrator (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/training/start",
+        "responseMode": "onReceived",
+        "options": {"responseCode": 202}
+      },
+      "id": "webhook_training",
+      "name": "Webhook: dataset.promoted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-600, 300],
+      "webhookId": "training-start"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MLFLOW_URL}}/api/2.0/mlflow/runs/create",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "experiment_id", "value": "={{$env.MLFLOW_EXPERIMENT_ID}}"},
+            {"name": "tags", "value": "={{[{key: 'dataset_hash', value: $json.dataset_hash}, {key: 'correlation_id', value: $json.correlation_id}]}}"}
+          ]
+        }
+      },
+      "id": "mlflow_create_run",
+      "name": "HTTP: mlflow.create_run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd /workspace && nohup tao-launcher emotion_net train -e /workspace/specs/emotionnet_2cls.yaml -r /workspace/experiments/{{$json.run_id}} > /workspace/experiments/{{$json.run_id}}/train.log 2>&1 &",
+        "authentication": "password"
+      },
+      "id": "tao_start_training",
+      "name": "SSH: tao.start_training",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-200, 300],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {"amount": 5, "unit": "minutes"},
+      "id": "wait_poll",
+      "name": "Wait: 5min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "webhookId": "training-wait"
+    },
+    {
+      "parameters": {
+        "command": "test -f /workspace/experiments/{{$json.run_id}}/summary.json && cat /workspace/experiments/{{$json.run_id}}/summary.json || echo '{\"status\": \"running\"}'",
+        "authentication": "password"
+      },
+      "id": "check_status",
+      "name": "SSH: check.status",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const result = JSON.parse($json.stdout || '{}');\nif (result.status === 'running') {\n  return [{json: {...items[0].json, status: 'running'}}];\n}\nreturn [{json: {...result, run_id: items[0].json.run_id}}];"
+      },
+      "id": "parse_summary",
+      "name": "Code: parse.summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{"value1": "={{$json.status}}", "value2": "completed"}]
+        }
+      },
+      "id": "if_done",
+      "name": "IF: training.done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {"value1": "={{$json.macro_f1}}", "operation": "largerEqual", "value2": 0.84},
+            {"value1": "={{$json.balanced_accuracy}}", "operation": "largerEqual", "value2": 0.85},
+            {"value1": "={{$json.ece}}", "operation": "smallerEqual", "value2": 0.08}
+          ]
+        }
+      },
+      "id": "gate_a_check",
+      "name": "IF: Gate_A.pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "command": "cd /workspace && tao-converter -k tlt_encode -d 3,224,224 -t fp16 -e /workspace/experiments/{{$json.run_id}}/emotionnet.engine /workspace/experiments/{{$json.run_id}}/model.etlt",
+        "authentication": "password"
+      },
+      "id": "tao_export",
+      "name": "SSH: tao.export_trt",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [1000, 100],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/training",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=training.completed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "dataset_hash", "value": "={{$json.dataset_hash}}"},
+            {"name": "engine_path", "value": "=/workspace/experiments/{{$json.run_id}}/emotionnet.engine"}
+          ]
+        }
+      },
+      "id": "emit_completed",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1200, 100]
+    }
+  ],
+  "connections": {
+    "webhook_training": {"main": [[{"node": "mlflow_create_run", "type": "main", "index": 0}]]},
+    "mlflow_create_run": {"main": [[{"node": "tao_start_training", "type": "main", "index": 0}]]},
+    "tao_start_training": {"main": [[{"node": "wait_poll", "type": "main", "index": 0}]]},
+    "wait_poll": {"main": [[{"node": "check_status", "type": "main", "index": 0}]]},
+    "check_status": {"main": [[{"node": "parse_summary", "type": "main", "index": 0}]]},
+    "parse_summary": {"main": [[{"node": "if_done", "type": "main", "index": 0}]]},
+    "if_done": {
+      "main": [
+        [{"node": "gate_a_check", "type": "main", "index": 0}],
+        [{"node": "wait_poll", "type": "main", "index": 0}]
+      ]
+    },
+    "gate_a_check": {"main": [[{"node": "tao_export", "type": "main", "index": 0}]]},
+    "tao_export": {"main": [[{"node": "emit_completed", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [{"name": "agent"}, {"name": "training"}, {"name": "phase4"}],
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}

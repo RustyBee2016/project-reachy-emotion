@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, List, Literal, Optional
+from typing_extensions import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, UUID4, field_validator
@@ -16,9 +17,9 @@ _ALLOWED_LABELS = frozenset(str(label) for label in EmotionEnum.enums)
 _ALLOWED_TARGET_SPLITS = frozenset(str(split) for split in SelectionTargetEnum.enums)
 
 
-VideoIdList = Annotated[list[UUID4], Field(min_length=1, max_length=200)]
+VideoIdList = Annotated[List[UUID4], Field(min_length=1, max_length=200)]
 SampleFraction = Annotated[float, Field(gt=0)]
-OptionalSeed = Annotated[int | None, Field(ge=0, le=2**31 - 1)]
+OptionalSeed = Annotated[Optional[int], Field(ge=0, le=2**31 - 1)]
 
 
 class StageRequest(BaseModel):
@@ -49,9 +50,9 @@ class StageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     status: Literal["accepted", "error"] = "accepted"
-    promoted_ids: list[str] = Field(default_factory=list)
-    skipped_ids: list[str] = Field(default_factory=list)
-    failed_ids: list[str] = Field(default_factory=list)
+    promoted_ids: List[str] = Field(default_factory=list)
+    skipped_ids: List[str] = Field(default_factory=list)
+    failed_ids: List[str] = Field(default_factory=list)
     dry_run: bool = Field(
         default=False,
         description="Indicates whether the response represents a simulated operation.",
@@ -113,9 +114,9 @@ class SampleResponse(BaseModel):
     status: Literal["accepted", "error"] = "accepted"
     run_id: str
     target_split: str
-    copied_ids: list[str] = Field(default_factory=list)
-    skipped_ids: list[str] = Field(default_factory=list)
-    failed_ids: list[str] = Field(default_factory=list)
+    copied_ids: List[str] = Field(default_factory=list)
+    skipped_ids: List[str] = Field(default_factory=list)
+    failed_ids: List[str] = Field(default_factory=list)
     dry_run: bool = Field(
         default=False,
         description="Indicates whether the response represents a simulated operation.",
@@ -146,7 +147,7 @@ class ResetManifestRequest(BaseModel):
         ...,
         description="Human-readable reason for triggering a manifest reset.",
     )
-    run_id: UUID4 | None = Field(
+    run_id: Optional[UUID4] = Field(
         default=None,
         description="Optional training run identifier scoped to the reset.",
     )
@@ -165,7 +166,7 @@ class ResetManifestResponse(BaseModel):
 
     status: Literal["accepted", "error"] = "accepted"
     reason: str
-    run_id: str | None = None
+    run_id: Optional[str] = None
 
     @classmethod
     def from_request(

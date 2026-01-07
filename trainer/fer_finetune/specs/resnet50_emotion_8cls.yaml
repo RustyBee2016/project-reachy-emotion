@@ -1,0 +1,91 @@
+# ResNet-50 Emotion Classifier Training Configuration
+# Multi-class classification: 8 emotions (AffectNet compatible)
+# Pre-trained on AffectNet + RAF-DB
+# Model placeholder: resnet50-affectnet-raf-db
+
+model:
+  backbone: "resnet50"
+  pretrained_weights: "resnet50-affectnet-raf-db"
+  num_classes: 8
+  input_size: 224
+  dropout_rate: 0.3
+  use_multi_task: true  # Enable valence/arousal regression head
+  
+  # Transfer learning
+  freeze_backbone_epochs: 5
+  unfreeze_layers:
+    - "layer4"
+    - "fc"
+  
+  model_storage_path: "/media/rusty_admin/project_data/ml_models/resnet50"
+
+data:
+  data_root: "/media/project_data/reachy_emotion/videos"
+  train_dir: "train"
+  val_dir: "test"
+  
+  # Full 8-class emotion set (AffectNet compatible)
+  class_names:
+    - "neutral"
+    - "happy"
+    - "sad"
+    - "anger"
+    - "fear"
+    - "disgust"
+    - "surprise"
+    - "contempt"
+  
+  batch_size: 32
+  num_workers: 4
+  pin_memory: true
+  
+  frame_sampling: "random"
+  frames_per_video: 1
+  
+  augmentation_enabled: true
+  mixup_alpha: 0.2
+  mixup_probability: 0.3
+  
+  image_mean: [0.485, 0.456, 0.406]
+  image_std: [0.229, 0.224, 0.225]
+
+num_epochs: 100  # More epochs for 8-class
+learning_rate: 0.0001
+weight_decay: 0.0001
+
+lr_scheduler: "cosine"
+warmup_epochs: 5
+min_lr: 0.000001
+
+label_smoothing: 0.1
+gradient_clip_norm: 1.0
+
+early_stopping_enabled: true
+patience: 15
+min_delta: 0.001
+monitor_metric: "val_f1_macro"
+
+mixed_precision: true
+
+checkpoint_dir: "/workspace/checkpoints/resnet50_emotion_8cls"
+save_best_only: true
+save_interval: 10
+
+# Adjusted gates for 8-class (more challenging)
+gate_a_min_f1_macro: 0.70
+gate_a_min_per_class_f1: 0.60
+gate_a_min_balanced_accuracy: 0.70
+gate_a_max_ece: 0.10
+gate_a_max_brier: 0.20
+
+gate_b_max_latency_p50_ms: 120.0
+gate_b_max_latency_p95_ms: 250.0
+gate_b_max_gpu_memory_gb: 2.5
+gate_b_min_f1_macro: 0.65
+gate_b_min_per_class_f1: 0.55
+
+mlflow_tracking_uri: "file:///workspace/mlruns"
+mlflow_experiment_name: "resnet50_emotion_8cls_finetune"
+
+seed: 42
+deterministic: true

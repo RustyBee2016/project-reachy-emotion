@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2025-10-17
+**Last Updated**: 2025-12-08
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -14,22 +14,33 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## Key Design Decisions
-- **[Decision: EmotionNet TAO Toolchain](./decisions/004-emotionnet-tao-toolchain.md)** — Train with TAO 4.x; export with TAO 5.3.
-*(Add links to decision records as they are created)*
-
-- **[Decision: Hybrid Storage Architecture](./decisions/)** *(pending)* — Why we chose local filesystem + PostgreSQL metadata over object storage.
-- **[Decision: DeepStream-Only Runtime](./decisions/)** *(pending)* — Rationale for skipping Triton on Jetson in v0.8.3.
-- **[Decision: Privacy-First Architecture](./decisions/)** *(pending)* — Local-only video processing, no raw video egress by default.
+- **[Decision: ResNet-50 AffectNet+RAF-DB Model](./decisions/006-resnet50-affectnet-rafdb.md)** — Replaced EmotionNet with ResNet-50 pretrained on FER datasets (2025-11-29).
+- **[Decision: Endpoint System v1 Rewrite](./decisions/005-endpoint-system-v1.md)** — Centralized config, versioned API, standardized responses, retry logic (2025-11-14).
+- **[Decision: EmotionNet TAO Toolchain](./decisions/004-emotionnet-tao-toolchain.md)** — Train with TAO 4.x; export with TAO 5.3. *(Superseded by 006)*
+- **[Decision: Hybrid Storage Architecture](./decisions/001-hybrid-storage-architecture.md)** — Local filesystem + PostgreSQL metadata over object storage.
+- **[Decision: DeepStream-Only Runtime](./decisions/002-deepstream-only-runtime.md)** — Rationale for skipping Triton on Jetson in v0.8.3.
+- **[Decision: Privacy-First Architecture](./decisions/003-privacy-first-architecture.md)** — Local-only video processing, no raw video egress by default.
 
 ---
 
 ## Runbooks & Operations
-*(Add links to operational playbooks as they are created)*
+- **[Runbook: Promote Video Flow](./runbooks/promote-video-flow.md)** — Step-by-step guide for promoting videos from `temp/` to `train/test/`.
+- **[Runbook: Rollback Procedure](./runbooks/rollback-procedure.md)** — ZFS snapshot rollback and manifest rebuild.
+- **[Runbook: NAS Backup & Restore](./runbooks/nas-backup-restore.md)** — Nightly rsync, quarterly restore test, hash verification.
+- **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, engine export, DeepStream config update.
 
-- **[Runbook: Promote Video Flow](./runbooks/)** *(pending)* — Step-by-step guide for promoting videos from `temp/` to `train/test/`.
-- **[Runbook: Rollback Procedure](./runbooks/)** *(pending)* — ZFS snapshot rollback and manifest rebuild.
-- **[Runbook: NAS Backup & Restore](./runbooks/)** *(pending)* — Nightly rsync, quarterly restore test, hash verification.
-- **[Runbook: Model Deployment](./runbooks/)** *(pending)* — Gate A/B/C validation, engine export, DeepStream config update.
+---
+
+## ML Training Pipeline (v08.4.2)
+- **Model**: ResNet-50 pre-trained on AffectNet + RAF-DB (placeholder: `resnet50-affectnet-raf-db`)
+- **Storage**: `/media/rusty_admin/project_data/ml_models/resnet50`
+- **Training Code**: `trainer/fer_finetune/` module
+- **Config**: `trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml`
+- **n8n Workflows**: `n8n/workflows/ml-agentic-ai_v.1/`
+  - `05_training_orchestrator_resnet50.json`
+  - `06_evaluation_agent_resnet50.json`
+  - `07_deployment_agent_resnet50.json`
+  - `10_ml_pipeline_orchestrator.json`
 
 ---
 

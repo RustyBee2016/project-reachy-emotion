@@ -15,11 +15,11 @@ class FileMoverError(RuntimeError):
     """Raised when a filesystem transition fails."""
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True)
 class FileTransition:
     """Represents a filesystem transition for a video."""
 
-    video_id: uuid.UUID
+    video_id: str  # UUID stored as string
     source: Path  # relative to root, pre-operation
     destination: Path  # relative to root, post-operation
     operation: Literal["move", "copy"]
@@ -37,7 +37,7 @@ class FileMover:
 
         return self._root
 
-    def stage_to_dataset_all(self, *, video_id: uuid.UUID, file_path: str) -> FileTransition:
+    def stage_to_dataset_all(self, *, video_id: str, file_path: str) -> FileTransition:
         """Move a file from temp/ into dataset_all/ preserving subdirectories."""
 
         relative, destination_relative, source, destination = self._prepare_stage(file_path)
@@ -50,7 +50,7 @@ class FileMover:
             operation="move",
         )
 
-    def plan_stage_to_dataset_all(self, *, video_id: uuid.UUID, file_path: str) -> FileTransition:
+    def plan_stage_to_dataset_all(self, *, video_id: str, file_path: str) -> FileTransition:
         """Preview a staging operation without mutating the filesystem."""
 
         relative, destination_relative, source, _ = self._prepare_stage(file_path)
@@ -65,10 +65,10 @@ class FileMover:
     def copy_to_split(
         self,
         *,
-        video_id: uuid.UUID,
+        video_id: str,
         file_path: str,
         target_split: str,
-        run_id: uuid.UUID,
+        run_id: str,
     ) -> FileTransition:
         """Copy a dataset_all file into train/ or test/ scoped by run_id."""
 
@@ -90,10 +90,10 @@ class FileMover:
     def plan_copy_to_split(
         self,
         *,
-        video_id: uuid.UUID,
+        video_id: str,
         file_path: str,
         target_split: str,
-        run_id: uuid.UUID,
+        run_id: str,
     ) -> FileTransition:
         """Preview a sampling copy operation without mutating the filesystem."""
 
@@ -157,7 +157,7 @@ class FileMover:
         self,
         file_path: str,
         target_split: str,
-        run_id: uuid.UUID,
+        run_id: str,
     ) -> tuple[Path, Path, Path, Path]:
         relative = self._to_relative_path(file_path)
         if relative.parts and relative.parts[0] != "dataset_all":
@@ -171,11 +171,11 @@ class FileMover:
         destination = self._root / destination_relative
         return relative, destination_relative, source, destination
 
-    def _ensure_source_exists(self, source: Path, video_id: uuid.UUID) -> None:
+    def _ensure_source_exists(self, source: Path, video_id: str) -> None:
         if not source.exists():
             raise FileMoverError(f"Source file missing for video {video_id}: {source}")
 
-    def _atomic_move(self, video_id: uuid.UUID, source: Path, destination: Path) -> None:
+    def _atomic_move(self, video_id: str, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         tmp_destination = destination.with_suffix(destination.suffix + f".tmp-{uuid.uuid4().hex}")
         try:
@@ -190,7 +190,7 @@ class FileMover:
                 f"Failed to move {source} -> {destination}: {exc}"
             ) from exc
 
-    def _atomic_copy(self, video_id: uuid.UUID, source: Path, destination: Path) -> None:
+    def _atomic_copy(self, video_id: str, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         tmp_destination = destination.with_suffix(destination.suffix + f".tmp-{uuid.uuid4().hex}")
         temp_file_path: Path | None = None

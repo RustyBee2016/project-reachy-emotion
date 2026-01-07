@@ -35,12 +35,12 @@ class Settings:
         )
     )
     videos_root: str = field(
-        default_factory=lambda: os.getenv("MEDIA_MOVER_VIDEOS_ROOT", "/media/project_data/reachy_emotion/videos"),
+        default_factory=lambda: os.getenv("MEDIA_MOVER_VIDEOS_ROOT", "/mnt/videos"),
     )
     manifests_root: str = field(
         default_factory=lambda: os.getenv(
             "MEDIA_MOVER_MANIFESTS_ROOT",
-            "/media/project_data/reachy_emotion/videos/manifests",
+            "/mnt/videos/manifests",
         ),
     )
     enable_cors: bool = field(

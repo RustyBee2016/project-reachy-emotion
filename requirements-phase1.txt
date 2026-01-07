@@ -9,11 +9,16 @@ requests>=2.28.0
 python-socketio[asyncio]>=5.7.0
 
 # Database dependencies
-psycopg2-binary>=2.9.0
-alembic>=1.11.0
-sqlalchemy>=2.0.0
+sqlalchemy[asyncio]>=2.0.0
+aiosqlite>=0.19.0
+asyncpg>=0.29.0
 
 # Testing dependencies
 pytest>=7.3.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.0.0
+
+# updates per Codex instructions
+httpx>=0.27.0
+sqlalchemy[asyncio]>=2.0.0  # replaces bare SQLAlchemy line
+aiosqlite>=0.19.0

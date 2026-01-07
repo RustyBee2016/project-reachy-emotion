@@ -1,0 +1,171 @@
+{
+  "name": "Agent 6 — Evaluation Agent ResNet-50 (Reachy 08.4.2)",
+  "description": "Evaluates trained ResNet-50 emotion classifier. Computes metrics including calibration (ECE, Brier) for Gate A validation.",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/evaluation/resnet50/start",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook_eval",
+      "name": "Webhook: evaluation.start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-600, 300],
+      "webhookId": "resnet50-eval-start"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test, COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test FROM video;"
+      },
+      "id": "db_check_balance",
+      "name": "Postgres: check.test_balance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-400, 300],
+      "credentials": {"postgres": {"id": "2", "name": "PostgreSQL - reachy_local"}}
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {"value1": "={{Math.min($json.happy_test, $json.sad_test)}}", "operation": "largerEqual", "value2": 20}
+          ]
+        }
+      },
+      "id": "if_balanced",
+      "name": "IF: test_set.balanced?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Prepare evaluation command\nconst runId = $json.run_id || 'latest';\nconst checkpointPath = $json.checkpoint_path || `/workspace/checkpoints/resnet50_emotion/best_model.pth`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    run_id: runId,\n    checkpoint_path: checkpointPath,\n    model_placeholder: 'resnet50-affectnet-raf-db'\n  }\n}];"
+      },
+      "id": "prepare_eval",
+      "name": "Code: prepare.evaluation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "command": "cd /workspace && source venv/bin/activate && python -c \"\nfrom trainer.fer_finetune.model import load_pretrained_model\nfrom trainer.fer_finetune.dataset import create_dataloaders\nfrom trainer.fer_finetune.evaluate import evaluate_model, generate_report\nimport json\n\nmodel = load_pretrained_model('{{$json.checkpoint_path}}', num_classes=2)\n_, val_loader = create_dataloaders('/media/project_data/reachy_emotion/videos', batch_size=32)\nresults = evaluate_model(model, val_loader, class_names=['happy', 'sad'])\nreport = generate_report(results, '/workspace/experiments/{{$json.run_id}}/eval_report.txt')\nprint(json.dumps(results))\n\"",
+        "authentication": "password"
+      },
+      "id": "ssh_run_eval",
+      "name": "SSH: run.evaluation",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse evaluation results\nconst output = $json.stdout || '{}';\nlet results;\ntry {\n  results = JSON.parse(output);\n} catch (e) {\n  results = {error: 'Failed to parse evaluation output', raw: output};\n}\n\n// Check Gate A requirements\nconst gateA = {\n  f1_macro: results.f1_macro >= 0.84,\n  balanced_accuracy: results.balanced_accuracy >= 0.85,\n  ece: results.ece <= 0.08,\n  brier: results.brier <= 0.16,\n  passed: false\n};\ngateA.passed = gateA.f1_macro && gateA.balanced_accuracy && gateA.ece && gateA.brier;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    metrics: results,\n    gate_a: gateA\n  }\n}];"
+      },
+      "id": "parse_results",
+      "name": "Code: parse.results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MLFLOW_URL}}/api/2.0/mlflow/runs/log-batch",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "run_id", "value": "={{$json.mlflow_run_id}}"},
+            {"name": "metrics", "value": "={{[{key: 'eval_f1_macro', value: $json.metrics.f1_macro}, {key: 'eval_accuracy', value: $json.metrics.accuracy}, {key: 'eval_ece', value: $json.metrics.ece}, {key: 'eval_brier', value: $json.metrics.brier}, {key: 'eval_balanced_accuracy', value: $json.metrics.balanced_accuracy}]}}"}
+          ]
+        }
+      },
+      "id": "mlflow_log",
+      "name": "HTTP: mlflow.log_metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.gate_a.passed}}", "value2": true}
+          ]
+        }
+      },
+      "id": "gate_a_check",
+      "name": "IF: Gate_A.pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/evaluation",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=evaluation.completed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "gate_a_passed", "value": "={{$json.gate_a.passed}}"},
+            {"name": "f1_macro", "value": "={{$json.metrics.f1_macro}}"},
+            {"name": "ece", "value": "={{$json.metrics.ece}}"},
+            {"name": "ready_for_deployment", "value": "={{$json.gate_a.passed}}"}
+          ]
+        }
+      },
+      "id": "emit_completed",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 100]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/evaluation",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=evaluation.gate_failed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "gate_a_details", "value": "={{JSON.stringify($json.gate_a)}}"},
+            {"name": "metrics", "value": "={{JSON.stringify($json.metrics)}}"}
+          ]
+        }
+      },
+      "id": "emit_gate_failed",
+      "name": "HTTP: emit.gate_failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "webhook_eval": {"main": [[{"node": "db_check_balance", "type": "main", "index": 0}]]},
+    "db_check_balance": {"main": [[{"node": "if_balanced", "type": "main", "index": 0}]]},
+    "if_balanced": {"main": [[{"node": "prepare_eval", "type": "main", "index": 0}]]},
+    "prepare_eval": {"main": [[{"node": "ssh_run_eval", "type": "main", "index": 0}]]},
+    "ssh_run_eval": {"main": [[{"node": "parse_results", "type": "main", "index": 0}]]},
+    "parse_results": {"main": [[{"node": "mlflow_log", "type": "main", "index": 0}]]},
+    "mlflow_log": {"main": [[{"node": "gate_a_check", "type": "main", "index": 0}]]},
+    "gate_a_check": {
+      "main": [
+        [{"node": "emit_completed", "type": "main", "index": 0}],
+        [{"node": "emit_gate_failed", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "agent"}, {"name": "evaluation"}, {"name": "resnet50"}, {"name": "ml-v1"}],
+  "updatedAt": "2025-11-29T00:00:00.000Z",
+  "versionId": "1"
+}
