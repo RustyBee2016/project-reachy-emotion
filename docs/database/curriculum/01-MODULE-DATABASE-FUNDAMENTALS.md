@@ -9,6 +9,7 @@
 ## Learning Objectives
 
 By the end of this module, you will be able to:
+
 1. Explain what a database is and why we use one
 2. Understand tables, rows, columns, and keys
 3. Write basic SQL queries
@@ -32,6 +33,7 @@ path,emotion,created
 ```
 
 **Problems with this approach:**
+
 - No way to prevent duplicate entries
 - Can't enforce rules (e.g., "emotion must be happy/sad/angry")
 - Slow searches when file grows large
@@ -42,13 +44,13 @@ path,emotion,created
 
 A **database** solves all these problems:
 
-| Problem | Database Solution |
-|---------|-------------------|
-| Duplicates | UNIQUE constraints |
-| Invalid data | CHECK constraints, ENUMs |
-| Slow searches | Indexes |
-| Concurrent access | Transactions, locking |
-| Undo mistakes | Rollback, point-in-time recovery |
+| Problem           | Database Solution                |
+| ----------------- | -------------------------------- |
+| Duplicates        | UNIQUE constraints               |
+| Invalid data      | CHECK constraints, ENUMs         |
+| Slow searches     | Indexes                          |
+| Concurrent access | Transactions, locking            |
+| Undo mistakes     | Rollback, point-in-time recovery |
 
 ### Relational vs Other Databases
 
@@ -70,6 +72,7 @@ Database Types
 ```
 
 **Why PostgreSQL for Reachy?**
+
 - Excellent for structured data (videos, training runs)
 - Strong consistency guarantees
 - Powerful query language
@@ -78,13 +81,13 @@ Database Types
 
 ### Key Terms
 
-| Term | Definition | Example |
-|------|------------|---------|
-| **Database** | A collection of organized data | `reachy_local` |
-| **Table** | A structure that holds related data | `video` |
-| **Row** | A single record in a table | One video's information |
-| **Column** | A specific attribute | `file_path`, `label` |
-| **Schema** | The structure definition | Table definitions |
+| Term         | Definition                          | Example                 |
+| ------------ | ----------------------------------- | ----------------------- |
+| **Database** | A collection of organized data      | `reachy_local`          |
+| **Table**    | A structure that holds related data | `video`                 |
+| **Row**      | A single record in a table          | One video's information |
+| **Column**   | A specific attribute                | `file_path`, `label`    |
+| **Schema**   | The structure definition            | Table definitions       |
 
 ---
 
@@ -111,16 +114,16 @@ Think of a table like a spreadsheet:
 
 Every column has a **data type** that defines what values it can hold:
 
-| SQL Type | Description | Example Values |
-|----------|-------------|----------------|
-| `VARCHAR(n)` | Text up to n characters | `'hello'`, `'videos/001.mp4'` |
-| `INTEGER` | Whole numbers | `42`, `-100`, `0` |
-| `BIGINT` | Large whole numbers | `9223372036854775807` |
-| `NUMERIC(p,s)` | Precise decimals | `3.14159`, `99.99` |
-| `BOOLEAN` | True or false | `TRUE`, `FALSE` |
-| `TIMESTAMPTZ` | Date and time with timezone | `'2025-01-05 14:30:00+00'` |
-| `UUID` | Unique identifier | `'550e8400-e29b-41d4-a716-446655440000'` |
-| `JSONB` | JSON data (binary) | `'{"key": "value"}'` |
+| SQL Type       | Description                 | Example Values                           |
+| -------------- | --------------------------- | ---------------------------------------- |
+| `VARCHAR(n)`   | Text up to n characters     | `'hello'`, `'videos/001.mp4'`            |
+| `INTEGER`      | Whole numbers               | `42`, `-100`, `0`                        |
+| `BIGINT`       | Large whole numbers         | `9223372036854775807`                    |
+| `NUMERIC(p,s)` | Precise decimals            | `3.14159`, `99.99`                       |
+| `BOOLEAN`      | True or false               | `TRUE`, `FALSE`                          |
+| `TIMESTAMPTZ`  | Date and time with timezone | `'2025-01-05 14:30:00+00'`               |
+| `UUID`         | Unique identifier           | `'550e8400-e29b-41d4-a716-446655440000'` |
+| `JSONB`        | JSON data (binary)          | `'{"key": "value"}'`                     |
 
 ### Reachy Example: The Video Table
 
@@ -144,6 +147,7 @@ CREATE TABLE video (
 ```
 
 **Breaking this down:**
+
 - `video_id UUID PRIMARY KEY` - Unique identifier, auto-generated
 - `VARCHAR(500) NOT NULL` - Required text field, max 500 chars
 - `NUMERIC(10,2)` - Number like `12345678.90`
@@ -152,7 +156,7 @@ CREATE TABLE video (
 
 ### NULL: The Absence of Value
 
-**NULL is not the same as empty or zero!**
+**<mark>NULL is not the same as empty or zero!</mark>**
 
 ```sql
 -- These are all different:
@@ -162,6 +166,7 @@ label = NULL        -- No value at all (unknown)
 ```
 
 In Reachy:
+
 - Videos in `temp` split have `label = NULL` (not yet labeled)
 - Videos in `dataset_all` must have a label (NOT NULL)
 
@@ -186,6 +191,7 @@ video table:
 ```
 
 **Primary Key Rules:**
+
 1. Must be unique (no duplicates)
 2. Cannot be NULL
 3. Should never change once assigned
@@ -229,6 +235,7 @@ CREATE TABLE training_selection (
 ```
 
 **Foreign Key Benefits:**
+
 - Prevents orphaned records (can't reference non-existent data)
 - `ON DELETE CASCADE` - When parent deleted, delete children too
 - Database enforces data integrity automatically
@@ -291,16 +298,17 @@ CREATE TABLE training_selection (
 
 ### The Four Basic Operations: CRUD
 
-| Operation | SQL Command | Description |
-|-----------|-------------|-------------|
-| **C**reate | `INSERT` | Add new rows |
-| **R**ead | `SELECT` | Query existing rows |
-| **U**pdate | `UPDATE` | Modify existing rows |
-| **D**elete | `DELETE` | Remove rows |
+| Operation  | SQL Command | Description          |
+| ---------- | ----------- | -------------------- |
+| **C**reate | `INSERT`    | Add new rows         |
+| **R**ead   | `SELECT`    | Query existing rows  |
+| **U**pdate | `UPDATE`    | Modify existing rows |
+| **D**elete | `DELETE`    | Remove rows          |
 
 ### SELECT: Reading Data
 
 **Basic syntax:**
+
 ```sql
 SELECT column1, column2, ...
 FROM table_name
@@ -428,14 +436,14 @@ GROUP BY tr.run_id, tr.strategy;
 
 **Constraints** are rules that the database enforces automatically.
 
-| Constraint | Purpose | Example |
-|------------|---------|---------|
-| `PRIMARY KEY` | Unique identifier | `video_id` |
-| `FOREIGN KEY` | Reference to another table | `run_id REFERENCES training_run` |
-| `NOT NULL` | Value required | `file_path VARCHAR(500) NOT NULL` |
-| `UNIQUE` | No duplicates allowed | `UNIQUE(sha256, size_bytes)` |
-| `CHECK` | Custom validation | `CHECK (confidence >= 0 AND confidence <= 1)` |
-| `DEFAULT` | Value if not specified | `DEFAULT 'temp'` |
+| Constraint    | Purpose                    | Example                                       |
+| ------------- | -------------------------- | --------------------------------------------- |
+| `PRIMARY KEY` | Unique identifier          | `video_id`                                    |
+| `FOREIGN KEY` | Reference to another table | `run_id REFERENCES training_run`              |
+| `NOT NULL`    | Value required             | `file_path VARCHAR(500) NOT NULL`             |
+| `UNIQUE`      | No duplicates allowed      | `UNIQUE(sha256, size_bytes)`                  |
+| `CHECK`       | Custom validation          | `CHECK (confidence >= 0 AND confidence <= 1)` |
+| `DEFAULT`     | Value if not specified     | `DEFAULT 'temp'`                              |
 
 ### Reachy Constraint Examples
 
@@ -466,6 +474,7 @@ CHECK (
 ```
 
 **In plain English:**
+
 - `temp` videos: NOT labeled (waiting for human review)
 - `dataset_all` videos: MUST be labeled
 - `train` videos: MUST be labeled
@@ -502,6 +511,7 @@ CHECK (
 A **transaction** is a group of operations that must all succeed or all fail together.
 
 **Example: Promoting a Video**
+
 ```sql
 BEGIN;  -- Start transaction
 
@@ -520,12 +530,12 @@ If Step 2 fails, Step 1 is automatically undone.
 
 ### ACID Properties
 
-| Property | Meaning | Guarantee |
-|----------|---------|-----------|
-| **A**tomicity | All or nothing | If one step fails, everything rolls back |
-| **C**onsistency | Data stays valid | Constraints are always enforced |
-| **I**solation | No interference | Concurrent users don't see partial changes |
-| **D**urability | Changes are permanent | Once committed, data survives crashes |
+| Property        | Meaning               | Guarantee                                  |
+| --------------- | --------------------- | ------------------------------------------ |
+| **A**tomicity   | All or nothing        | If one step fails, everything rolls back   |
+| **C**onsistency | Data stays valid      | Constraints are always enforced            |
+| **I**solation   | No interference       | Concurrent users don't see partial changes |
+| **D**urability  | Changes are permanent | Once committed, data survives crashes      |
 
 ### Isolation Levels
 
@@ -561,6 +571,7 @@ Try to lock row 2...         Try to lock row 1...
 PostgreSQL detects deadlocks and kills one transaction.
 
 **Prevention:**
+
 - Always lock resources in the same order
 - Keep transactions short
 - Use `FOR UPDATE SKIP LOCKED` when appropriate
@@ -601,6 +612,7 @@ Test your understanding:
 ## Hands-On Exercise 1
 
 ### Setup
+
 ```bash
 # Connect to your local PostgreSQL
 psql -U reachy_app -d reachy_local
@@ -609,39 +621,44 @@ psql -U reachy_app -d reachy_local
 ### Tasks
 
 1. **Insert test videos:**
-```sql
-INSERT INTO video (file_path, split, size_bytes) VALUES
+   
+   ```sql
+   INSERT INTO video (file_path, split, size_bytes) VALUES
     ('videos/exercise/001.mp4', 'temp', 1024000),
     ('videos/exercise/002.mp4', 'temp', 2048000),
     ('videos/exercise/003.mp4', 'temp', 512000);
-```
+   ```
 
 2. **Promote one video to dataset_all:**
-```sql
-UPDATE video
-SET split = 'dataset_all', label = 'happy'
-WHERE file_path = 'videos/exercise/001.mp4';
-```
+   
+   ```sql
+   UPDATE video
+   SET split = 'dataset_all', label = 'happy'
+   WHERE file_path = 'videos/exercise/001.mp4';
+   ```
 
 3. **Query to verify:**
-```sql
-SELECT file_path, split, label
-FROM video
-WHERE file_path LIKE 'videos/exercise/%';
-```
+   
+   ```sql
+   SELECT file_path, split, label
+   FROM video
+   WHERE file_path LIKE 'videos/exercise/%';
+   ```
 
 4. **Try to violate a constraint:**
-```sql
--- This should fail! (dataset_all requires label)
-UPDATE video
-SET split = 'dataset_all', label = NULL
-WHERE file_path = 'videos/exercise/002.mp4';
-```
+   
+   ```sql
+   -- This should fail! (dataset_all requires label)
+   UPDATE video
+   SET split = 'dataset_all', label = NULL
+   WHERE file_path = 'videos/exercise/002.mp4';
+   ```
 
 5. **Clean up:**
-```sql
-DELETE FROM video WHERE file_path LIKE 'videos/exercise/%';
-```
+   
+   ```sql
+   DELETE FROM video WHERE file_path LIKE 'videos/exercise/%';
+   ```
 
 ---
 

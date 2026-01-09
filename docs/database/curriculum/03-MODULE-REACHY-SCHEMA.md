@@ -139,6 +139,52 @@ CHECK (
 )
 ```
 
+---
+
+> ⚠️ **Known Issue #3: Check Constraint Inconsistency**
+>
+> The split/label policy constraint differs between files:
+>
+> **models.py** includes `'purged'`:
+> ```python
+> CheckConstraint(
+>     "(split IN ('temp', 'test', 'purged') AND label IS NULL) OR ..."
+> )
+> ```
+>
+> **Alembic migration** is missing `'purged'`:
+> ```python
+> CheckConstraint(
+>     "(split IN ('temp', 'test') AND label IS NULL) OR ..."  # Missing 'purged'!
+> )
+> ```
+>
+> **Impact**: Alembic-created databases reject purged videos.
+>
+> **Fix**: Add `'purged'` to the Alembic constraint.
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
+> ⚠️ **Known Issue #4: Missing Check Constraint in SQL**
+>
+> The SQL schema files (`001_phase1_schema.sql`) don't include the split/label policy constraint.
+>
+> **Impact**: Databases created with SQL files won't enforce business rules.
+>
+> **Fix**: Add to `001_phase1_schema.sql`:
+> ```sql
+> ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
+>     (split IN ('temp', 'test', 'purged') AND label IS NULL)
+>     OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
+> );
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
 **Common Queries:**
 
 ```sql
@@ -256,6 +302,24 @@ CREATE TABLE training_selection (
     selected_at  TIMESTAMPTZ DEFAULT now()
 );
 ```
+
+---
+
+> ⚠️ **Known Issue #11: TrainingSelection PK Mismatch**
+>
+> SQL and Python models define different primary key structures:
+>
+> **SQL**: `id BIGSERIAL PRIMARY KEY` (single auto-increment column)
+>
+> **models.py**: Composite PK `(run_id, video_id, target_split)`
+>
+> **Impact**: Migration conflicts if both approaches are used.
+>
+> **Fix**: Align on one approach. Recommend keeping SQL's `BIGSERIAL` for simplicity.
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
 
 **Relationship Diagram:**
 

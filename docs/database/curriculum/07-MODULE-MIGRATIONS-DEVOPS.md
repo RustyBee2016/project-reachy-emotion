@@ -225,6 +225,49 @@ def downgrade():
 
 ---
 
+### Migration Pitfalls: Known Issues
+
+When working with migrations, be aware of these synchronization issues:
+
+> ⚠️ **Reminder: Issue #3 - Check Constraint Inconsistency**
+>
+> The Alembic migration is missing `'purged'` in the check constraint.
+> Ensure your migration includes:
+> ```python
+> CheckConstraint(
+>     "(split IN ('temp', 'test', 'purged') AND label IS NULL) OR ..."
+> )
+> ```
+>
+> See: Module 03 and `docs/database/07-KNOWN-ISSUES.md` for details.
+
+> ⚠️ **Reminder: Issue #4 - Missing Check Constraint in SQL**
+>
+> The SQL schema files don't include the split/label policy constraint.
+> If using SQL migrations, add:
+> ```sql
+> ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
+>     (split IN ('temp', 'test', 'purged') AND label IS NULL)
+>     OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
+> );
+> ```
+>
+> See: Module 03 and `docs/database/07-KNOWN-ISSUES.md` for details.
+
+> ⚠️ **Reminder: Issue #9 - Enum Type Name Mismatch**
+>
+> SQL uses `video_split` and `emotion_label`, but Alembic uses `video_split_enum` and `emotion_enum`.
+>
+> **Risk**: Running both SQL and Alembic migrations creates duplicate enum types.
+>
+> **Best Practice**: Choose ONE migration approach per environment:
+> - **Production**: Use SQL files only
+> - **Development/Testing**: Use Alembic only
+>
+> See: Module 02 and `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
 ## Lesson 7.4: Development Setup (30 minutes)
 
 ### Quick Start with Docker

@@ -180,6 +180,59 @@ SELECT enum_range(NULL::emotion_label);
 -- Result: {neutral,happy,sad,angry,surprise,fearful}
 ```
 
+---
+
+> ⚠️ **Known Issue #1: Missing 'fearful' Emotion**
+>
+> The Python enum in `apps/api/app/db/enums.py` is missing `'fearful'`.
+> The SQL has 6 values, but Python only has 5.
+>
+> **Impact**: Python code will reject 'fearful' as invalid.
+>
+> **Fix**: Add `"fearful"` to `EmotionEnum` in `enums.py`:
+> ```python
+> EmotionEnum = Enum(
+>     "neutral", "happy", "sad", "angry", "surprise", "fearful",
+>     name=EMOTION_ENUM_NAME,
+> )
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
+> ⚠️ **Known Issue #2: Split Enum 'purged' Mismatch**
+>
+> The `video_split` enum is created with 4 values in SQL 001, but Python expects 5.
+> The `'purged'` value is added later in `003_missing_tables.sql`.
+>
+> **Impact**: Order-dependent failures if SQL 003 not applied before Python runs.
+>
+> **Fix Options**:
+> - A) Add `'purged'` to SQL 001 initially
+> - B) Ensure SQL 003 runs before any Python code
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
+> ⚠️ **Known Issue #9: Enum Type Name Mismatch**
+>
+> SQL and Python use different enum type names:
+>
+> | SQL Name | Python Name |
+> |----------|-------------|
+> | `video_split` | `video_split_enum` |
+> | `emotion_label` | `emotion_enum` |
+>
+> **Impact**: If both SQL and Alembic run, duplicate types may be created.
+>
+> **Fix**: Align naming conventions between SQL and Python.
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
 ### UUIDs: Universally Unique Identifiers
 
 **What is a UUID?**
@@ -216,6 +269,34 @@ INSERT INTO video (file_path, split) VALUES ('test.mp4', 'temp')
 RETURNING video_id;
 -- Returns: newly generated UUID
 ```
+
+---
+
+> ⚠️ **Known Issue #8: UUID vs String Type Mismatch**
+>
+> SQL uses native PostgreSQL `UUID` type, but Python models use `String(36)`.
+>
+> **SQL**:
+> ```sql
+> video_id UUID PRIMARY KEY
+> ```
+>
+> **Python** (`models.py`):
+> ```python
+> video_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+> ```
+>
+> **Impact**: Potential type conversion issues and performance differences.
+>
+> **Fix**: Use SQLAlchemy's `UUID` type or PostgreSQL dialect's `UUID`:
+> ```python
+> from sqlalchemy.dialects.postgresql import UUID
+> video_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
 
 ### JSONB: JSON Binary
 
@@ -285,6 +366,47 @@ SELECT now();
 SELECT * FROM video
 WHERE created_at > '2025-01-01T00:00:00Z';
 ```
+
+### INET: IP Address Type
+
+PostgreSQL has a native `INET` type for IP addresses:
+
+```sql
+-- Store IPv4 or IPv6 addresses
+ip_address INET
+
+-- Query examples
+SELECT * FROM user_session WHERE ip_address = '192.168.1.1';
+SELECT * FROM user_session WHERE ip_address << '192.168.0.0/16';  -- Subnet match
+```
+
+---
+
+> ⚠️ **Known Issue #13: AuditLog IP Type Mismatch**
+>
+> SQL uses PostgreSQL's native `INET` type, but Python uses `String(45)`.
+>
+> **SQL**:
+> ```sql
+> ip_address INET
+> ```
+>
+> **Python** (`models.py`):
+> ```python
+> ip_address: Mapped[str] = mapped_column(String(45))
+> ```
+>
+> **Impact**: Cannot use PostgreSQL INET operators for IP range queries via ORM.
+>
+> **Fix**: Use SQLAlchemy's PostgreSQL dialect:
+> ```python
+> from sqlalchemy.dialects.postgresql import INET
+> ip_address: Mapped[str] = mapped_column(INET)
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
 
 ### NUMERIC: Precise Decimals
 

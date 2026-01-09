@@ -140,86 +140,106 @@ UPDATE video SET split = 'dataset_all', label = 'happy' WHERE ...;
 
 ---
 
-## Lesson 8.2: Fixing Known Issues (30 minutes)
+## Lesson 8.2: Known Issues Summary & Deployment Checklist (30 minutes)
 
-### Issue #1: Missing 'fearful' Emotion
+This section consolidates all known issues covered throughout the curriculum. Use this as a **deployment readiness checklist**.
 
-**Problem:** Python enums missing 'fearful'.
+### Pre-Deployment Checklist
 
-**Fix in `apps/api/app/db/enums.py`:**
+| # | Issue | Severity | Module | Status |
+|---|-------|----------|--------|--------|
+| 1 | Emotion enum missing 'fearful' | 🔴 CRITICAL | Module 02 | ☐ Fixed |
+| 2 | Split enum 'purged' mismatch | 🔴 CRITICAL | Module 02 | ☐ Fixed |
+| 3 | Check constraint inconsistency | 🔴 CRITICAL | Module 03 | ☐ Fixed |
+| 4 | Missing check constraint in SQL | 🔴 CRITICAL | Module 03 | ☐ Fixed |
+| 5 | Missing SQLAlchemy models | 🔴 CRITICAL | Module 05 | ☐ Fixed |
+| 6 | Video model missing columns | 🔴 CRITICAL | Module 05 | ☐ Fixed |
+| 7 | TrainingRun model incomplete | 🔴 CRITICAL | Module 05 | ☐ Fixed |
+| 8 | UUID vs String type mismatch | 🔴 CRITICAL | Module 02 | ☐ Fixed |
+| 9 | Enum type name mismatch | 🟡 MAJOR | Module 02, 07 | ☐ Fixed |
+| 10 | PromotionLog missing columns | 🟡 MAJOR | Module 05 | ☐ Fixed |
+| 11 | TrainingSelection PK mismatch | 🟡 MAJOR | Module 03 | ☐ Fixed |
+| 12 | Stratification logic bug | 🟠 MINOR | Module 04 | ☐ Fixed |
+| 13 | AuditLog IP type mismatch | 🟠 MINOR | Module 02 | ☐ Fixed |
+
+### Quick Reference: Where to Find Each Fix
+
+| Issue | Fix Location | Curriculum Reference |
+|-------|--------------|---------------------|
+| #1 | `apps/api/app/db/enums.py` | Module 02: ENUMs section |
+| #2 | `alembic/versions/*.py` or SQL 001 | Module 02: ENUMs section |
+| #3 | Alembic migration file | Module 03: Video table section |
+| #4 | `001_phase1_schema.sql` | Module 03: Video table section |
+| #5 | `apps/api/app/db/models.py` | Module 05: Model definitions |
+| #6 | `apps/api/app/db/models.py` (Video) | Module 05: Video model section |
+| #7 | `apps/api/app/db/models.py` (TrainingRun) | Module 05: TrainingRun section |
+| #8 | `apps/api/app/db/models.py` | Module 02: UUIDs section |
+| #9 | SQL files or Alembic (choose one) | Module 02, 07: Migration section |
+| #10 | `apps/api/app/db/models.py` (PromotionLog) | Module 05: After TrainingRun |
+| #11 | `apps/api/app/db/models.py` (TrainingSelection) | Module 03: TrainingSelection section |
+| #12 | `002_stored_procedures.sql` | Module 04: Sampling function |
+| #13 | `apps/api/app/db/models.py` (AuditLog) | Module 02: INET section |
+
+### Must Fix Before Deployment (Critical)
+
+These 8 issues will cause immediate failures:
+
+**Issue #1: Missing 'fearful' Emotion** - Fix in `enums.py`:
 ```python
 EmotionEnum = Enum(
-    "neutral",
-    "happy",
-    "sad",
-    "angry",
-    "surprise",
-    "fearful",  # ADD THIS LINE
+    "neutral", "happy", "sad", "angry", "surprise", "fearful",
     name=EMOTION_ENUM_NAME,
-    native_enum=False,
 )
 ```
 
-### Issue #2: Missing 'purged' Split
-
-**Problem:** Alembic migration missing 'purged'.
-
-**Fix in Alembic migration:**
+**Issue #2: Missing 'purged' Split** - Fix in Alembic or SQL 001:
 ```python
-split_enum = sa.Enum(
-    "temp",
-    "dataset_all",
-    "train",
-    "test",
-    "purged",  # ADD THIS LINE
-    name="video_split_enum",
-)
+split_enum = sa.Enum("temp", "dataset_all", "train", "test", "purged", ...)
 ```
 
-### Issue #3: Check Constraint Mismatch
-
-**Problem:** SQL files missing check constraint.
-
-**Fix - Add to `001_phase1_schema.sql`:**
+**Issue #3 & #4: Check Constraint** - Add to SQL:
 ```sql
 ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
     (split IN ('temp', 'test', 'purged') AND label IS NULL)
-    OR
-    (split IN ('dataset_all', 'train') AND label IS NOT NULL)
+    OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
 );
 ```
 
-### Issue #4: Missing SQLAlchemy Models
-
-**Problem:** `user_session`, `generation_request`, `emotion_event` not in models.py.
-
-**Fix - Add to `apps/api/app/db/models.py`:**
+**Issue #5: Missing Models** - Add to `models.py`:
 ```python
 class UserSession(Base):
     __tablename__ = "user_session"
-
     session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    # ... see Module 05 for complete definition
 
 class GenerationRequest(Base):
     __tablename__ = "generation_request"
-
-    request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    emotion: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
-    status: Mapped[str] = mapped_column(String(50), default="pending")
+    # ... see Module 05 for complete definition
 
 class EmotionEvent(Base):
     __tablename__ = "emotion_event"
-
-    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    device_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    emotion: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
-    confidence: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
-    timestamp: Mapped[datetime] = mapped_column(nullable=False)
+    # ... see Module 05 for complete definition
 ```
+
+**Issue #6: Video Missing Columns** - Add to Video model:
+```python
+metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+deleted_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+```
+
+**Issue #7: TrainingRun Incomplete** - Add 9 missing columns (see Module 05)
+
+**Issue #8: UUID Type** - Use proper UUID type:
+```python
+from sqlalchemy.dialects.postgresql import UUID
+video_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+```
+
+### Full Documentation
+
+For complete details on all issues including impact analysis and workarounds:
+- **Reference**: `docs/database/07-KNOWN-ISSUES.md`
 
 ---
 

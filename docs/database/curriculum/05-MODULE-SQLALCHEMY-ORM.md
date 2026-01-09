@@ -148,6 +148,8 @@ EmotionEnum = Enum(
 )
 ```
 
+> ⚠️ **Reminder**: Issue #1 (Missing 'fearful') applies here. See Module 02 for the fix.
+
 **Why `native_enum=False`?**
 - Creates CHECK constraints instead of PostgreSQL ENUM types
 - Works with SQLite (used for testing)
@@ -214,6 +216,34 @@ class Video(Base):
         return f"<Video(video_id={self.video_id}, path={self.file_path}, split={self.split})>"
 ```
 
+---
+
+> ⚠️ **Known Issue #6: Video Model Missing Columns**
+>
+> The Video model above is missing columns that exist in the SQL schema:
+>
+> **Missing columns**:
+> - `metadata JSONB` - Flexible extra data storage
+> - `deleted_at TIMESTAMPTZ` - For soft deletes (GDPR compliance)
+>
+> **Impact**: Cannot use soft deletes or flexible metadata via ORM.
+>
+> **Fix**: Add the missing columns to the Video model:
+> ```python
+> from sqlalchemy.dialects.postgresql import JSONB
+>
+> class Video(Base):
+>     # ... existing columns ...
+>
+>     # ADD THESE:
+>     metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+>     deleted_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
 ### Breaking Down the Model
 
 ```python
@@ -275,6 +305,110 @@ class TrainingRun(Base):
         ),
     )
 ```
+
+---
+
+> ⚠️ **Known Issue #7: TrainingRun Model Incomplete**
+>
+> The TrainingRun model has only 6 columns but SQL has 15+.
+>
+> **Missing columns**:
+> - `dataset_hash CHAR(64)` - Hash of all videos used
+> - `mlflow_run_id VARCHAR(255)` - Link to MLflow
+> - `model_path VARCHAR(500)` - Path to .tlt model
+> - `engine_path VARCHAR(500)` - Path to TensorRT .engine
+> - `metrics JSONB` - F1, accuracy, etc.
+> - `config JSONB` - Hyperparameters
+> - `error_message TEXT` - If failed
+> - `started_at TIMESTAMPTZ`
+> - `completed_at TIMESTAMPTZ`
+>
+> **Impact**: MLflow integration and metrics storage broken via ORM.
+>
+> **Fix**: Add the missing columns:
+> ```python
+> class TrainingRun(Base):
+>     # ... existing columns ...
+>
+>     # ADD THESE:
+>     dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+>     mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+>     model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+>     engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+>     metrics: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+>     config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+>     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+>     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+>     completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
+> ⚠️ **Known Issue #5: Missing SQLAlchemy Models**
+>
+> Three tables exist in SQL but have no ORM models:
+> - `user_session` (SQL line 118)
+> - `generation_request` (SQL line 136)
+> - `emotion_event` (SQL line 155)
+>
+> **Impact**: Cannot access these tables via Python ORM.
+>
+> **Fix**: Add model classes to `apps/api/app/db/models.py`:
+> ```python
+> class UserSession(Base):
+>     __tablename__ = "user_session"
+>     session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+>     user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+>     device_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+>     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+>     started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+>     ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+>     actions_count: Mapped[int] = mapped_column(default=0)
+>
+> class GenerationRequest(Base):
+>     __tablename__ = "generation_request"
+>     request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+>     prompt: Mapped[str] = mapped_column(Text, nullable=False)
+>     emotion: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
+>     status: Mapped[str] = mapped_column(String(50), default="pending")
+>     video_id: Mapped[Optional[str]] = mapped_column(ForeignKey("video.video_id"), nullable=True)
+>
+> class EmotionEvent(Base):
+>     __tablename__ = "emotion_event"
+>     event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+>     device_id: Mapped[str] = mapped_column(String(255), nullable=False)
+>     emotion: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
+>     confidence: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
+>     timestamp: Mapped[datetime] = mapped_column(nullable=False)
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+
+---
+
+> ⚠️ **Known Issue #10: PromotionLog Missing Columns**
+>
+> The PromotionLog model is missing idempotency columns:
+> - `idempotency_key VARCHAR(64) UNIQUE`
+> - `correlation_id UUID`
+>
+> **Impact**: Idempotency support broken via ORM.
+>
+> **Fix**: Add the missing columns:
+> ```python
+> class PromotionLog(Base):
+>     # ... existing columns ...
+>
+>     # ADD THESE:
+>     idempotency_key: Mapped[Optional[str]] = mapped_column(
+>         String(64), unique=True, nullable=True
+>     )
+>     correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
 

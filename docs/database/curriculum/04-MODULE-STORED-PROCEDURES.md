@@ -700,7 +700,44 @@ END;
 $$;
 ```
 
-**Important Note**: There is a known bug in the stratification logic. See `docs/database/07-KNOWN-ISSUES.md` for details.
+---
+
+> ⚠️ **Known Issue #12: Stratification Logic Bug**
+>
+> The `create_training_run_with_sampling()` function doesn't truly stratify by class.
+>
+> **Current behavior**: Applies `random() < train_fraction` globally across all videos.
+>
+> **Expected behavior**: Apply the fraction within each label group to preserve class proportions.
+>
+> **Example Problem**:
+> - Dataset: 100 happy, 20 sad
+> - With 70/30 split applied globally: ~70 happy + ~14 sad in train
+> - Class imbalance is preserved but not guaranteed per-class
+>
+> **Impact**: Potential class imbalance in train/test splits, especially with small datasets.
+>
+> **Fix**: Modify the sampling logic to iterate per-label:
+> ```sql
+> -- Stratified sampling (per-label)
+> INSERT INTO training_selection (run_id, video_id, target_split)
+> SELECT
+>     v_run_id,
+>     video_id,
+>     CASE WHEN row_num <= (label_count * p_train_fraction)
+>          THEN 'train'::video_split
+>          ELSE 'test'::video_split
+>     END
+> FROM (
+>     SELECT video_id, label,
+>            ROW_NUMBER() OVER (PARTITION BY label ORDER BY random()) as row_num,
+>            COUNT(*) OVER (PARTITION BY label) as label_count
+>     FROM video
+>     WHERE split = 'dataset_all' AND label IS NOT NULL
+> ) ranked;
+> ```
+>
+> See: `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
 
