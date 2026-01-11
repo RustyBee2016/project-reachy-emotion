@@ -42,7 +42,7 @@ Conflicts between automation and policy defer to the human project owner (Russ).
 ---
 
 ## Agent Overview
-The Reachy_Local_08.4.2 system uses **nine cooperating agents**, each performing one narrow, auditable task in the video → label → train → evaluate → deploy loop.  
+The Reachy_Local_08.4.2 system uses **ten cooperating agents**, each performing one narrow, auditable task in the video → label → train → evaluate → deploy loop.  
 All orchestration occurs in **n8n** running on Ubuntu 1.
 
 ---
@@ -178,6 +178,36 @@ Aggregate system metrics and raise alerts when thresholds are breached.
 **Purpose:**  
 Monitor class ratios and bias subsequent synthetic video generation to maintain a 50/50 balance between `happy` and `sad`.  
 Acts as a lightweight helper to Labeling Agent + Promotion Agent when automated balancing is desired.
+
+---
+
+### Agent 10 — Reachy Gesture Agent
+**Purpose:**  
+Execute physical gestures on the Reachy Mini robot based on emotion context and LLM response cues.
+
+**Responsibilities:**
+- Receive gesture cues from the gateway via WebSocket (`cue` events).
+- Parse gesture keywords from LLM responses (e.g., `[WAVE]`, `[HUG]`, `[EMPATHY]`).
+- Map detected emotions to appropriate default gestures when LLM doesn't specify.
+- Execute gesture sequences on Reachy Mini via the Reachy SDK (gRPC).
+- Maintain gesture queue with priority handling.
+- Support simulation mode for testing without physical robot.
+- Report gesture execution metrics to Observability Agent.
+
+**Gesture Types:**
+- **Happy emotions:** CELEBRATE, EXCITED, THUMBS_UP, WAVE, NOD
+- **Sad emotions:** EMPATHY, COMFORT, HUG, SAD_ACK, LISTEN
+- **Neutral:** NOD, LISTEN, WAVE, THINK
+
+**Integration Points:**
+- `apps/reachy/gestures/gesture_controller.py` — Reachy SDK interface
+- `apps/reachy/gestures/emotion_gesture_map.py` — Emotion-to-gesture mapping
+- `apps/reachy/cue_handler.py` — WebSocket cue routing
+- `apps/pipeline/emotion_llm_gesture.py` — Full pipeline orchestration
+
+**Requirements:**
+- Python 3.12+ (Reachy SDK requirement)
+- Reachy Mini robot online at configured gRPC address, or simulation mode enabled
 
 ---
 

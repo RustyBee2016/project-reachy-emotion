@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2025-12-08
+**Last Updated**: 2026-01-11
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -14,6 +14,7 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## Key Design Decisions
+- **[Decision: Reachy Gesture & LLM Integration](./decisions/007-reachy-gesture-llm-integration.md)** — GPT-5.2 empathetic responses with gesture keyword system for Reachy Mini (2026-01-11).
 - **[Decision: ResNet-50 AffectNet+RAF-DB Model](./decisions/006-resnet50-affectnet-rafdb.md)** — Replaced EmotionNet with ResNet-50 pretrained on FER datasets (2025-11-29).
 - **[Decision: Endpoint System v1 Rewrite](./decisions/005-endpoint-system-v1.md)** — Centralized config, versioned API, standardized responses, retry logic (2025-11-14).
 - **[Decision: EmotionNet TAO Toolchain](./decisions/004-emotionnet-tao-toolchain.md)** — Train with TAO 4.x; export with TAO 5.3. *(Superseded by 006)*
