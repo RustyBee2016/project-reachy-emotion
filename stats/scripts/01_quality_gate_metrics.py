@@ -115,7 +115,11 @@ class MetricsReport:
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
-        return asdict(self)
+        data = asdict(self)
+        # Ensure booleans are native Python bool for JSON serialization
+        data["gates_passed"] = {k: bool(v) for k, v in self.gates_passed.items()}
+        data["overall_pass"] = bool(self.overall_pass)
+        return data
 
 
 # =============================================================================
@@ -376,8 +380,12 @@ def save_report(report: MetricsReport, output_path: Path, model_name: str = "mod
         "model_name": model_name,
         "quality_gates": {
             "thresholds": QUALITY_GATES,
-            "results": report.gates_passed,
-            "overall_pass": report.overall_pass,
+            "results": {
+                "macro_f1": bool(report.gates_passed["macro_f1"]),
+                "balanced_accuracy": bool(report.gates_passed["balanced_accuracy"]),
+                "f1_neutral": bool(report.gates_passed["f1_neutral"]),
+            },
+            "overall_pass": bool(report.overall_pass),
         },
         "metrics": report.to_dict(),
         "emotion_classes": EMOTION_CLASSES,

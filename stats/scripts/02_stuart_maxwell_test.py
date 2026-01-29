@@ -90,7 +90,16 @@ class StuartMaxwellResult:
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
-        return asdict(self)
+        data = asdict(self)
+        data["significant"] = bool(self.significant)
+        data["agreement_rate"] = float(self.agreement_rate)
+        data["chi_squared"] = float(self.chi_squared)
+        data["p_value"] = float(self.p_value)
+        data["marginal_differences"] = {
+            cls: float(diff) for cls, diff in self.marginal_differences.items()
+        }
+        data["contingency_table"] = [list(map(int, row)) for row in self.contingency_table]
+        return data
 
 
 # =============================================================================

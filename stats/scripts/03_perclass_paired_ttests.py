@@ -84,7 +84,16 @@ class PerClassTestResult:
     direction: str  # "improved", "degraded", or "unchanged"
     
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        data["mean_base"] = float(self.mean_base)
+        data["mean_finetuned"] = float(self.mean_finetuned)
+        data["mean_difference"] = float(self.mean_difference)
+        data["std_difference"] = float(self.std_difference)
+        data["t_statistic"] = float(self.t_statistic)
+        data["p_value_raw"] = float(self.p_value_raw)
+        data["p_value_adjusted"] = float(self.p_value_adjusted)
+        data["significant"] = bool(self.significant)
+        return data
 
 
 @dataclass
@@ -110,9 +119,14 @@ class PairedTTestsResult:
     degraded_classes: List[str]
     
     def to_dict(self) -> dict:
-        result = asdict(self)
-        result['class_results'] = [r.to_dict() for r in self.class_results]
-        return result
+        data = asdict(self)
+        data["alpha"] = float(self.alpha)
+        data["n_significant"] = int(self.n_significant)
+        data["n_improved"] = int(self.n_improved)
+        data["n_degraded"] = int(self.n_degraded)
+        data["n_unchanged"] = int(self.n_unchanged)
+        data["class_results"] = [r.to_dict() for r in self.class_results]
+        return data
 
 
 # =============================================================================
