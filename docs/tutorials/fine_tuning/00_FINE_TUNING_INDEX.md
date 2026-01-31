@@ -3,13 +3,33 @@
 **Project**: Reachy Emotion Recognition  
 **Audience**: Junior Engineers  
 **Duration**: 2-3 weeks  
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-01-31
+
+---
+
+## 🆕 New ML Engineers: Start Here!
+
+**[ML_PIPELINE_ONBOARDING_GUIDE.md](ML_PIPELINE_ONBOARDING_GUIDE.md)** — Comprehensive 4-6 hour guide covering:
+- EfficientNet-B0 (HSEmotion) architecture overview
+- Quick start inference with pre-trained model
+- Training with synthetic video data
+- Quality gate validation
+- ONNX export for Jetson deployment
+
+## 👨‍🏫 Technical Trainers: Preparation Guide
+
+**[TRAIN_THE_TRAINER.md](TRAIN_THE_TRAINER.md)** — 2-3 hour preparation guide covering:
+- Pre-session environment verification
+- Curriculum structure and session breakdown
+- Key concepts to emphasize with teaching analogies
+- Common Q&A and demonstration scripts
+- Hands-on exercises and assessment rubric
 
 ---
 
 ## Overview
 
-This guide teaches you how to fine-tune a ResNet-50 emotion classification model for the Reachy robot. By the end, you'll understand:
+This guide series teaches you how to fine-tune an **EfficientNet-B0** emotion classification model (HSEmotion pre-trained) for the Reachy robot. By the end, you'll understand:
 
 1. **What fine-tuning is** and why we use it
 2. **How transfer learning works** for emotion recognition
@@ -57,34 +77,42 @@ Before starting, ensure you have:
 ### Key Commands
 
 ```bash
-# Train 2-class model (happy/sad)
-python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_2cls.yaml
+# Train 2-class model (happy/sad) - EfficientNet-B0 (RECOMMENDED)
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
 
 # Train 8-class model (all emotions)
-python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_8cls.yaml
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_8cls.yaml
 
 # Resume training from checkpoint
-python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_2cls.yaml --resume outputs/latest.pth
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml --resume checkpoints/latest.pth
 
 # Export to ONNX
-python trainer/train_resnet50.py --export-only --resume outputs/best_model.pth --export-path exports/
+python trainer/train_efficientnet.py --export-only --resume checkpoints/best_model.pth --export-path exports/
+
+# Legacy: ResNet-50 (for comparison only)
+python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_2cls.yaml
 ```
 
 ### Key Files
 
 ```
 trainer/
-├── train_resnet50.py           # Main training script
+├── train_efficientnet.py       # Main training script (EfficientNet-B0)
+├── train_resnet50.py           # Legacy ResNet-50 script
 ├── fer_finetune/
 │   ├── config.py               # Training configuration
-│   ├── model.py                # ResNet-50 model definition
+│   ├── model_efficientnet.py   # EfficientNet-B0 model (HSEmotion)
+│   ├── model.py                # ResNet-50 model (legacy)
+│   ├── train_efficientnet.py   # EfficientNet training loop
+│   ├── train.py                # ResNet-50 training loop
 │   ├── dataset.py              # Data loading
-│   ├── train.py                # Training loop
 │   ├── evaluate.py             # Metrics computation
 │   ├── export.py               # ONNX export
 │   └── specs/
-│       ├── resnet50_emotion_2cls.yaml  # 2-class config
-│       └── resnet50_emotion_8cls.yaml  # 8-class config
+│       ├── efficientnet_b0_emotion_2cls.yaml  # 2-class config (RECOMMENDED)
+│       ├── efficientnet_b0_emotion_8cls.yaml  # 8-class config
+│       ├── resnet50_emotion_2cls.yaml         # Legacy 2-class
+│       └── resnet50_emotion_8cls.yaml         # Legacy 8-class
 ```
 
 ### Gate A Requirements
