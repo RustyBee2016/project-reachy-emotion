@@ -2,10 +2,27 @@
 
 ## Metadata
 - **Project:** Reachy_Local_08.4.2  
-- **Primary Objective:** Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using ResNet-50 pre-trained on AffectNet + RAF-DB datasets.  
+- **Primary Objective:** Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion).  
 - **Secondary Objectives:** Local-first privacy, reproducible fine-tuning, human-in-the-loop labeling and dataset curation, low operational overhead.  
 - **Non-goals:** Audio emotion recognition, cloud dependencies, linguistic or conversational emotion synthesis.  
-- **Stakeholders:** Robot end-users, Reachy R&D team, and project maintainers.  
+- **Stakeholders:** Robot end-users, Reachy R&D team, and project maintainers.
+
+---
+
+## Project Phases
+
+### Phase 1: Offline ML Classification System
+Foundation infrastructure: web app, EfficientNet-B0 training pipeline, FastAPI gateway, MLflow tracking, Gate A validation.
+
+### Phase 2: Emotional Intelligence Layer
+- **Degree**: Confidence scores (0–1) for emotion intensity
+- **PPE**: 8-class Ekman taxonomy with emotion-to-response mapping
+- **EQ**: Calibration metrics (ECE, Brier, MCE) for reliability
+- **Gesture Modulation**: 5-tier confidence-based expressiveness (`gesture_modulator.py`)
+- **LLM Prompt Tailoring**: Emotion-conditioned prompts with confidence guidance
+
+### Phase 3: Edge Deployment & Real-Time Inference
+Jetson deployment: TensorRT conversion, DeepStream pipeline, real-time inference, Gates B & C validation, staged rollout.  
 
 ---
 
@@ -35,9 +52,9 @@ Conflicts between automation and policy defer to the human project owner (Russ).
 - **Networking:**  
   Static LAN IPs — Ubuntu 1 (10.0.4.130), Ubuntu 2 (10.0.4.140), Jetson (10.0.4.150).  
 - **Model:**  
-  ResNet-50 pre-trained on AffectNet + RAF-DB, fine-tuned for binary (`happy` vs `sad`) classification.  
-  Model placeholder: `resnet50-affectnet-raf-db`  
-  Storage path: `/media/rusty_admin/project_data/ml_models/resnet50`
+  EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion `enet_b0_8_best_vgaf`), fine-tuned for binary (`happy` vs `sad`) classification.  
+  Model placeholder: `efficientnet-b0-hsemotion`  
+  Storage path: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
 
 ---
 

@@ -1,16 +1,9 @@
--
-### 6.7 Model Selection Rationale — EfficientNet Family
-
-- **Why EfficientNet-B0 now:** Provides ~3× latency (≈40 ms vs 120 ms budget) and 3× memory headroom compared to the prior ResNet-50 export while maintaining target accuracy through compound scaling and HSEmotion pre-training. The extra thermal/memory margin protects gesture workloads and future cue-planning features on Jetson Xavier NX.
-- **EfficientNet-B2 trade-off:** HSEmotion’s `enet_b2_8` offers higher accuracy in unconstrained settings but is expected to exceed Jetson latency and memory limits (≤120 ms, ≤2.5 GB). Requirements now mandate a benchmark/validation cycle before any promotion to B2, and Gate B metrics must be re-established if constraints change.
-- **Sources:** HSEmotion / EmotiEffLib (`pip install emotiefflib`) for video-optimized EfficientNet-B0/B2 weights, plus timm fallbacks when custom checkpoints are unavailable. Google’s canonical EfficientNet repo is considered legacy for this stack.
-
-# Project Requirements — Reachy_EQ_PPE_Degree_Mini_01
+# Project Requirements — Reachy_Local_08.4.2
 
 ## 1. Project Overview
-- **Project Name**: Reachy_EQ_PPE_Degree_Mini_01
-- **Version**: 0.09.0
-- **Last Updated**: 2026-01-14
+- **Project Name**: Reachy_Local_08.4.2
+- **Version**: 0.08.4.2
+- **Last Updated**: 2025-11-26
 - **Project Type**: Robotics Control Software
 - **Target Platform**: Reachy Mini Companion Robot — Jetson Xavier NX 16GB model
 - **Primary Language**: Python 3.8+
@@ -25,18 +18,15 @@
 | 0.08.3.3| 2025-10-06 | Team             | Pin TAO container/image version; document workspace mounts and envs; canonicalize storage root on Ubuntu 1; add explicit endpoint map; clarify EmotionNet schema; note Media Mover on Ubuntu 1 |
 | 0.08.4.2| 2025-10-16 | Team             | Project renamed to Reachy_Local_08.4.2; updated README alignment; agentic AI system integration; enhanced privacy controls and deployment gates |
 | 0.08.4.3| 2025-10-28 | Team             | Introduced `/videos/dataset_all/` staging, randomized train/test selection workflows, and updated promotion/manifest requirements |
-| 0.09.0  | 2026-01-14 | Russell Bray     | Renamed to Reachy_EQ_PPE_Degree_Mini_01; added emotion-degree telemetry (0–5), Reachy Mini Lite gesture orchestration, multi-task training updates, and refreshed documentation |
-| 0.09.1  | 2026-01-25 | Cascade          | Swapped backbone to EfficientNet-B0 (HSEmotion enet_b0_8_best_vgaf) for 3× latency/memory headroom on Jetson; documented EfficientNet-B2 trade-offs |
 
 ### Project Description
-Reachy‑Emotion‑Recognition is an open‑source robotic platform designed for human‑robot interaction and research. This project implements a privacy‑preserving emotion perception + expression system with a continuous improvement loop:
+Reachy‑Emotion‑Recognition is an open‑source robotic platform designed for human‑robot interaction and research. This project implements a privacy‑preserving emotion recognition system with a continuous improvement loop:
 
-1. **Data Generation**: Web app for generating and classifying synthetic emotion videos (labels + degree sliders).
-2. **Model Training**: Multi-task fine-tuning of EfficientNet-B0 (HSEmotion enet_b0_8_best_vgaf pretrained on VGGFace2 + AffectNet) with categorical + scalar heads plus gesture-alignment summaries, tuned for Jetson latency/memory constraints.
-3. **Deployment**: Containerized deployment to Reachy Mini Lite with staged rollout and cue planner integration.
-4. **Inference**: Real‑time emotion classification + degree estimation with strict performance SLAs.
-5. **Expression Loop**: Gesture planner pairs empathetic dialogue and Reachy gestures driven by emotion degree.
-6. **Feedback Loop**: Ongoing user‑based classifications refine both labels and degree targets for future iterations.
+1. **Data Generation**: Web app for generating and classifying synthetic emotion videos.
+2. **Model Training**: Fine‑tuning of ResNet-50 (AffectNet + RAF-DB pretrained) models with rigorous validation.
+3. **Deployment**: Containerized deployment to Reachy robots with staged rollout.
+4. **Inference**: Real‑time emotion classification with strict performance SLAs.
+5. **Feedback Loop**: Ongoing user‑based classifications improve future model iterations.
 
 The system prioritizes user privacy through on‑device processing, minimal data retention, and strict access controls. Performance is continuously monitored against quantifiable metrics for accuracy, latency, and resource utilization.
 
@@ -150,15 +140,14 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ### 6.2 Software Dependencies
 - **OS**: Ubuntu 20.04 LTS with ROS 2 Foxy
 - **Python**: 3.8+
-- **ML Framework**: PyTorch 2.0+ with CUDA 12 for EfficientNet-B0 fine-tuning
+- **ML Framework**: PyTorch 2.0+ with CUDA 12 for ResNet-50 fine-tuning
 - **ML Libraries**: `timm 0.9+` (pretrained models), `albumentations 1.3+` (augmentation), `scikit-learn 1.3+` (metrics)
 - **NVIDIA Framework Wheel**: 24.05
 - **NVIDIA JetPack**: 5.x
 - **Containerization**: Docker 20.10+ with NVIDIA Container Toolkit
-- **Deep Learning (Training, Ubuntu 1)**: PyTorch + timm + `emotiefflib` for EfficientNet-B0 fine-tuning; NVIDIA TAO Toolkit **6.x** (legacy compatibility)
-- **Model**: EfficientNet-B0 (`enet_b0_8_best_vgaf`) pre-trained on VGGFace2 + AffectNet (video-optimized emotion backbone)
-- **Model Storage**: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
-  - Alternate checkpoint: EfficientNet-B2 (`enet_b2_8`) available for future benchmarking when Jetson constraints are relaxed
+- **Deep Learning (Training, Ubuntu 1)**: PyTorch + timm for ResNet-50 fine-tuning; NVIDIA TAO Toolkit **6.x** (legacy compatibility)
+- **Model**: ResNet-50 pre-trained on AffectNet + RAF-DB (placeholder: `resnet50-affectnet-raf-db`)
+- **Model Storage**: `/media/rusty_admin/project_data/ml_models/resnet50`
 - **Inference (Jetson)**: NVIDIA **DeepStream SDK 6.x** + **TensorRT 8.6+** (`gst-nvinfer`, `pyds`, GStreamer 1.22+)
 - **API Gateway**: FastAPI **0.110+** (Pydantic v2), `orjson 3.10+`
 - **ASGI Server**: Uvicorn **0.29+** (optionally under Gunicorn)
@@ -202,18 +191,14 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ## 7. Model Deployment & Quality Gates
 
 ### 7.1 Deployment Gates
-**Gate A — Offline Validation (Pre-robot)**
+**Gate A — Offline Validation (Pre‑robot)**
 - Macro F1 (val): ≥ 0.84; per‑class floors ≥ 0.75; no class < 0.70
 - Balanced accuracy: ≥ 0.85
 - Calibration: ECE ≤ 0.08, Brier ≤ 0.16
 
-EfficientNet-B0 is the reference backbone for these gates; any alternative (e.g., EfficientNet-B2) must demonstrate equal or better metrics **and** prove latency/memory compliance before the gates are updated.
-
 **Gate B — Robot Shadow Mode**
 - On‑device latency: p50 ≤ 120 ms, p95 ≤ 250 ms
 - GPU memory ≤ 2.5 GB; Macro F1 ≥ 0.80; per‑class floors ≥ 0.72; no class < 0.68
-
-EfficientNet-B0’s 3× latency/memory cushion (≈40 ms p50 inference, ~0.8 GB GPU footprint) supplies the thermal headroom needed for gesture planners and future multimodal features. Make sure this margin remains ≥2× after TensorRT optimization before clearing Gate B.
 
 **Gate C — Limited User Rollout**
 - User‑visible latency ≤ 300 ms end‑to‑end; abstention ≤ 20%; complaints < 1% of sessions
@@ -253,47 +238,6 @@ EfficientNet-B0’s 3× latency/memory cushion (≈40 ms p50 inference, ~0.8 GB 
 
 ---
 
-## 9.5 Project Phases
-
-The project is organized into three sequential phases, each building on the previous:
-
-### Phase 1: Offline ML Classification System
-**Scope:** Foundation infrastructure and model training pipeline
-- Web application for video generation, upload, and emotion labeling
-- EfficientNet-B0 fine-tuning pipeline with transfer learning
-- FastAPI gateway and Media Mover services
-- Database schema and MLflow experiment tracking
-- Quality Gate A validation (F1 ≥ 0.84, ECE ≤ 0.08)
-
-**Key Files:** `apps/web/`, `trainer/fer_finetune/`, `apps/api/`
-
-### Phase 2: Emotional Intelligence Layer
-**Scope:** Degree, PPE, EQ metrics + response generation
-- **Degree of Emotion**: Continuous confidence scores (0–1) from softmax
-- **Primary Principles of Emotion (PPE)**: 8-class Ekman taxonomy mapping
-- **Emotional Intelligence (EQ)**: Calibration metrics (ECE, Brier, MCE)
-- **Gesture Modulation**: Confidence-tiered gesture expressiveness (5 tiers)
-- **LLM Prompt Tailoring**: Emotion-conditioned prompts with confidence guidance
-
-**Key Files:** 
-- `apps/reachy/gestures/gesture_modulator.py` — Degree-modulated gestures
-- `apps/llm/prompts/emotion_prompts.py` — Emotion-conditioned LLM prompts
-- `apps/reachy/gestures/emotion_gesture_map.py` — PPE gesture mapping
-- `trainer/fer_finetune/evaluate.py` — EQ calibration metrics
-
-### Phase 3: Edge Deployment & Real-Time Inference
-**Scope:** Jetson deployment and production optimization
-- TensorRT engine conversion (ONNX → .engine)
-- DeepStream pipeline configuration
-- Real-time inference on Jetson Xavier NX
-- WebSocket communication (Jetson ↔ Ubuntu 2)
-- Quality Gates B & C validation (latency, memory, user satisfaction)
-- Shadow → Canary → Rollout deployment stages
-
-**Key Files:** `jetson/`, `apps/pipeline/emotion_llm_gesture.py`
-
----
-
 ## 10. Timeline and Milestones
 | Milestone | Target Date | Owner | Status |
 |-----------|-------------|-------|--------|
@@ -308,13 +252,13 @@ The project is organized into three sequential phases, each building on the prev
 
 ### 11.1 Components
 - **Ubuntu 1 — Model Host (heavy compute)**  
-  LM Studio (Llama-3.1-8B-Instruct), synthetic video clients, **Media Mover API** (base: `https://10.0.4.130/api/media`), PostgreSQL (metadata only), Nginx static media, EfficientNet-B0 dual-head training/export pipeline.
+  LM Studio (Llama‑3.1‑8B‑Instruct), synthetic video clients, **Media Mover API** (base: `https://10.0.4.130/api/media`), PostgreSQL (metadata only), Nginx static media.
 
 - **Ubuntu 2 — App Gateway (ingress/orchestrator)**  
   Nginx reverse proxy + FastAPI app; receives Jetson JSON events; writes metadata; routes LLM calls; promotes videos via Media Mover; exposes `/healthz`, `/metrics`, `/ws/cues/{device_id}`.
 
 - **Jetson (Reachy edge device)**  
-  DeepStream + TensorRT (`gst-nvinfer`) loading EfficientNet-B0 EmotionNet `.engine`; emits JSON (no raw video); consumes cues over WebSocket.
+  DeepStream + TensorRT (`gst‑nvinfer`) loading EmotionNet `.engine`; emits JSON (no raw video); consumes cues over WebSocket.
 
 ### 11.2 Design Principles
 - Local‑first; no raw video egress by default

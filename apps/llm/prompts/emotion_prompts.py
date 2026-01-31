@@ -140,11 +140,11 @@ class EmotionPromptBuilder:
             )
             parts.append(gesture_prompt)
         
-        if confidence < 0.7:
-            parts.append(
-                "\nNote: The emotion detection confidence is moderate. "
-                "Be attentive to cues that might indicate a different emotional state."
-            )
+        # Tiered confidence-based prompt modulation
+        # This implements the Degree component of the EQ system
+        confidence_note = self._get_confidence_guidance(confidence)
+        if confidence_note:
+            parts.append(confidence_note)
         
         if custom_context:
             parts.append(f"\nAdditional context: {custom_context}")
@@ -204,6 +204,58 @@ Be sensitive to this transition:
         )
         
         return context_prefix + user_message
+    
+    def _get_confidence_guidance(self, confidence: float) -> Optional[str]:
+        """
+        Get confidence-tiered guidance for LLM response generation.
+        
+        This implements degree-modulated response intensity - the same
+        emotion at different confidence levels should trigger different
+        response styles.
+        
+        Args:
+            confidence: Model confidence score [0, 1]
+            
+        Returns:
+            Guidance string or None for high confidence
+        """
+        if confidence >= 0.90:
+            # Full confidence: no additional guidance needed
+            return None
+        elif confidence >= 0.75:
+            # Moderate confidence: tempered certainty
+            return (
+                "\nConfidence Level: MODERATE (75-90%)\n"
+                "The emotion detection is fairly confident. Respond with appropriate "
+                "emotional attunement, but remain open to subtle cues that the user's "
+                "state might be slightly different than detected."
+            )
+        elif confidence >= 0.60:
+            # Lower confidence: hedged response
+            return (
+                "\nConfidence Level: UNCERTAIN (60-75%)\n"
+                "The emotion detection has moderate uncertainty. Respond with a gentler, "
+                "more exploratory approach. Use phrases like 'It seems like...' or "
+                "'I'm sensing that...' rather than assuming you know exactly how they feel. "
+                "Be ready to adjust if they clarify their emotional state."
+            )
+        elif confidence >= 0.40:
+            # Low confidence: minimal assumption
+            return (
+                "\nConfidence Level: LOW (40-60%)\n"
+                "The emotion detection is uncertain. Do NOT assume you know how the user "
+                "feels. Use neutral, open-ended responses that invite them to share their "
+                "state if they wish. Phrases like 'How are you doing?' or 'What's on your "
+                "mind?' are appropriate. Avoid emotion-specific gestures."
+            )
+        else:
+            # Very low confidence: abstain from emotional inference
+            return (
+                "\nConfidence Level: VERY LOW (<40%)\n"
+                "The emotion detection is too uncertain to act upon. Respond in a completely "
+                "neutral, friendly manner. Do NOT reference any detected emotion. Do NOT "
+                "use emotion-specific gestures. Simply be present and conversational."
+            )
     
     def get_recommended_gestures(self, emotion: str) -> list[str]:
         """

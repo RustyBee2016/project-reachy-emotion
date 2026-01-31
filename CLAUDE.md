@@ -2,7 +2,7 @@
 
 > **Purpose**: Guide Claude Code (Desktop) when analyzing and working with this codebase.  
 > **Project**: Reachy_Local_08.4.2 — Local-first emotion recognition for the Reachy Mini robot.  
-> **Last Updated**: 2025-11-27
+> **Last Updated**: 2026-01-31
 
 ---
 
@@ -10,21 +10,51 @@
 
 Reachy_Local_08.4.2 is a **privacy-first, LAN-contained pipeline** for real-time emotion recognition on the Reachy Mini robot. The system uses:
 
-- **EmotionNet** — NVIDIA TAO-based classifier fine-tuned for binary emotion classification (`happy` vs `sad`)
+- **EfficientNet-B0** — HSEmotion backbone (`enet_b0_8_best_vgaf`) pre-trained on VGGFace2 + AffectNet, fine-tuned for binary emotion classification (`happy` vs `sad`)
 - **DeepStream + TensorRT** — Edge inference on Jetson Xavier NX
 - **FastAPI + Nginx** — API gateway and media serving
 - **LM Studio** — On-premise LLM (Llama-3.1-8B-Instruct) for empathetic dialogue
 - **PostgreSQL** — Metadata storage (no raw video in DB)
-- **n8n** — Agentic AI orchestration (9 cooperating agents)
+- **n8n** — Agentic AI orchestration (10 cooperating agents)
 - **MLflow** — Experiment tracking and model lineage
 
 ### Primary Objective
-Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using the EmotionNet model with human-in-the-loop labeling and dataset curation.
+Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using EfficientNet-B0 with human-in-the-loop labeling and dataset curation.
 
 ### Non-Goals
 - Audio emotion recognition
 - Cloud dependencies
 - Linguistic or conversational emotion synthesis
+
+---
+
+## Project Phases
+
+### Phase 1: Offline ML Classification System
+Foundation infrastructure: web app, EfficientNet-B0 training pipeline, FastAPI gateway, MLflow tracking, Gate A validation.
+
+**Key Components:**
+- `apps/web/` — Streamlit UI for video upload/labeling
+- `trainer/fer_finetune/` — Training pipeline with transfer learning
+- `apps/api/` — FastAPI gateway
+
+### Phase 2: Emotional Intelligence Layer
+Response generation with degree-modulated behavior:
+
+| Concept | Description | Key File |
+|---------|-------------|----------|
+| **Degree** | Confidence scores (0–1) for emotion intensity | `trainer/fer_finetune/evaluate.py` |
+| **PPE** | 8-class Ekman taxonomy with emotion-to-response mapping | `apps/reachy/gestures/emotion_gesture_map.py` |
+| **EQ** | Calibration metrics (ECE, Brier, MCE) for reliability | `trainer/fer_finetune/evaluate.py` |
+| **Gesture Modulation** | 5-tier confidence-based expressiveness | `apps/reachy/gestures/gesture_modulator.py` |
+| **LLM Prompt Tailoring** | Emotion-conditioned prompts with confidence guidance | `apps/llm/prompts/emotion_prompts.py` |
+
+### Phase 3: Edge Deployment & Real-Time Inference
+Jetson deployment: TensorRT conversion, DeepStream pipeline, real-time inference, Gates B & C validation, staged rollout.
+
+**Key Components:**
+- `jetson/` — DeepStream configs and WebSocket client
+- `apps/pipeline/emotion_llm_gesture.py` — Full pipeline orchestration
 
 ---
 
@@ -181,29 +211,30 @@ When starting work on this project, read these files in order:
 
 ---
 
-## EmotionNet Model Details
+## EfficientNet-B0 Model Details
 
 ### Architecture
-- **Base**: ResNet-18 (ImageNet pretrained)
-- **Input**: 68-point facial landmarks (1 × 136 × 1) or 224×224×3 images
-- **Output**: Emotion class probabilities
-- **Original Classes**: 6 (neutral, happy, surprise, squint, disgust, scream)
+- **Base**: EfficientNet-B0 (HSEmotion `enet_b0_8_best_vgaf`)
+- **Pre-training**: VGGFace2 + AffectNet (emotion-optimized)
+- **Input**: 224×224×3 RGB images
+- **Output**: Emotion class probabilities + optional valence/arousal
 - **Project Classes**: 2 (happy, sad) — fine-tuned for binary classification
+- **Expandable to**: 8-class Ekman taxonomy (Phase 2 PPE)
 
-### Training Configuration (`emotionnet_2cls.yaml`)
+### Training Configuration (`efficientnet_emotion_2cls.yaml`)
 ```yaml
 model:
-  arch: "resnet18"
+  arch: "efficientnet_b0"
   input_shape: [224, 224, 3]
   num_classes: 2
-  pretrained_weights: "imagenet"
-  freeze_blocks: [0, 1]  # Transfer learning
+  pretrained_weights: "hsemotion"  # enet_b0_8_best_vgaf
+  freeze_blocks: ["conv_stem", "blocks.0", "blocks.1"]
   dropout_rate: 0.3
 
 training:
   batch_size: 32
   num_epochs: 50
-  optimizer: "adam"
+  optimizer: "adamw"
   learning_rate: 0.001
   lr_schedule:
     type: "cosine"
@@ -211,13 +242,20 @@ training:
   early_stopping:
     patience: 10
     metric: "val_f1_macro"
+  
+  # Two-phase training
+  freeze_epochs: 5      # Train head only
+  unfreeze_layers: ["blocks.5", "blocks.6", "classifier"]
 ```
 
-### Model Load Key
-```
-nvidia_tlt
-```
-Use this key for all TAO commands requiring model encryption/decryption.
+### Model Selection Rationale
+| Metric | EfficientNet-B0 | ResNet-50 (prior) |
+|--------|-----------------|-------------------|
+| Inference Latency | ~40 ms | ~120 ms |
+| GPU Memory | ~0.8 GB | ~2.4 GB |
+| Thermal Headroom | 3× margin | Near limit |
+
+EfficientNet-B0 provides **3× latency and memory headroom** on Jetson Xavier NX while maintaining accuracy through HSEmotion pre-training.
 
 ### Quality Gates
 | Gate | Metric | Threshold |
