@@ -217,6 +217,24 @@ The codebase contains **~50 tutorial files** across multiple curricula. Here's h
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### New: Web App Curriculum (Weeks 1–8)
+
+Project Managers now have a dedicated curriculum for tracking the **web application team**.
+
+| Resource | Location | Purpose |
+|----------|----------|---------|
+| **Curriculum Overview** | `docs/tutorials/webapp/WEBAPP_CURRICULUM_INDEX.md` | Learning path, skills matrix, assessment checkpoints |
+| **Weekly Tutorials (Weeks 1-8)** | `docs/tutorials/webapp/WEEK_0X_*.md` | Detailed instructions for each sprint (overview, setup, FastAPI, Streamlit, training dashboard, deployment, testing, integration) |
+| **Index / Status Page** | `docs/tutorials/webapp/WEBAPP_TUTORIAL_INDEX.md` | Current progress, prerequisites, quick links |
+
+Use this curriculum to:
+
+1. **Assign onboarding tasks** to new web developers
+2. **Track weekly progress** (each file has deliverables + verification commands)
+3. **Align stakeholders** on what “done” looks like for UI/backend deliverables
+
+> **PM Tip:** When you need an at-a-glance status, read `WEBAPP_CURRICULUM_INDEX.md` (skills matrix + assessment checkpoints). When you need drill-down detail, open the corresponding `WEEK_0X_*.md` file.
+
 ---
 
 ## PM Reading Priority

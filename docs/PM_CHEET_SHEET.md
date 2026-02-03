@@ -40,6 +40,7 @@
 | **8-week plan**        | `docs/tutorials/TUTORIAL_INDEX.md`                              |
 | **n8n curriculum**     | `docs/tutorials/CURRICULUM_INDEX.md`                            |
 | **ML training guides** | `docs/tutorials/fine_tuning/`                                   |
+| **Web app curriculum** | `docs/tutorials/webapp/WEBAPP_CURRICULUM_INDEX.md`              |
 | **Stats analysis**     | `docs/research_papers/Phase_1_Statistical_Analysis.md`          |
 | **PM full guide**      | `docs/PM_ONBOARDING_GUIDE.md`                                   |
 
