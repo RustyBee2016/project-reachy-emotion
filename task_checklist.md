@@ -88,9 +88,26 @@
 ## Phase 6: Documentation & Memory Bank
 
 - [x] **6.1** Update `AGENTS.md` with new Reachy gesture agent
-- [ ] **6.2** Update `memory-bank/requirements.md` with LLM/gesture specs
+- [x] **6.2** Update `memory-bank/requirements.md` with LLM/gesture specs
 - [x] **6.3** Create decision record for GPT-5.2 model selection
-- [ ] **6.4** Update `README.md` with Reachy Mini setup instructions
+- [x] **6.4** Update `README.md` with Reachy Mini setup instructions
+
+---
+
+## Phase 7: Statistical Analysis (R Conversions)
+
+- [ ] **7.1** Implement `01_quality_gate_metrics.R`
+  - Add CLI parity with Python version (demo, CSV, Postgres/config options)
+  - Support JSON/plot outputs and raw-data caching
+- [ ] **7.2** Implement `02_stuart_maxwell_test.R`
+  - Provide demo generation plus CSV/Postgres ingestion options
+  - Output JSON + visualizations for contingency and marginal diffs
+- [ ] **7.3** Implement `03_perclass_paired_ttests.R`
+  - Include Benjamini-Hochberg correction and Postgres/CSV ingestion
+  - Support JSON exports and optional plots
+- [ ] **7.4** Create simulated-data tests for all R scripts
+  - Place under `stats/R_scripts/R_tests`
+  - Validate CLI paths for demo and Postgres-backed runs
 
 ---
 
