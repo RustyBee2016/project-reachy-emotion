@@ -13,7 +13,7 @@ from .model import EmotionClassifier, load_pretrained_model
 from .dataset import EmotionDataset, get_train_transforms, get_val_transforms, validate_dataset
 from .train import Trainer, train_model
 from .evaluate import compute_metrics, expected_calibration_error
-from .export import export_to_onnx, convert_to_tensorrt
+from .export import export_to_onnx, convert_to_tensorrt, export_efficientnet_for_deployment
 
 __all__ = [
     # Config
@@ -37,6 +37,7 @@ __all__ = [
     # Export
     "export_to_onnx",
     "convert_to_tensorrt",
+    "export_efficientnet_for_deployment",
 ]
 
 __version__ = "0.8.4.2"

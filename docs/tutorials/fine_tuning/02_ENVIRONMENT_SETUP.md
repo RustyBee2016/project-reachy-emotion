@@ -175,19 +175,19 @@ print('All imports successful!')
 ```
 reachy_emotion/
 ├── trainer/                    # Training code
-│   ├── train_resnet50.py       # Main training script
+│   ├── train_efficientnet.py   # Main training script (EfficientNet-B0)
 │   ├── fer_finetune/           # Fine-tuning module
 │   │   ├── __init__.py
 │   │   ├── config.py           # Training configuration
-│   │   ├── model.py            # ResNet-50 model
+│   │   ├── model_efficientnet.py  # EfficientNet-B0 model (HSEmotion)
 │   │   ├── dataset.py          # Data loading
-│   │   ├── train.py            # Training loop
+│   │   ├── train_efficientnet.py  # Training loop
 │   │   ├── evaluate.py         # Metrics computation
 │   │   ├── export.py           # ONNX export
 │   │   └── specs/              # Config files
-│   │       ├── resnet50_emotion_2cls.yaml
-│   │       └── resnet50_emotion_8cls.yaml
-│   └── tao/                    # TAO Toolkit (alternative)
+│   │       ├── efficientnet_b0_emotion_2cls.yaml  # 2-class (RECOMMENDED)
+│   │       └── efficientnet_b0_emotion_8cls.yaml  # 8-class
+│   └── tao/                    # NVIDIA TAO Toolkit (alternative)
 │
 ├── data/                       # Training data (create this)
 │   ├── train/                  # Training images
@@ -217,33 +217,42 @@ reachy_emotion/
 ### Step 6.1: Create Weights Directory
 
 ```bash
-mkdir -p /media/project_data/ml_models/resnet50
+mkdir -p /media/project_data/ml_models/efficientnet_b0
 ```
 
-### Step 6.2: Download Weights
+### Step 6.2: Download HSEmotion Weights
 
-The pre-trained weights should be available at the model storage path. If not:
+The training script automatically downloads HSEmotion weights on first run. To pre-download:
 
 ```bash
-# Option 1: Download from project storage (if available)
-# scp admin@storage:/models/resnet50_affectnet_rafdb.pth /media/project_data/ml_models/resnet50/
+# Option 1: Let the training script download automatically (RECOMMENDED)
+# The script downloads enet_b0_8_best_vgaf.pt from HSEmotion repository
 
-# Option 2: Use ImageNet weights (fallback)
-# The training script will automatically download ImageNet weights if custom weights aren't found
+# Option 2: Manual download
+python -c "
+from trainer.fer_finetune.model_efficientnet import download_hsemotion_weights
+download_hsemotion_weights('enet_b0_8_best_vgaf')
+print('HSEmotion weights downloaded successfully')
+"
 ```
 
-### Step 6.3: Verify Weights (if downloaded)
+### Step 6.3: Verify Weights
 
 ```bash
 python -c "
 import torch
-weights_path = '/media/project_data/ml_models/resnet50/resnet50_affectnet_rafdb.pth'
-try:
-    checkpoint = torch.load(weights_path, map_location='cpu')
-    print(f'Weights loaded successfully')
-    print(f'Keys: {list(checkpoint.keys())[:5]}...')
-except FileNotFoundError:
-    print('Custom weights not found - will use ImageNet weights')
+from pathlib import Path
+
+# Check if HSEmotion weights exist in cache
+cache_dir = Path.home() / '.cache' / 'hsemotion'
+weights_file = cache_dir / 'enet_b0_8_best_vgaf.pt'
+
+if weights_file.exists():
+    checkpoint = torch.load(weights_file, map_location='cpu')
+    print(f'HSEmotion weights found')
+    print(f'Model type: EfficientNet-B0 (8-class emotion)')
+else:
+    print('Weights not yet downloaded - will download on first training run')
 "
 ```
 
@@ -258,8 +267,8 @@ cd /path/to/reachy_emotion
 
 python -c "
 from trainer.fer_finetune.config import TrainingConfig
-from trainer.fer_finetune.model import EmotionClassifier
-from trainer.fer_finetune.train import Trainer
+from trainer.fer_finetune.model_efficientnet import EfficientNetEmotionClassifier
+from trainer.fer_finetune.train_efficientnet import Trainer
 
 print('✅ All training modules import successfully')
 "
@@ -270,12 +279,12 @@ print('✅ All training modules import successfully')
 ```bash
 python -c "
 import torch
-from trainer.fer_finetune.model import EmotionClassifier
+from trainer.fer_finetune.model_efficientnet import EfficientNetEmotionClassifier
 
 # Create model
-model = EmotionClassifier(
-    backbone='resnet50',
+model = EfficientNetEmotionClassifier(
     num_classes=2,
+    pretrained_weights='enet_b0_8_best_vgaf',
     dropout_rate=0.3,
 )
 
@@ -300,8 +309,8 @@ Expected output:
 ✅ Model created successfully
    Device: cuda
    Output shape: torch.Size([1, 2])
-   Total params: 23,510,082
-   Trainable params: 4,098
+   Total params: 4,012,226
+   Trainable params: 2,562
 ```
 
 ### Step 7.3: Check Training Config
@@ -311,7 +320,7 @@ python -c "
 from trainer.fer_finetune.config import TrainingConfig
 
 # Load 2-class config
-config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml')
+config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml')
 
 print('✅ Config loaded successfully')
 print(f'   Model: {config.model.backbone}')
@@ -385,7 +394,7 @@ Before proceeding, verify:
 | PyTorch installed | `python -c "import torch; print(torch.__version__)"` | 2.0+ |
 | CUDA available | `python -c "import torch; print(torch.cuda.is_available())"` | True |
 | GPU accessible | `nvidia-smi` | Shows GPU |
-| Training modules | `python -c "from trainer.fer_finetune.train import Trainer"` | No error |
+| Training modules | `python -c "from trainer.fer_finetune.train_efficientnet import Trainer"` | No error |
 | Config loads | See Step 7.3 | Shows config values |
 
 ---

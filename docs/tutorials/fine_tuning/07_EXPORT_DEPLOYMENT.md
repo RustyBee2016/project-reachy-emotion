@@ -66,7 +66,7 @@ By the end of this guide, you will:
 
 ```bash
 # Export after training (if Gate A passed)
-python trainer/train_resnet50.py \
+python trainer/train_efficientnet.py \
     --export-only \
     --resume outputs/checkpoints/best_model.pth \
     --export-path outputs/exports/my_model
@@ -76,8 +76,8 @@ python trainer/train_resnet50.py \
 
 ```
 ============================================================
-ResNet-50 Emotion Classifier Training
-Model: resnet50-affectnet-raf-db (placeholder)
+EfficientNet-B0 Emotion Classifier Training
+Model: enet_b0_8_best_vgaf (HSEmotion)
 Run ID: export_20260128_235000
 ============================================================
 
@@ -99,7 +99,7 @@ EXPORT RESULTS
   "output_shape": [1, 2],
   "precision": "fp16",
   "opset_version": 17,
-  "file_size_mb": 45.2
+  "file_size_mb": 16.8
 }
 ============================================================
 ```
@@ -115,7 +115,7 @@ import torch
 import torch.onnx
 from pathlib import Path
 
-from trainer.fer_finetune.model import load_pretrained_model
+from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 
 def export_to_onnx(
     checkpoint_path: str,
@@ -439,7 +439,7 @@ compare_pytorch_onnx(
 scp outputs/exports/emotion_classifier.onnx jetson@10.0.4.150:/opt/reachy/models/
 
 # Transfer config
-scp trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml jetson@10.0.4.150:/opt/reachy/configs/
+scp trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml jetson@10.0.4.150:/opt/reachy/configs/
 ```
 
 ---
@@ -490,7 +490,7 @@ Before considering export complete:
 
 ```bash
 # Export to ONNX
-python trainer/train_resnet50.py \
+python trainer/train_efficientnet.py \
     --export-only \
     --resume outputs/checkpoints/best_model.pth \
     --export-path outputs/exports/

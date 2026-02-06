@@ -291,7 +291,7 @@ print(f"Gradients computed: {model.fc.weight.grad is not None}")
 # Verify config loads correctly
 from trainer.fer_finetune.config import TrainingConfig
 
-config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml')
+config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml')
 print(f"Learning rate: {config.learning_rate}")
 print(f"Batch size: {config.data.batch_size}")
 print(f"Data root: {config.data.data_root}")

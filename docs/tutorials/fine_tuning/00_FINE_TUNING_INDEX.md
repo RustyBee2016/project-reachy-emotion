@@ -52,11 +52,13 @@ Before starting, ensure you have:
 **Not required** (you'll learn these):
 - Deep learning experience
 - PyTorch knowledge
-- Understanding of ResNet architecture
+- [ ] Understanding of EfficientNet architecture
 
 ---
 
 ## Guide Structure
+
+### Core Training Pipeline (Required)
 
 | Guide | Topic | Duration | Difficulty |
 |-------|-------|----------|------------|
@@ -68,7 +70,23 @@ Before starting, ensure you have:
 | [06_EVALUATION_GATE_A.md](06_EVALUATION_GATE_A.md) | Evaluation & Gate A | 2-3 hours | Intermediate |
 | [07_EXPORT_DEPLOYMENT.md](07_EXPORT_DEPLOYMENT.md) | Export to ONNX | 1-2 hours | Intermediate |
 
-**Total**: ~15-20 hours over 2-3 weeks
+### Practical Guides (Highly Recommended)
+
+| Guide | Topic | Duration | Difficulty |
+|-------|-------|----------|------------|
+| [08_QUICK_START_HANDS_ON.md](08_QUICK_START_HANDS_ON.md) | First Inference & Training | 30-45 min | Beginner |
+| [09_WEB_UI_DATA_WORKFLOW.md](09_WEB_UI_DATA_WORKFLOW.md) | Web UI for Data Curation | 1-2 hours | Beginner |
+| [10_WORKED_EXAMPLE_COMPLETE_RUN.md](10_WORKED_EXAMPLE_COMPLETE_RUN.md) | Complete Training Reference | Reference | Intermediate |
+
+### Advanced Topics (Production)
+
+| Guide | Topic | Duration | Difficulty |
+|-------|-------|----------|------------|
+| [11_NVIDIA_TAO_TOOLKIT_GUIDE.md](11_NVIDIA_TAO_TOOLKIT_GUIDE.md) | TAO for Jetson Deployment | 3-4 hours | Advanced |
+| [12_N8N_ORCHESTRATION_GUIDE.md](12_N8N_ORCHESTRATION_GUIDE.md) | Automated Training Pipelines | 2-3 hours | Intermediate |
+
+**Total Core**: ~15-20 hours over 2-3 weeks  
+**Total with Advanced**: ~25-30 hours over 3-4 weeks
 
 ---
 
@@ -129,19 +147,35 @@ trainer/
 
 ## Learning Path
 
-### Week 1: Foundations
-- Day 1-2: Read Guide 01 (What is Fine-Tuning)
-- Day 3: Complete Guide 02 (Environment Setup)
-- Day 4-5: Work through Guide 03 (Data Preparation)
+### Fast Track (1 week)
+For engineers who need to get productive quickly:
+- **Day 1**: Guide 08 (Quick Start Hands-On) — 45 min
+- **Day 2**: Guide 01 (What is Fine-Tuning) + Guide 02 (Environment Setup) — 3 hours
+- **Day 3**: Guide 09 (Web UI Data Workflow) + Guide 03 (Data Preparation) — 4 hours
+- **Day 4-5**: Guide 04 (Training Walkthrough) + Guide 05 (Monitoring) — 6 hours
 
-### Week 2: Training
-- Day 1-2: Complete Guide 04 (Training Walkthrough)
-- Day 3: Work through Guide 05 (Monitoring & Debugging)
-- Day 4-5: Complete Guide 06 (Evaluation & Gate A)
+### Standard Track (2-3 weeks)
 
-### Week 3: Deployment (Optional)
-- Day 1-2: Complete Guide 07 (Export & Deployment)
-- Day 3-5: Practice with different configurations
+**Week 1: Foundations**
+- Day 1: Guide 08 (Quick Start) — Get hands-on immediately
+- Day 2-3: Guide 01 (What is Fine-Tuning) — Understand concepts
+- Day 4: Guide 02 (Environment Setup) — Set up your machine
+- Day 5: Guide 09 (Web UI Data Workflow) — Learn data curation
+
+**Week 2: Training**
+- Day 1-2: Guide 03 (Data Preparation) — Prepare datasets
+- Day 3-4: Guide 04 (Training Walkthrough) — Run training
+- Day 5: Guide 05 (Monitoring & Debugging) — Track experiments
+
+**Week 3: Evaluation & Production**
+- Day 1-2: Guide 06 (Evaluation & Gate A) — Validate models
+- Day 3: Guide 07 (Export & Deployment) — Export to ONNX
+- Day 4-5: Guide 10 (Worked Example) — Reference a complete run
+
+### Advanced Track (Week 4+)
+For production deployment to Jetson:
+- Day 1-2: Guide 11 (NVIDIA TAO Toolkit) — Production training
+- Day 3: Guide 12 (n8n Orchestration) — Automated pipelines
 
 ---
 

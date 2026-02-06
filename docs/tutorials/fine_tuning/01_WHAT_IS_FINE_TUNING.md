@@ -12,7 +12,7 @@ By the end of this guide, you will:
 - [ ] Understand what fine-tuning means
 - [ ] Know why we use transfer learning
 - [ ] Understand the two-phase training strategy
-- [ ] Know what ResNet-50 is and why we use it
+- [ ] Know what EfficientNet-B0 is and why we use it
 
 ---
 
@@ -116,74 +116,70 @@ When fine-tuning:
 
 ---
 
-## 3. Our Model: ResNet-50
+## 3. Our Model: EfficientNet-B0 (HSEmotion)
 
-### What is ResNet-50?
+### What is EfficientNet-B0?
 
-**ResNet-50** is a neural network architecture with 50 layers, designed by Microsoft in 2015. It won the ImageNet competition and is still widely used.
+**EfficientNet-B0** is a neural network architecture designed by Google in 2019. It uses a "compound scaling" method that balances network depth, width, and resolution to achieve excellent accuracy with fewer parameters than older architectures.
 
-### Why ResNet-50?
+### Why EfficientNet-B0?
 
 | Feature | Benefit for Reachy |
 |---------|-------------------|
-| **Well-tested** | Reliable, known to work |
-| **Good accuracy** | Strong baseline performance |
-| **Reasonable size** | Can run on Jetson Xavier NX |
-| **Pre-trained weights available** | AffectNet + RAF-DB emotion data |
+| **Efficient** | Smaller model, faster inference |
+| **High accuracy** | State-of-the-art on emotion benchmarks |
+| **Edge-optimized** | Runs well on Jetson Xavier NX |
+| **HSEmotion pre-trained** | VGGFace2 + AffectNet weights available |
 
-### ResNet-50 Architecture (Simplified)
+### EfficientNet-B0 Architecture (Simplified)
 
 ```
 Input Image (224×224×3)
         │
         ▼
 ┌───────────────────┐
-│   Conv Layer 1    │  ← Initial feature extraction
+│   Conv Stem       │  ← Initial feature extraction
 └───────────────────┘
         │
         ▼
 ┌───────────────────┐
-│   Layer 1 Block   │  ← 3 residual blocks
+│   Blocks 1-4      │  ← MBConv blocks (early layers)
+│   (early blocks)  │     Keep frozen during Phase 1
 └───────────────────┘
         │
         ▼
 ┌───────────────────┐
-│   Layer 2 Block   │  ← 4 residual blocks
+│   Blocks 5-6      │  ← MBConv blocks (late layers)
+│   (late blocks)   │     We unfreeze these in Phase 2
 └───────────────────┘
         │
         ▼
 ┌───────────────────┐
-│   Layer 3 Block   │  ← 6 residual blocks
+│   Conv Head       │  ← Final convolution
 └───────────────────┘
         │
         ▼
 ┌───────────────────┐
-│   Layer 4 Block   │  ← 3 residual blocks (we fine-tune this)
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐
-│  Global Avg Pool  │  ← Reduces to 2048 features
+│  Global Avg Pool  │  ← Reduces to 1280 features
 └───────────────────┘
         │
         ▼
 ┌───────────────────┐
 │  Classification   │  ← We replace this for emotions
-│      Head         │
+│      Head (FC)    │
 └───────────────────┘
         │
         ▼
 Output: [happy, sad, angry, ...]
 ```
 
-### Pre-trained Weights
+### Pre-trained Weights (HSEmotion)
 
-Our model starts with weights trained on:
-1. **ImageNet** (14 million images, 1000 classes)
-2. **AffectNet** (450K facial images with emotions)
-3. **RAF-DB** (30K facial images with emotions)
+Our model uses **HSEmotion** weights (`enet_b0_8_best_vgaf`), pre-trained on:
+1. **VGGFace2** (3.3 million facial images)
+2. **AffectNet** (450K facial images with 8 emotions)
 
-This gives us a strong starting point for emotion recognition.
+This gives us an exceptional starting point specifically optimized for facial emotion recognition.
 
 ---
 
@@ -207,7 +203,7 @@ Instead, we train in two phases:
 │                                                                      │
 │   ┌─────────────────┐                                               │
 │   │   Backbone      │  🔒 FROZEN (no updates)                       │
-│   │   (ResNet-50)   │  - Keeps pre-trained knowledge                │
+│   │ (EfficientNet)  │  - Keeps pre-trained knowledge                │
 │   │                 │  - Parameters don't change                    │
 │   └────────┬────────┘                                               │
 │            │                                                         │
@@ -351,7 +347,7 @@ For the Reachy robot, we start with binary classification:
 | Setting | Value | Why |
 |---------|-------|-----|
 | Classes | 2 (happy, sad) | Simpler task, easier to validate |
-| Input size | 224×224 | Standard for ResNet |
+| Input size | 224×224 | Standard for EfficientNet-B0 |
 | Batch size | 32 | Good balance of speed/stability |
 | Phase 1 epochs | 5 | Enough to train head |
 | Phase 2 epochs | 15 | Fine-tune backbone |
@@ -412,10 +408,10 @@ Test your understanding:
 
 1. **Fine-tuning** adapts a pre-trained model to a new task
 2. **Transfer learning** saves time and improves results
-3. **ResNet-50** is our backbone, pre-trained on emotion data
+3. **EfficientNet-B0** is our backbone, pre-trained on emotion data (HSEmotion)
 4. **Two-phase training** protects pre-trained knowledge
 5. **Phase 1**: Frozen backbone, train head only
-6. **Phase 2**: Unfreeze layer 4, fine-tune with lower LR
+6. **Phase 2**: Unfreeze blocks 5-6, fine-tune with lower LR
 
 ### What's Next
 

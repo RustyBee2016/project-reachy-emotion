@@ -21,65 +21,66 @@ By the end of this guide, you will:
 
 ### The Config File
 
-Training is controlled by a YAML configuration file. Let's examine `resnet50_emotion_2cls.yaml`:
+Training is controlled by a YAML configuration file. Let's examine `efficientnet_b0_emotion_2cls.yaml`:
 
 ```yaml
-# trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml
+# trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
 
 # Model settings
 model:
-  backbone: resnet50                    # Network architecture
+  backbone: efficientnet_b0             # HSEmotion EfficientNet-B0
   num_classes: 2                        # happy, sad
   input_size: 224                       # Image size (224x224)
-  dropout_rate: 0.3                     # Dropout for regularization
-  pretrained_weights: resnet50-affectnet-raf-db  # Pre-trained weights
+  dropout_rate: 0.3                     # Dropout before FC head
+  pretrained_weights: enet_b0_8_best_vgaf
   freeze_backbone_epochs: 5             # Phase 1 duration
-  unfreeze_layers: ["layer4"]           # Layers to unfreeze in Phase 2
-  use_multi_task: false                 # Single-task (classification only)
+  unfreeze_layers: ["blocks.6", "blocks.5", "conv_head"]
+  use_multi_task: false
 
 # Data settings
 data:
-  data_root: data                       # Path to data directory
-  batch_size: 32                        # Images per batch
-  num_workers: 4                        # Parallel data loading threads
-  class_names: ["happy", "sad"]         # Class labels
-  mixup_alpha: 0.2                      # Mixup augmentation strength
-  mixup_probability: 0.5                # Probability of applying mixup
+  data_root: /media/project_data/reachy_emotion/videos
+  train_dir: train
+  val_dir: test
+  batch_size: 32
+  num_workers: 4
+  mixup_alpha: 0.2
+  mixup_probability: 0.3
 
 # Training settings
-num_epochs: 20                          # Total training epochs
-learning_rate: 0.001                    # Initial learning rate
-min_lr: 0.00001                         # Minimum learning rate
-weight_decay: 0.01                      # L2 regularization
-lr_scheduler: cosine                    # Learning rate schedule
-warmup_epochs: 2                        # Warmup period
-gradient_clip_norm: 1.0                 # Gradient clipping
-label_smoothing: 0.1                    # Label smoothing
+num_epochs: 30
+learning_rate: 0.0003
+min_lr: 0.000001
+weight_decay: 0.0001
+lr_scheduler: cosine
+warmup_epochs: 3
+gradient_clip_norm: 1.0
+label_smoothing: 0.1
 
 # Early stopping
 early_stopping_enabled: true
-patience: 10                            # Epochs without improvement
-min_delta: 0.001                        # Minimum improvement
+patience: 10
+min_delta: 0.001
 
 # Checkpointing
-checkpoint_dir: outputs/checkpoints
-save_interval: 5                        # Save every N epochs
+checkpoint_dir: /workspace/checkpoints/efficientnet_b0_2cls
+save_interval: 5
 
-# Quality gates (Gate A from requirements)
+# Quality gates (Gate A)
 gate_a_min_f1_macro: 0.84
 gate_a_min_balanced_accuracy: 0.85
-gate_a_min_per_class_f1: 0.70
+gate_a_min_per_class_f1: 0.75
 gate_a_max_ece: 0.08
 gate_a_max_brier: 0.16
 
 # Experiment tracking
-mlflow_tracking_uri: http://localhost:5000
-mlflow_experiment_name: reachy_emotion_2cls
+mlflow_tracking_uri: file:///workspace/mlruns
+mlflow_experiment_name: efficientnet_b0_emotion_2cls
 
 # Reproducibility
 seed: 42
 deterministic: true
-mixed_precision: true                   # Use FP16 for faster training
+mixed_precision: true
 ```
 
 ### Key Parameters Explained
@@ -117,23 +118,23 @@ ls data/val/
 ### Step 2.2: Start Training
 
 ```bash
-# Basic training command
-python trainer/train_resnet50.py \
-    --config fer_finetune/specs/resnet50_emotion_2cls.yaml
+# Basic training command (binary happy/sad)
+python trainer/train_efficientnet.py \
+    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
 
 # With custom run ID
-python trainer/train_resnet50.py \
-    --config fer_finetune/specs/resnet50_emotion_2cls.yaml \
+python trainer/train_efficientnet.py \
+    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
     --run-id my_first_training
 
-# With custom data directory
-python trainer/train_resnet50.py \
-    --config fer_finetune/specs/resnet50_emotion_2cls.yaml \
-    --data-dir /path/to/my/data
+# With custom video root
+python trainer/train_efficientnet.py \
+    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --data-dir /path/to/my/videos
 
 # With custom output directory
-python trainer/train_resnet50.py \
-    --config fer_finetune/specs/resnet50_emotion_2cls.yaml \
+python trainer/train_efficientnet.py \
+    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
     --output-dir /path/to/outputs
 ```
 
@@ -141,30 +142,30 @@ python trainer/train_resnet50.py \
 
 ```
 ============================================================
-ResNet-50 Emotion Classifier Training
-Model: resnet50-affectnet-raf-db (placeholder)
-Run ID: resnet50_emotion_20260128_231500
+EfficientNet-B0 Emotion Classifier Training
+Model: enet_b0_8_best_vgaf (HSEmotion)
+Run ID: efficientnet_b0_20260205_140501
 ============================================================
 
-Loading config: fer_finetune/specs/resnet50_emotion_2cls.yaml
+Loading config: fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
 Trainer initialized on device: cuda
-Model params: 23,510,082 total, 4,098 trainable
+Model params: 4,013,954 total, 2,562 trainable
 
 ============================================================
-Starting training run: resnet50_emotion_20260128_231500
+Starting training run: efficientnet_b0_20260205_140501
 ============================================================
 
 Data loaders created: 25 train batches, 7 val batches
 Class weights applied: [1.0, 1.0]
 Backbone frozen
 
-Epoch 1/20 (LR: 1.00e-04)
-  Train - Loss: 0.6823, F1: 0.5234
-  Val   - Loss: 0.5912, F1: 0.6123, ECE: 0.1523
+Epoch 1/30 (LR: 3.00e-04)
+  Train - Loss: 0.6831, F1: 0.5220
+  Val   - Loss: 0.5904, F1: 0.6085, ECE: 0.1500
 Gate A: FAILED
-  F1 macro: 0.6123 (req: 0.84)
-  Balanced acc: 0.6234 (req: 0.85)
-  ECE: 0.1523 (req: ≤0.08)
+  F1 macro: 0.6085 (req: 0.84)
+  Balanced acc: 0.6201 (req: 0.85)
+  ECE: 0.1500 (req: ≤0.08)
 ```
 
 ---
@@ -219,8 +220,8 @@ After `freeze_backbone_epochs` (default: 5), training transitions:
 Transitioning to Phase 2: Unfreezing backbone layers
 ============================================================
 
-Unfrozen 2359296 parameters in layers: ['layer4']
-Trainable params: 2,363,394
+Unfrozen 524288 parameters in layers: ['blocks.6', 'blocks.5']
+Trainable params: 526,850
 ```
 
 Now the model can fine-tune the backbone features.
@@ -337,10 +338,10 @@ mlflow server --host 0.0.0.0 --port 5000
 
 ### Checkpoint Files
 
-Training saves checkpoints automatically:
+Training saves checkpoints automatically (path from `checkpoint_dir` in the config):
 
 ```
-outputs/checkpoints/
+/workspace/checkpoints/efficientnet_b0_2cls/
 ├── latest.pth          # Most recent checkpoint
 ├── best_model.pth      # Best validation F1
 ├── checkpoint_epoch_5.pth
@@ -369,25 +370,25 @@ If training is interrupted (crash, timeout, etc.):
 
 ```bash
 # Resume from latest checkpoint
-python trainer/train_resnet50.py \
-    --config fer_finetune/specs/resnet50_emotion_2cls.yaml \
-    --resume outputs/checkpoints/latest.pth
+python trainer/train_efficientnet.py \
+    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --resume /workspace/checkpoints/efficientnet_b0_2cls/latest.pth
 
 # Resume from specific checkpoint
-python trainer/train_resnet50.py \
-    --config fer_finetune/specs/resnet50_emotion_2cls.yaml \
-    --resume outputs/checkpoints/checkpoint_epoch_10.pth
+python trainer/train_efficientnet.py \
+    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --resume /workspace/checkpoints/efficientnet_b0_2cls/checkpoint_epoch_10.pth
 ```
 
 Output when resuming:
 ```
-Loading checkpoint: outputs/checkpoints/latest.pth
+Loading checkpoint: /workspace/checkpoints/efficientnet_b0_2cls/latest.pth
 Resumed from epoch 15, phase 2
 Best metric so far: 0.8534
-Trainable params: 2,363,394
+Trainable params: 526,850
 
 ============================================================
-Resuming training run: resnet50_emotion_20260128_231500 from epoch 16
+Resuming training run: efficientnet_b0_20260205_140501 from epoch 16
 ============================================================
 ```
 
@@ -444,11 +445,11 @@ Resuming training run: resnet50_emotion_20260128_231500 from epoch 16
 
 2. **Run short training** (5 epochs):
    ```bash
-   python trainer/train_resnet50.py \
-       --config fer_finetune/specs/resnet50_emotion_2cls.yaml \
-       --data-dir data_test \
-       --run-id test_run_001
-   ```
+  python trainer/train_efficientnet.py \
+      --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+      --data-dir data_test \
+      --run-id test_run_001
+  ```
 
 3. **Observe the output**:
    - Does loss decrease?
@@ -457,8 +458,8 @@ Resuming training run: resnet50_emotion_20260128_231500 from epoch 16
 
 4. **Check the checkpoint**:
    ```bash
-   ls outputs/checkpoints/
-   ```
+  ls /workspace/checkpoints/efficientnet_b0_2cls/
+  ```
 
 ---
 
@@ -521,13 +522,13 @@ RuntimeError: CUDA out of memory
 
 ```bash
 # Start training
-python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_2cls.yaml
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
 
 # Resume training
-python trainer/train_resnet50.py --config ... --resume outputs/checkpoints/latest.pth
+python trainer/train_efficientnet.py --config ... --resume /workspace/checkpoints/efficientnet_b0_2cls/latest.pth
 
 # Custom data directory
-python trainer/train_resnet50.py --config ... --data-dir /path/to/data
+python trainer/train_efficientnet.py --config ... --data-dir /path/to/videos
 ```
 
 ### What's Next

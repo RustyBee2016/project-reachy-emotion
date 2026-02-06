@@ -315,6 +315,239 @@ echo "Engine saved to $ENGINE_PATH"
     }
 
 
+def export_efficientnet_for_deployment(
+    checkpoint_path: str,
+    output_dir: str,
+    model_name: str = "emotion_efficientnet",
+    precision: str = "fp16",
+    input_size: int = 224,
+    num_classes: int = 2,
+) -> Dict[str, str]:
+    """
+    Complete export pipeline for EfficientNet-B0 emotion classifier deployment.
+    
+    Exports HSEmotion EfficientNet-B0 model to ONNX and generates deployment metadata.
+    TensorRT conversion should be done on the target device (Jetson Xavier NX).
+    
+    Args:
+        checkpoint_path: Path to trained EfficientNet checkpoint
+        output_dir: Output directory for exported files
+        model_name: Name for exported model
+        precision: Target precision for TensorRT ("fp16" or "fp32")
+        input_size: Input image size (default 224 for EfficientNet-B0)
+        num_classes: Number of classes (2 for binary, 8 for full emotions)
+    
+    Returns:
+        Dictionary of exported file paths and metadata
+    """
+    from .model_efficientnet import create_efficientnet_model
+    
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Load EfficientNet model from checkpoint
+    logger.info(f"Loading EfficientNet model from {checkpoint_path}")
+    
+    # Create model architecture
+    model = create_efficientnet_model(
+        num_classes=num_classes,
+        dropout_rate=0.3,
+        pretrained=False,  # We'll load from checkpoint
+        use_multi_task=False,
+    )
+    
+    # Load checkpoint
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    
+    # Handle different checkpoint formats
+    if 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+    elif 'state_dict' in checkpoint:
+        state_dict = checkpoint['state_dict']
+    else:
+        state_dict = checkpoint
+    
+    # Remove 'module.' prefix if present (from DataParallel)
+    state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+    
+    model.load_state_dict(state_dict)
+    model.eval()
+    
+    logger.info("EfficientNet model loaded successfully")
+    
+    # Export to ONNX
+    onnx_path = output_dir / f"{model_name}.onnx"
+    export_to_onnx(
+        model, 
+        str(onnx_path), 
+        input_size=input_size,
+        opset_version=17,  # TensorRT 8.6+ compatibility
+        dynamic_batch=True,
+    )
+    
+    # Generate deployment metadata specific to EfficientNet
+    metadata = {
+        'model_name': model_name,
+        'model_type': 'efficientnet_b0_hsemotion',
+        'model_placeholder': 'enet_b0_8_best_vgaf',
+        'checkpoint_path': str(checkpoint_path),
+        'onnx_path': str(onnx_path),
+        'input_size': input_size,
+        'num_classes': num_classes,
+        'precision': precision,
+        'class_names': ['happy', 'sad'] if num_classes == 2 else [
+            'anger', 'contempt', 'disgust', 'fear', 
+            'happy', 'neutral', 'sad', 'surprise'
+        ],
+        'normalization': {
+            'mean': [0.485, 0.456, 0.406],  # ImageNet normalization
+            'std': [0.229, 0.224, 0.225],
+        },
+        'storage_path': '/media/rusty_admin/project_data/ml_models/efficientnet_b0',
+        'performance_targets': {
+            'jetson_xavier_nx': {
+                'latency_p50_ms': 40,
+                'latency_p95_ms': 80,
+                'gpu_memory_gb': 0.8,
+                'throughput_fps': 25,
+            }
+        },
+        'gate_b_thresholds': {
+            'max_latency_p50_ms': 120.0,
+            'max_latency_p95_ms': 250.0,
+            'max_gpu_memory_gb': 2.5,
+            'min_f1_macro': 0.80 if num_classes == 2 else 0.75,
+        }
+    }
+    
+    metadata_path = output_dir / f"{model_name}_metadata.json"
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    # Generate TensorRT conversion script optimized for EfficientNet-B0
+    trt_script = f'''#!/bin/bash
+# TensorRT conversion script for EfficientNet-B0 on Jetson Xavier NX
+# Run this ON THE JETSON device
+#
+# Expected performance:
+#   - Latency: ~40ms p50 (3x headroom vs 120ms budget)
+#   - Memory: ~0.8GB GPU (3x headroom vs 2.5GB budget)
+
+ONNX_PATH="{model_name}.onnx"
+ENGINE_PATH="{model_name}.engine"
+
+echo "Converting EfficientNet-B0 to TensorRT engine..."
+echo "Target precision: {precision}"
+echo "Input size: {input_size}x{input_size}"
+
+/usr/src/tensorrt/bin/trtexec \\
+    --onnx=$ONNX_PATH \\
+    --saveEngine=$ENGINE_PATH \\
+    --{'fp16' if precision == 'fp16' else 'fp32'} \\
+    --workspace=2048 \\
+    --minShapes=input:1x3x{input_size}x{input_size} \\
+    --optShapes=input:4x3x{input_size}x{input_size} \\
+    --maxShapes=input:8x3x{input_size}x{input_size} \\
+    --avgRuns=100 \\
+    --verbose
+
+if [ $? -eq 0 ]; then
+    echo "✓ TensorRT engine created successfully: $ENGINE_PATH"
+    echo "✓ Ready for DeepStream integration"
+    
+    # Verify engine performance
+    echo "Running performance validation..."
+    /usr/src/tensorrt/bin/trtexec \\
+        --loadEngine=$ENGINE_PATH \\
+        --shapes=input:1x3x{input_size}x{input_size} \\
+        --avgRuns=100 \\
+        --duration=10
+else
+    echo "✗ TensorRT conversion failed"
+    exit 1
+fi
+'''
+    
+    script_path = output_dir / f"convert_to_trt.sh"
+    with open(script_path, 'w') as f:
+        f.write(trt_script)
+    
+    # Make script executable (on Unix systems)
+    try:
+        import stat
+        script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
+    except:
+        pass  # Windows doesn't need this
+    
+    # Generate DeepStream config template
+    deepstream_config = f'''[application]
+enable-perf-measurement=1
+perf-measurement-interval-sec=5
+
+[tiled-display]
+enable=0
+
+[source0]
+enable=1
+type=3
+uri=file:///opt/reachy/test_videos/emotion_test.mp4
+num-sources=1
+gpu-id=0
+
+[sink0]
+enable=1
+type=2
+sync=0
+gpu-id=0
+
+[osd]
+enable=1
+gpu-id=0
+border-width=2
+
+[streammux]
+gpu-id=0
+batch-size=1
+batched-push-timeout=40000
+width={input_size}
+height={input_size}
+enable-padding=0
+nvbuf-memory-type=0
+
+[primary-gie]
+enable=1
+gpu-id=0
+model-engine-file={model_name}.engine
+batch-size=1
+bbox-border-color0=1;0;0;1
+bbox-border-color1=0;1;1;1
+interval=0
+gie-unique-id=1
+nvbuf-memory-type=0
+config-file-path=emotion_inference.txt
+'''
+    
+    deepstream_path = output_dir / f"deepstream_config.txt"
+    with open(deepstream_path, 'w') as f:
+        f.write(deepstream_config)
+    
+    logger.info(f"EfficientNet export complete. Files in {output_dir}:")
+    logger.info(f"  - {onnx_path.name} (ONNX model)")
+    logger.info(f"  - {metadata_path.name} (deployment metadata)")
+    logger.info(f"  - {script_path.name} (TensorRT conversion script)")
+    logger.info(f"  - {deepstream_path.name} (DeepStream config template)")
+    
+    return {
+        'onnx': str(onnx_path),
+        'metadata': str(metadata_path),
+        'trt_script': str(script_path),
+        'deepstream_config': str(deepstream_path),
+        'output_dir': str(output_dir),
+        'model_type': 'efficientnet_b0_hsemotion',
+        'performance_targets': metadata['performance_targets'],
+    }
+
+
 def verify_onnx_inference(
     onnx_path: str,
     test_input: Optional[torch.Tensor] = None,
