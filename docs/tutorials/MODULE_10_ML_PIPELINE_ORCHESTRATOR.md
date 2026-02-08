@@ -62,17 +62,17 @@ Verify the agent webhooks from previous modules are registered:
 
 ```bash
 # Training Agent
-curl -X POST http://10.0.4.130:5678/webhook/agent/training/resnet50/start \
+curl -X POST http://10.0.4.130:5678/webhook/agent/training/efficientnet/start \
   -H "Content-Type: application/json" \
   -d '{"test": true}'
 
 # Evaluation Agent  
-curl -X POST http://10.0.4.130:5678/webhook/agent/evaluation/resnet50/start \
+curl -X POST http://10.0.4.130:5678/webhook/agent/evaluation/efficientnet/start \
   -H "Content-Type: application/json" \
   -d '{"test": true}'
 
 # Deployment Agent
-curl -X POST http://10.0.4.130:5678/webhook/agent/deployment/resnet50/start \
+curl -X POST http://10.0.4.130:5678/webhook/agent/deployment/efficientnet/start \
   -H "Content-Type: application/json" \
   -d '{"test": true}'
 ```
@@ -110,7 +110,7 @@ FROM video;
 │     └── Test: ≥20 per class                                             │
 │                                                                         │
 │  2. TRAINING (Agent 05)                                                 │
-│     ├── Fine-tune ResNet-50                                             │
+│     ├── Fine-tune EfficientNet-B0                                             │
 │     ├── Gate A validation                                               │
 │     └── Export ONNX                                                     │
 │                                                                         │
@@ -201,7 +201,7 @@ emit_complete
 
 ### Step 1: Create the Workflow
 
-1. Create: `ML Pipeline Orchestrator — ResNet-50 (Reachy 08.4.2)`
+1. Create: `ML Pipeline Orchestrator — EfficientNet-B0 (Reachy 08.4.2)`
 2. Settings: Execution Order = `v1`
 
 ---
@@ -220,7 +220,7 @@ emit_complete
 **Expected Input**:
 ```json
 {
-  "config": "fer_finetune/specs/resnet50_emotion_2cls.yaml",
+  "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
   "auto_deploy": false,
   "correlation_id": "optional-id"
 }
@@ -242,11 +242,11 @@ const pipelineId = `ml_pipeline_${timestamp}`;
 return [{
   json: {
     pipeline_id: pipelineId,
-    model: 'resnet50-affectnet-raf-db',
-    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50',
+    model: 'efficientnet-b0-hsemotion',
+    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet_b0',
     stages: ['dataset_check', 'training', 'evaluation', 'deployment'],
     current_stage: 'dataset_check',
-    config: $json.config || 'fer_finetune/specs/resnet50_emotion_2cls.yaml',
+    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml',
     auto_deploy: $json.auto_deploy || false,
     correlation_id: $json.correlation_id || pipelineId,
     started_at: new Date().toISOString()
@@ -355,7 +355,7 @@ Connect: IF dataset.ready? (True branch) → trigger.training
 | Parameter | Value |
 |-----------|-------|
 | Method | `POST` |
-| URL | `http://localhost:5678/webhook/agent/training/resnet50/start` |
+| URL | `http://localhost:5678/webhook/agent/training/efficientnet/start` |
 
 **Body**:
 ```json
@@ -422,7 +422,7 @@ Connect: IF dataset.ready? (True branch) → trigger.training
 | Parameter | Value |
 |-----------|-------|
 | Method | `POST` |
-| URL | `http://localhost:5678/webhook/agent/evaluation/resnet50/start` |
+| URL | `http://localhost:5678/webhook/agent/evaluation/efficientnet/start` |
 
 **Body**:
 ```json
@@ -470,7 +470,7 @@ Connect: IF auto_deploy? (True branch) → trigger.deployment
 | Parameter | Value |
 |-----------|-------|
 | Method | `POST` |
-| URL | `http://localhost:5678/webhook/agent/deployment/resnet50/start` |
+| URL | `http://localhost:5678/webhook/agent/deployment/efficientnet/start` |
 
 **Body**:
 ```json
@@ -501,7 +501,7 @@ Connect BOTH paths (with and without deployment) to this node.
 {
   "event_type": "pipeline.completed",
   "pipeline_id": "={{$('Code: init.pipeline').item.json.pipeline_id}}",
-  "model": "resnet50-affectnet-raf-db",
+  "model": "efficientnet-b0-hsemotion",
   "final_stage": "={{$json.current_stage || 'evaluation'}}",
   "gate_a_passed": "={{$json.gate_a_passed}}",
   "deployed": "={{$json.deployed || false}}",
@@ -555,7 +555,7 @@ Pipeline complete (model deployed)
 curl -X POST http://10.0.4.130:5678/webhook/ml/pipeline/start \
   -H "Content-Type: application/json" \
   -d '{
-    "config": "fer_finetune/specs/resnet50_emotion_2cls.yaml"
+    "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml"
   }'
 ```
 

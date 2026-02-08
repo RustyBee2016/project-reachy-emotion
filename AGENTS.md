@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Project:** Reachy_Local_08.4.2  
-- **Primary Objective:** Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion).  
+- **Primary Objective:** Emotion classification from short synthetic videos (3-class: `happy`, `sad`, `neutral`) using EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion).  
 - **Secondary Objectives:** Local-first privacy, reproducible fine-tuning, human-in-the-loop labeling and dataset curation, low operational overhead.  
 - **Non-goals:** Audio emotion recognition, cloud dependencies, linguistic or conversational emotion synthesis.  
 - **Stakeholders:** Robot end-users, Reachy R&D team, and project maintainers.
@@ -52,7 +52,7 @@ Conflicts between automation and policy defer to the human project owner (Russ).
 - **Networking:**  
   Static LAN IPs — Ubuntu 1 (10.0.4.130), Ubuntu 2 (10.0.4.140), Jetson (10.0.4.150).  
 - **Model:**  
-  EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion `enet_b0_8_best_vgaf`), fine-tuned for binary (`happy` vs `sad`) classification.  
+  EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion `enet_b0_8_best_vgaf`), fine-tuned for 3-class (`happy`, `sad`, `neutral`) classification.  
   Model placeholder: `efficientnet-b0-hsemotion`  
   Storage path: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
 
@@ -84,9 +84,9 @@ Initiated by the web UI or generation workflow. Operates in local-only mode; no 
 Manage user-assisted classification and dataset promotion.
 
 **Updated Responsibilities (v08.4.2):**
-- Maintain training split integrity (`videos/train/`) by ensuring all accepted items carry a valid label (`happy` or `sad`).  
+- Maintain training split integrity (`videos/train/`) by ensuring all accepted items carry a valid label (`happy`, `sad`, or `neutral`).  
 - Enforce the **no-label rule** for the `test` split.  
-- Interface with the web UI to update per-class counts and 50/50 balance status.  
+- Interface with the web UI to update per-class counts and 1:1:1 balance status (happy, sad, neutral).  
 - Coordinate with the Database API to apply the `chk_split_label` constraint and maintain per-split quotas.  
 - Log each promotion event (`temp → train` or `temp → test`) with `intended_emotion`, timestamp, and `sha256`.  
 
@@ -117,19 +117,19 @@ Ensure filesystem and database consistency.
 
 ### Agent 5 — Training Orchestrator
 **Purpose:**  
-Trigger ResNet-50 emotion classifier fine-tuning once dataset balance and size thresholds are met.
+Trigger EfficientNet-B0 emotion classifier fine-tuning once dataset balance and size thresholds are met.
 
 **Updated Responsibilities (v08.4.2 ML):**
-- Launch PyTorch training using `trainer/train_resnet50.py` with config `fer_finetune/specs/resnet50_emotion_2cls.yaml`.  
-- Implement two-phase training: frozen backbone (epochs 1-5) → selective unfreezing (layer4 + fc).  
-- Apply AffectNet + RAF-DB pre-trained weights (`resnet50-affectnet-raf-db` placeholder).  
+- Launch PyTorch training using `trainer/train_efficientnet.py` with config `fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`.  
+- Implement two-phase training: frozen backbone (epochs 1-5) → selective unfreezing (blocks.5, blocks.6, conv_head).  
+- Apply HSEmotion pre-trained weights (`enet_b0_8_best_vgaf` from VGGFace2 + AffectNet).  
 - Use mixed precision (FP16), mixup augmentation, and cosine LR schedule with warmup.  
 - Mount dataset paths from `/media/project_data/reachy_emotion/videos/train/` and generate checkpoints.  
 - Record dataset hash, model version, and metrics (F1, ECE, Brier) to MLflow.  
 - Validate Gate A requirements before export: F1 ≥ 0.84, balanced accuracy ≥ 0.85, ECE ≤ 0.08.  
 - Export to ONNX on success; publish `training.completed` with artifacts and metrics.
 
-**n8n Workflow:** `ml-agentic-ai_v.1/05_training_orchestrator_resnet50.json`  
+**n8n Workflow:** `ml-agentic-ai_v.2/05_training_orchestrator_efficientnet.json`  
 
 ---
 
@@ -138,15 +138,15 @@ Trigger ResNet-50 emotion classifier fine-tuning once dataset balance and size t
 Run validation jobs once the test set is balanced.
 
 **Updated Responsibilities (v08.4.2 ML):**  
-- Confirm `min(happy_count, sad_count) ≥ TEST_MIN_PER_CLASS` (default: 20) before triggering evaluation.  
-- Load trained ResNet-50 checkpoint and run inference on test set.  
+- Confirm `min(happy_count, sad_count, neutral_count) ≥ TEST_MIN_PER_CLASS` (default: 20) before triggering evaluation.  
+- Load trained EfficientNet-B0 checkpoint and run inference on test set.  
 - Compute comprehensive metrics: accuracy, F1 (macro + per-class), balanced accuracy.  
 - Compute calibration metrics: ECE (Expected Calibration Error), Brier score.  
 - Validate Gate A requirements and emit pass/fail status.  
 - Generate evaluation report with confusion matrix.  
 - Reference test videos by file path only; never attach or infer labels internally.
 
-**n8n Workflow:** `ml-agentic-ai_v.1/06_evaluation_agent_resnet50.json`  
+**n8n Workflow:** `ml-agentic-ai_v.2/06_evaluation_agent_efficientnet.json`  
 
 ---
 
@@ -158,13 +158,13 @@ Promote validated engines from `shadow → canary → rollout` with explicit app
 - Transfer ONNX model to Jetson via SCP.  
 - Convert ONNX → TensorRT engine on Jetson using `trtexec` with FP16 precision.  
 - Backup existing engine before deployment.  
-- Copy exported `.engine` to the Jetson NX at `/opt/reachy/models/emotion_resnet50.engine`.  
+- Copy exported `.engine` to the Jetson NX at `/opt/reachy/models/emotion_efficientnet.engine`.  
 - Update DeepStream pipeline configuration (`emotion_inference.txt`) and restart service.  
 - Verify Gate B requirements: FPS ≥ 25, latency p50 ≤ 120 ms, GPU memory ≤ 2.5 GB.  
 - Support automatic rollback to prior engine on Gate B failure.  
 - Record deployment metadata (`engine_version`, `model`, `fps`, `latency`, `timestamp`).
 
-**n8n Workflow:** `ml-agentic-ai_v.1/07_deployment_agent_resnet50.json`  
+**n8n Workflow:** `ml-agentic-ai_v.2/07_deployment_agent_efficientnet.json`  
 
 ---
 
@@ -193,7 +193,7 @@ Aggregate system metrics and raise alerts when thresholds are breached.
 
 ### Optional Sub-Agent — Generation Balancer
 **Purpose:**  
-Monitor class ratios and bias subsequent synthetic video generation to maintain a 50/50 balance between `happy` and `sad`.  
+Monitor class ratios and bias subsequent synthetic video generation to maintain 1:1:1 balance across `happy`, `sad`, and `neutral`.  
 Acts as a lightweight helper to Labeling Agent + Promotion Agent when automated balancing is desired.
 
 ---

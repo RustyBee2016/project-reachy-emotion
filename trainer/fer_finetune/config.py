@@ -21,7 +21,7 @@ class ModelConfig:
     # Architecture
     backbone: str = "resnet50"
     pretrained_weights: str = "resnet50-affectnet-raf-db"  # Placeholder for AffectNet+RAF-DB weights
-    num_classes: int = 2  # Binary: happy, sad (expandable to 8)
+    num_classes: int = 3  # Ternary: happy, sad, neutral (expandable to 8)
     input_size: int = 224
     
     # Classification head
@@ -59,7 +59,7 @@ class DataConfig:
     val_dir: str = "test"
     
     # Class mapping (binary default, expandable)
-    class_names: List[str] = field(default_factory=lambda: ["happy", "sad"])
+    class_names: List[str] = field(default_factory=lambda: ["happy", "sad", "neutral"])
     
     # For multi-class expansion
     full_class_names: List[str] = field(default_factory=lambda: [
@@ -83,6 +83,15 @@ class DataConfig:
     # Normalization (ImageNet stats - used by AffectNet pretrained models)
     image_mean: List[float] = field(default_factory=lambda: [0.485, 0.456, 0.406])
     image_std: List[float] = field(default_factory=lambda: [0.229, 0.224, 0.225])
+    
+    # Real-world test set distribution (reflects actual usage patterns)
+    # Training uses 1:1:1 balanced, but real-world evaluation should reflect
+    # that users are neutral ~75% of the time
+    realworld_test_distribution: Dict[str, float] = field(default_factory=lambda: {
+        "neutral": 0.75,  # Most common state
+        "happy": 0.15,    # Occasional positive
+        "sad": 0.10,      # Less frequent negative
+    })
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -119,6 +128,10 @@ class TrainingConfig:
     # Regularization
     label_smoothing: float = 0.1
     gradient_clip_norm: float = 1.0
+    
+    # Class imbalance handling
+    use_class_weights: bool = True  # Weight loss by inverse class frequency
+    class_weight_power: float = 0.5  # Dampening factor (1.0 = full inverse, 0.5 = sqrt)
     
     # Early stopping
     early_stopping_enabled: bool = True
@@ -221,7 +234,7 @@ class TrainingConfig:
         }
 
 
-# Default configuration for binary emotion classification
+# Default configuration for 3-class emotion classification (happy, sad, neutral)
 DEFAULT_CONFIG = TrainingConfig()
 
 # Configuration for 8-class emotion classification

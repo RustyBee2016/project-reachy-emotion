@@ -5,7 +5,7 @@ Exports trained PyTorch models to:
 - ONNX (intermediate format)
 - TensorRT engine (for Jetson inference)
 
-Model storage path: /media/rusty_admin/project_data/ml_models/resnet50
+Model storage path: /media/rusty_admin/project_data/ml_models/efficientnet_b0
 """
 
 import torch
@@ -17,8 +17,8 @@ import json
 logger = logging.getLogger(__name__)
 
 # Model storage constants
-MODEL_STORAGE_PATH = "/media/rusty_admin/project_data/ml_models/resnet50"
-MODEL_PLACEHOLDER = "resnet50-affectnet-raf-db"
+MODEL_STORAGE_PATH = "/media/rusty_admin/project_data/ml_models/efficientnet_b0"
+MODEL_PLACEHOLDER = "efficientnet-b0-hsemotion"
 
 
 def export_to_onnx(
@@ -244,7 +244,7 @@ def export_for_deployment(
     Returns:
         Dictionary of exported file paths
     """
-    from .model import load_pretrained_model
+    from .model_efficientnet import load_pretrained_model
     
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -266,7 +266,7 @@ def export_for_deployment(
         'input_size': input_size,
         'num_classes': num_classes,
         'precision': precision,
-        'class_names': ['happy', 'sad'] if num_classes == 2 else None,
+        'class_names': ['happy', 'sad', 'neutral'] if num_classes == 3 else (['happy', 'sad'] if num_classes == 2 else None),
         'normalization': {
             'mean': [0.485, 0.456, 0.406],
             'std': [0.229, 0.224, 0.225],

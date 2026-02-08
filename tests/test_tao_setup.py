@@ -12,9 +12,9 @@ from trainer.tao.config_loader import TAOConfigLoader, InvalidConfigError
 class TestTAOConfigLoader:
     """Test TAO configuration loading and validation."""
     
-    def test_load_valid_2cls_config(self):
-        """Test loading valid 2-class configuration."""
-        config_path = Path(__file__).parent.parent / "trainer/tao/specs/emotionnet_2cls.yaml"
+    def test_load_valid_3cls_config(self):
+        """Test loading valid 3-class configuration (Phase 1)."""
+        config_path = Path(__file__).parent.parent / "trainer/tao/specs/emotionnet_3cls.yaml"
         
         if not config_path.exists():
             pytest.skip("Config file not found")
@@ -30,11 +30,11 @@ class TestTAOConfigLoader:
         
         # Check model config
         assert config['model']['arch'] == 'resnet18'
-        assert config['model']['num_classes'] == 2
+        assert config['model']['num_classes'] == 3
         assert config['model']['input_shape'] == [224, 224, 3]
         
-        # Check dataset config
-        assert config['dataset']['classes'] == ['happy', 'sad']
+        # Check dataset config (3-class: happy, sad, neutral)
+        assert config['dataset']['classes'] == ['happy', 'sad', 'neutral']
         assert config['dataset']['augmentation']['enable'] is True
         
         # Check training config

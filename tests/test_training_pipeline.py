@@ -23,8 +23,8 @@ def temp_dirs():
     dataset_all = dataset_dir / 'dataset_all'
     dataset_all.mkdir(parents=True)
     
-    # Create sample videos
-    for emotion in ['happy', 'sad']:
+    # Create sample videos (3-class: happy, sad, neutral)
+    for emotion in ['happy', 'sad', 'neutral']:
         emotion_dir = dataset_all / emotion
         emotion_dir.mkdir()
         for i in range(5):
@@ -38,10 +38,10 @@ def temp_dirs():
     config_file.write_text("""
 model:
   arch: resnet18
-  num_classes: 2
+  num_classes: 3
   model_name: emotionnet_test
 dataset:
-  classes: [happy, sad]
+  classes: [happy, sad, neutral]
 training:
   batch_size: 32
   num_epochs: 50

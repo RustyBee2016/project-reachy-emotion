@@ -173,7 +173,7 @@ class PipelineTest:
     def step_train_model(self) -> bool:
         """Train the model."""
         cmd = [
-            "python", "trainer/train_resnet50.py",
+            "python", "trainer/train_efficientnet.py",
             "--config", "fer_finetune/specs/test_synthetic.yaml",
             "--data-dir", f"data/{self.run_id}",
             "--output-dir", f"outputs/{self.run_id}",
@@ -217,7 +217,7 @@ class PipelineTest:
     def step_export_onnx(self) -> bool:
         """Export model to ONNX."""
         cmd = [
-            "python", "trainer/train_resnet50.py",
+            "python", "trainer/train_efficientnet.py",
             "--export-only",
             "--checkpoint", f"outputs/{self.run_id}/best_model.pt",
             "--export-path", f"outputs/{self.run_id}/model.onnx",
@@ -271,7 +271,7 @@ class PipelineTest:
         cmd = [
             "ssh", f"reachy@{JETSON_HOST}",
             "python3", "/opt/reachy/gate_b_validator.py",
-            "--engine", "/opt/reachy/models/engines/emotion_resnet50.engine",
+            "--engine", "/opt/reachy/models/engines/emotion_efficientnet.engine",
             "--duration", "30",
             "--output", "/tmp/gate_b_results.json",
         ]
@@ -290,7 +290,7 @@ class PipelineTest:
         cmd = [
             "ssh", f"reachy@{JETSON_HOST}",
             "python3", "/opt/reachy/test_inference.py",
-            "--engine", "/opt/reachy/models/engines/emotion_resnet50.engine",
+            "--engine", "/opt/reachy/models/engines/emotion_efficientnet.engine",
             "--samples", "10",
         ]
         
@@ -1067,7 +1067,7 @@ if __name__ == "__main__":
 ```bash
 # On Jetson
 python3 stress_test.py \
-    --engine /opt/reachy/models/engines/emotion_resnet50.engine \
+    --engine /opt/reachy/models/engines/emotion_efficientnet.engine \
     --duration 60 \
     --target-fps 30 \
     --output /tmp/stress_test_results.json

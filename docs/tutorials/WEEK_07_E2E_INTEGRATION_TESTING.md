@@ -392,7 +392,7 @@ class E2ETestRunner:
         # Check if engine exists on Jetson
         result = subprocess.run(
             ["ssh", f"reachy@{CONFIG['jetson_host']}", 
-             "test", "-f", "/opt/reachy/models/engines/emotion_resnet50.engine"],
+             "test", "-f", "/opt/reachy/models/engines/emotion_efficientnet.engine"],
             capture_output=True, timeout=10
         )
         
@@ -406,7 +406,7 @@ class E2ETestRunner:
         result = subprocess.run(
             ["ssh", f"reachy@{CONFIG['jetson_host']}",
              "python3", "/opt/reachy/gate_b_validator.py",
-             "--engine", "/opt/reachy/models/engines/emotion_resnet50.engine",
+             "--engine", "/opt/reachy/models/engines/emotion_efficientnet.engine",
              "--duration", "10"],
             capture_output=True, text=True, timeout=60
         )

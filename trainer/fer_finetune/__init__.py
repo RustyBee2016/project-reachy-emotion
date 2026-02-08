@@ -1,15 +1,22 @@
 """
 FER Fine-tuning Module for Reachy_Local_08.4.2
 
-ResNet-50 emotion classifier fine-tuned on AffectNet + RAF-DB datasets
-for binary (happy/sad) or multi-class emotion classification.
+EfficientNet-B0 emotion classifier with HSEmotion pretrained weights
+for 3-class (happy/sad/neutral) or 8-class emotion classification.
 
-Model path: /media/rusty_admin/project_data/ml_models/resnet50
-Model placeholder: resnet50-affectnet-raf-db
+Model path: /media/rusty_admin/project_data/ml_models/efficientnet_b0
+Model placeholder: efficientnet-b0-hsemotion
 """
 
 from .config import TrainingConfig, ModelConfig, DataConfig
-from .model import EmotionClassifier, load_pretrained_model
+from .model_efficientnet import (
+    HSEmotionEfficientNet,
+    create_efficientnet_model,
+    load_pretrained_model,
+    PHASE1_CLASSES,
+)
+# Legacy ResNet model (for backward compatibility)
+from .model_resnet import EmotionClassifier
 from .dataset import EmotionDataset, get_train_transforms, get_val_transforms, validate_dataset
 from .train import Trainer, train_model
 from .evaluate import compute_metrics, expected_calibration_error
@@ -20,9 +27,13 @@ __all__ = [
     "TrainingConfig",
     "ModelConfig", 
     "DataConfig",
-    # Model
-    "EmotionClassifier",
+    # Model (EfficientNet - primary)
+    "HSEmotionEfficientNet",
+    "create_efficientnet_model",
     "load_pretrained_model",
+    "PHASE1_CLASSES",
+    # Model (ResNet - legacy)
+    "EmotionClassifier",
     # Dataset
     "EmotionDataset",
     "get_train_transforms",

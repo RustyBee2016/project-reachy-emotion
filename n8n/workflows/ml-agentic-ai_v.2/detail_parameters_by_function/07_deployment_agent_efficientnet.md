@@ -1,14 +1,14 @@
-# Agent 7 — Deployment Agent ResNet-50 (Reachy 08.4.2)
+# Agent 7 — Deployment Agent EfficientNet-B0 (Reachy 08.4.2)
 
-> **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/07_deployment_agent_resnet50.json`  
+> **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/07_deployment_agent_efficientnet.json`  
 > **Version:** 08.4.2  
 > **Last Updated:** 2025-11-29
 
 ## Overview
 
-The Deployment Agent promotes validated ResNet-50 models from Ubuntu 1 to the Jetson Xavier NX edge device. It handles ONNX→TensorRT conversion, DeepStream configuration updates, service restarts, and Gate B validation (FPS ≥ 25, latency p50 ≤ 120ms). Automatic rollback is triggered if Gate B fails.
+The Deployment Agent promotes validated EfficientNet-B0 models from Ubuntu 1 to the Jetson Xavier NX edge device. It handles ONNX→TensorRT conversion, DeepStream configuration updates, service restarts, and Gate B validation (FPS ≥ 25, latency p50 ≤ 120ms). Automatic rollback is triggered if Gate B fails.
 
-**Model:** `resnet50-affectnet-raf-db`  
+**Model:** `efficientnet-b0-hsemotion`  
 **Target:** Jetson Xavier NX (10.0.4.150)
 
 ## Node Inventory (Alphabetical)
@@ -85,16 +85,16 @@ IF: gate_a.passed?
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
 | `httpMethod` | `POST` | Accept POST requests |
-| `path` | `agent/deployment/resnet50/start` | URL path |
+| `path` | `agent/deployment/efficientnet/start` | URL path |
 | `responseMode` | `onReceived` | Respond immediately |
 | `options.responseCode` | `202` | HTTP 202 Accepted |
-| `webhookId` | `resnet50-deploy-start` | Unique identifier |
+| `webhookId` | `efficientnet-deploy-start` | Unique identifier |
 
 #### Expected Input
 
 ```json
 {
-  "run_id": "resnet50_emotion_xxx",
+  "run_id": "efficientnet_b0_emotion_xxx",
   "gate_a_passed": true,
   "onnx_path": "/workspace/exports/xxx/model.onnx",
   "correlation_id": "string"
@@ -135,8 +135,8 @@ IF: gate_a.passed?
 const runId = $json.run_id;
 const onnxPath = $json.onnx_path || 
   `/workspace/exports/${runId}/emotion_classifier_${runId}.onnx`;
-const enginePath = `/opt/reachy/models/emotion_resnet50.engine`;
-const backupPath = `/opt/reachy/models/backup/emotion_resnet50_${Date.now()}.engine`;
+const enginePath = `/opt/reachy/models/emotion_efficientnet.engine`;
+const backupPath = `/opt/reachy/models/backup/emotion_efficientnet_b0_${Date.now()}.engine`;
 
 return [{
   json: {
@@ -144,7 +144,7 @@ return [{
     onnx_path: onnxPath,
     engine_path: enginePath,
     backup_path: backupPath,
-    model_placeholder: 'resnet50-affectnet-raf-db',
+    model_placeholder: 'efficientnet-b0-hsemotion',
     deployment_stage: 'shadow'
   }
 }];
@@ -155,8 +155,8 @@ return [{
 ```json
 {
   "onnx_path": "/workspace/exports/xxx/emotion_classifier_xxx.onnx",
-  "engine_path": "/opt/reachy/models/emotion_resnet50.engine",
-  "backup_path": "/opt/reachy/models/backup/emotion_resnet50_1701234567890.engine",
+  "engine_path": "/opt/reachy/models/emotion_efficientnet.engine",
+  "backup_path": "/opt/reachy/models/backup/emotion_efficientnet_b0_1701234567890.engine",
   "deployment_stage": "shadow"
 }
 ```
@@ -425,7 +425,7 @@ return [{
 |-----------|-------|---------|
 | `event_type` | `deployment.completed` | Event type |
 | `run_id` | `={{$json.run_id}}` | Run ID |
-| `model` | `resnet50-affectnet-raf-db` | Model |
+| `model` | `efficientnet-b0-hsemotion` | Model |
 | `engine_path` | `={{$json.engine_path}}` | Engine location |
 | `fps` | `={{$json.metrics.fps}}` | Achieved FPS |
 | `latency_p50_ms` | `={{$json.metrics.latency_p50_ms}}` | Achieved latency |
@@ -501,7 +501,7 @@ fi
 
 - `agent`
 - `deployment`
-- `resnet50`
+- `efficientnet`
 - `ml-v1`
 
 ---

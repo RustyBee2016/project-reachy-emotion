@@ -1,5 +1,5 @@
 # EfficientNet-B0 Emotion Classifier Configuration
-# Binary classification: happy, sad
+# 3-class classification: happy, sad, neutral
 # Model: HSEmotion enet_b0_8_best_vgaf (VGGFace2 + AffectNet pretrained)
 #
 # Performance targets (Jetson Xavier NX):
@@ -9,7 +9,7 @@
 # Model settings
 model:
   backbone: efficientnet_b0
-  num_classes: 2
+  num_classes: 3
   input_size: 224
   dropout_rate: 0.3
   pretrained_weights: enet_b0_8_best_vgaf
@@ -26,7 +26,7 @@ data:
   batch_size: 32
   num_workers: 4
   pin_memory: true
-  class_names: ["happy", "sad"]
+  class_names: ["happy", "sad", "neutral"]
   frame_sampling: middle
   frames_per_video: 1
   augmentation_enabled: true
@@ -55,7 +55,7 @@ monitor_metric: val_f1_macro
 mixed_precision: true
 
 # Checkpointing
-checkpoint_dir: /workspace/checkpoints/efficientnet_b0_2cls
+checkpoint_dir: /workspace/checkpoints/efficientnet_b0_3cls
 save_best_only: true
 save_interval: 5
 
@@ -75,7 +75,7 @@ gate_b_min_per_class_f1: 0.72
 
 # MLflow tracking
 mlflow_tracking_uri: file:///workspace/mlruns
-mlflow_experiment_name: efficientnet_b0_emotion_2cls
+mlflow_experiment_name: efficientnet_b0_emotion_3cls
 
 # Reproducibility
 seed: 42

@@ -1,6 +1,6 @@
 {
-  "name": "ML Pipeline Orchestrator — ResNet-50 (Reachy 08.4.2)",
-  "description": "End-to-end ML pipeline orchestrating dataset preparation, training, evaluation, and deployment for ResNet-50 emotion classifier.",
+  "name": "ML Pipeline Orchestrator — EfficientNet-B0 (Reachy 08.4.2)",
+  "description": "End-to-end ML pipeline orchestrating dataset preparation, training, evaluation, and deployment for EfficientNet-B0 emotion classifier.",
   "nodes": [
     {
       "parameters": {
@@ -19,7 +19,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Initialize pipeline run\nconst timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst pipelineId = `ml_pipeline_${timestamp}`;\n\nreturn [{\n  json: {\n    pipeline_id: pipelineId,\n    model: 'resnet50-affectnet-raf-db',\n    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50',\n    stages: ['dataset_check', 'training', 'evaluation', 'deployment'],\n    current_stage: 'dataset_check',\n    config: $json.config || 'fer_finetune/specs/resnet50_emotion_2cls.yaml',\n    auto_deploy: $json.auto_deploy || false,\n    correlation_id: $json.correlation_id || pipelineId\n  }\n}];"
+        "jsCode": "// Initialize pipeline run\nconst timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst pipelineId = `ml_pipeline_${timestamp}`;\n\nreturn [{\n  json: {\n    pipeline_id: pipelineId,\n    model: 'efficientnet-b0-hsemotion',\n    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50',\n    stages: ['dataset_check', 'training', 'evaluation', 'deployment'],\n    current_stage: 'dataset_check',\n    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml',\n    auto_deploy: $json.auto_deploy || false,\n    correlation_id: $json.correlation_id || pipelineId\n  }\n}];"
       },
       "id": "init_pipeline",
       "name": "Code: init.pipeline",
@@ -66,7 +66,7 @@
     },
     {
       "parameters": {
-        "url": "={{$env.N8N_HOST}}/webhook/agent/training/resnet50/start",
+        "url": "={{$env.N8N_HOST}}/webhook/agent/training/efficientnet/start",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -118,7 +118,7 @@
     },
     {
       "parameters": {
-        "url": "={{$env.N8N_HOST}}/webhook/agent/evaluation/resnet50/start",
+        "url": "={{$env.N8N_HOST}}/webhook/agent/evaluation/efficientnet/start",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -158,7 +158,7 @@
     },
     {
       "parameters": {
-        "url": "={{$env.N8N_HOST}}/webhook/agent/deployment/resnet50/start",
+        "url": "={{$env.N8N_HOST}}/webhook/agent/deployment/efficientnet/start",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -184,7 +184,7 @@
           "parameters": [
             {"name": "event_type", "value": "=pipeline.completed"},
             {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
-            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
             {"name": "final_stage", "value": "={{$json.current_stage}}"},
             {"name": "gate_a_passed", "value": "={{$json.gate_a_passed}}"},
             {"name": "deployed", "value": "={{$json.deployed || false}}"}
@@ -249,7 +249,7 @@
     "trigger_deployment": {"main": [[{"node": "emit_complete", "type": "main", "index": 0}]]}
   },
   "settings": {"executionOrder": "v1", "saveManualExecutions": true},
-  "tags": [{"name": "orchestrator"}, {"name": "ml-pipeline"}, {"name": "resnet50"}, {"name": "ml-v1"}],
+  "tags": [{"name": "orchestrator"}, {"name": "ml-pipeline"}, {"name": "efficientnet"}, {"name": "ml-v1"}],
   "updatedAt": "2025-11-29T00:00:00.000Z",
   "versionId": "1"
 }

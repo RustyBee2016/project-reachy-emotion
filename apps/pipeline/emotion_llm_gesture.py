@@ -28,6 +28,10 @@ from apps.reachy.gestures.emotion_gesture_map import (
 )
 from apps.reachy.gestures.gesture_definitions import GESTURE_LIBRARY
 
+# Inference robustness utilities
+from shared.utils.confidence_handler import ConfidenceHandler, ConfidenceResult
+from shared.utils.emotion_smoother import EmotionSmoother, SmoothedResult, create_smoother_30fps
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +53,16 @@ class PipelineConfig:
     
     use_mock_llm: bool = False
     
+    # Confidence threshold for abstention (returns "uncertain" if below)
     min_confidence_threshold: float = 0.6
+    
+    # Margin threshold between top-2 predictions
+    confidence_margin_threshold: float = 0.15
+    
+    # Temporal smoothing settings
+    enable_temporal_smoothing: bool = True
+    smoothing_window_size: int = 15  # 0.5s at 30 FPS
+    smoothing_min_consistency: float = 0.6  # 60% of window must agree
     
     emotion_debounce_seconds: float = 2.0
     
@@ -115,6 +128,20 @@ class EmotionLLMGesturePipeline:
         
         self._gesture_controller = GestureController(self.config.reachy_config)
         self._gesture_mapper = EmotionGestureMapper()
+        
+        # Initialize confidence handler for abstention
+        self._confidence_handler = ConfidenceHandler(
+            threshold=self.config.min_confidence_threshold,
+            margin_threshold=self.config.confidence_margin_threshold,
+        )
+        
+        # Initialize temporal smoother for flicker prevention
+        self._emotion_smoother: Optional[EmotionSmoother] = None
+        if self.config.enable_temporal_smoothing:
+            self._emotion_smoother = EmotionSmoother(
+                window_size=self.config.smoothing_window_size,
+                min_consistency=self.config.smoothing_min_consistency,
+            )
         
         self._event_queue: asyncio.Queue[EmotionEvent] = asyncio.Queue(
             maxsize=self.config.max_queue_size
@@ -212,6 +239,8 @@ class EmotionLLMGesturePipeline:
         """
         Submit an emotion event for processing.
         
+        Applies confidence thresholding and temporal smoothing before queuing.
+        
         Args:
             event: Emotion detection event from Jetson
             
@@ -222,16 +251,57 @@ class EmotionLLMGesturePipeline:
             logger.warning(f"Cannot submit event, pipeline state: {self._state}")
             return False
         
-        if event.confidence < self.config.min_confidence_threshold:
+        # Step 1: Check confidence threshold (abstention mechanism)
+        confidence_result = self._confidence_handler.evaluate(
+            emotion=event.emotion,
+            confidence=event.confidence,
+        )
+        
+        if not confidence_result.should_act:
             logger.debug(
-                f"Ignoring low-confidence event: {event.emotion} "
-                f"({event.confidence:.0%} < {self.config.min_confidence_threshold:.0%})"
+                f"Abstaining from event: {event.emotion} ({event.confidence:.0%}) - "
+                f"{confidence_result.reason}"
             )
+            # Still feed to smoother for window tracking, but mark as uncertain
+            if self._emotion_smoother:
+                self._emotion_smoother.smooth("uncertain", 0.0)
             return False
         
+        # Step 2: Apply temporal smoothing (flicker prevention)
+        final_emotion = event.emotion
+        final_confidence = event.confidence
+        
+        if self._emotion_smoother:
+            smoothed = self._emotion_smoother.smooth(event.emotion, event.confidence)
+            
+            if not smoothed.is_stable:
+                logger.debug(
+                    f"Emotion not stable: {event.emotion} (consistency: {smoothed.consistency_ratio:.0%})"
+                )
+                # Don't queue unstable emotions - robot holds current gesture
+                return False
+            
+            final_emotion = smoothed.emotion
+            final_confidence = smoothed.confidence
+            
+            # If smoother returns uncertain, skip processing
+            if final_emotion == "uncertain":
+                logger.debug("Smoother returned uncertain, skipping")
+                return False
+        
+        # Step 3: Queue the validated, smoothed event
+        smoothed_event = EmotionEvent(
+            emotion=final_emotion,
+            confidence=final_confidence,
+            device_id=event.device_id,
+            timestamp=event.timestamp,
+            frame_number=event.frame_number,
+            inference_ms=event.inference_ms,
+        )
+        
         try:
-            self._event_queue.put_nowait(event)
-            logger.debug(f"Queued emotion event: {event.emotion} ({event.confidence:.0%})")
+            self._event_queue.put_nowait(smoothed_event)
+            logger.debug(f"Queued smoothed emotion: {final_emotion} ({final_confidence:.0%})")
             return True
         except asyncio.QueueFull:
             logger.warning("Event queue full, dropping event")
@@ -399,7 +469,7 @@ class EmotionLLMGesturePipeline:
     
     def get_metrics(self) -> dict:
         """Get pipeline metrics."""
-        return {
+        metrics = {
             "state": self._state.value,
             "current_emotion": self._current_emotion,
             "queue_size": self._event_queue.qsize(),
@@ -407,6 +477,15 @@ class EmotionLLMGesturePipeline:
             "conversation_length": len(self._llm_client.get_history()),
             "gesture_controller_connected": self._gesture_controller.is_connected,
         }
+        
+        # Add smoother stats if enabled
+        if self._emotion_smoother:
+            smoother_stats = self._emotion_smoother.get_window_stats()
+            metrics["smoother_window_size"] = smoother_stats.get("window_size", 0)
+            metrics["smoother_last_stable"] = smoother_stats.get("last_stable_emotion")
+            metrics["smoother_emotion_counts"] = smoother_stats.get("emotion_counts", {})
+        
+        return metrics
 
 
 async def demo_pipeline():
@@ -437,6 +516,13 @@ async def demo_pipeline():
     
     test_interactions = [
         (EmotionEvent(
+            emotion="neutral",
+            confidence=0.78,
+            device_id="reachy-mini-01",
+            timestamp=datetime.utcnow().isoformat() + "Z"
+        ), "Hi, I just wanted to check in and see how things are going."),
+        
+        (EmotionEvent(
             emotion="sad",
             confidence=0.92,
             device_id="reachy-mini-01",
@@ -456,6 +542,13 @@ async def demo_pipeline():
             device_id="reachy-mini-01",
             timestamp=datetime.utcnow().isoformat() + "Z"
         ), "Actually, I just remembered I got some good news today!"),
+        
+        (EmotionEvent(
+            emotion="neutral",
+            confidence=0.72,
+            device_id="reachy-mini-01",
+            timestamp=datetime.utcnow().isoformat() + "Z"
+        ), "Thanks for listening. I feel a bit better now."),
     ]
     
     for event, message in test_interactions:

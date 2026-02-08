@@ -133,9 +133,9 @@ class TestStoredProcedures:
     
     def test_get_class_distribution(self, db_cursor, db_conn):
         """Test class distribution calculation."""
-        # Insert test videos
-        for i in range(10):
-            label = 'happy' if i < 5 else 'sad'
+        # Insert test videos (3-class: happy, sad, neutral)
+        labels = ['happy', 'happy', 'happy', 'sad', 'sad', 'sad', 'neutral', 'neutral', 'neutral']
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label, size_bytes, duration_sec)
                 VALUES (%s, %s, %s, %s, %s)
@@ -146,13 +146,14 @@ class TestStoredProcedures:
         db_cursor.execute("SELECT * FROM get_class_distribution('dataset_all')")
         results = db_cursor.fetchall()
         
-        assert len(results) == 2
+        assert len(results) == 3
         happy_row = [r for r in results if r['label'] == 'happy'][0]
         sad_row = [r for r in results if r['label'] == 'sad'][0]
+        neutral_row = [r for r in results if r['label'] == 'neutral'][0]
         
-        assert happy_row['count'] == 5
-        assert sad_row['count'] == 5
-        assert happy_row['percentage'] == 50.0
+        assert happy_row['count'] == 3
+        assert sad_row['count'] == 3
+        assert neutral_row['count'] == 3
     
     def test_check_dataset_balance_empty(self, db_cursor):
         """Test balance check with empty dataset."""
@@ -165,9 +166,9 @@ class TestStoredProcedures:
     
     def test_check_dataset_balance_insufficient(self, db_cursor, db_conn):
         """Test balance check with insufficient samples."""
-        # Insert 50 samples (below minimum of 100)
-        for i in range(50):
-            label = 'happy' if i < 25 else 'sad'
+        # Insert 60 samples (below minimum of 100) - 3-class balanced
+        labels = ['happy'] * 20 + ['sad'] * 20 + ['neutral'] * 20
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
@@ -183,9 +184,9 @@ class TestStoredProcedures:
     
     def test_check_dataset_balance_imbalanced(self, db_cursor, db_conn):
         """Test balance check with class imbalance."""
-        # Insert 150 happy, 50 sad (ratio = 3.0, exceeds max of 1.5)
-        for i in range(200):
-            label = 'happy' if i < 150 else 'sad'
+        # Insert 150 happy, 30 sad, 20 neutral (ratio = 7.5, exceeds max of 1.5)
+        labels = ['happy'] * 150 + ['sad'] * 30 + ['neutral'] * 20
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
@@ -201,9 +202,9 @@ class TestStoredProcedures:
     
     def test_check_dataset_balance_good(self, db_cursor, db_conn):
         """Test balance check with balanced dataset."""
-        # Insert 120 happy, 110 sad (ratio = 1.09, within 1.5)
-        for i in range(230):
-            label = 'happy' if i < 120 else 'sad'
+        # Insert 80 happy, 75 sad, 75 neutral (ratio = 1.07, within 1.5)
+        labels = ['happy'] * 80 + ['sad'] * 75 + ['neutral'] * 75
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
@@ -324,9 +325,9 @@ class TestStoredProcedures:
     
     def test_create_training_run_with_sampling(self, db_cursor, db_conn):
         """Test training run creation with automatic sampling."""
-        # Insert balanced dataset
-        for i in range(200):
-            label = 'happy' if i < 100 else 'sad'
+        # Insert balanced dataset (3-class: happy, sad, neutral)
+        labels = ['happy'] * 70 + ['sad'] * 70 + ['neutral'] * 70
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
@@ -362,15 +363,16 @@ class TestStoredProcedures:
         selections = {row['target_split']: row['cnt'] for row in db_cursor.fetchall()}
         
         # Should have roughly 70/30 split (allow some variance due to randomness)
-        assert 130 <= selections['train'] <= 150
-        assert 50 <= selections['test'] <= 70
-        assert selections['train'] + selections['test'] == 200
+        # Total is 210 samples (70 each class)
+        assert 130 <= selections['train'] <= 160
+        assert 50 <= selections['test'] <= 80
+        assert selections['train'] + selections['test'] == 210
     
     def test_get_training_run_details(self, db_cursor, db_conn):
         """Test training run details retrieval."""
-        # Create run with sampling
-        for i in range(100):
-            label = 'happy' if i < 50 else 'sad'
+        # Create run with sampling (3-class: happy, sad, neutral)
+        labels = ['happy'] * 34 + ['sad'] * 33 + ['neutral'] * 33
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)

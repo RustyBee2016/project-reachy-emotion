@@ -132,7 +132,7 @@ Ubuntu 1 (Training Server)          Jetson Xavier NX (Edge Device)
 
 ### Step 1: Create the Workflow
 
-1. Create: `Agent 7 — Deployment Agent ResNet-50 (Reachy 08.4.2)`
+1. Create: `Agent 7 — Deployment Agent EfficientNet-B0 (Reachy 08.4.2)`
 2. Settings: Execution Order = `v1`
 
 ---
@@ -144,14 +144,14 @@ Ubuntu 1 (Training Server)          Jetson Xavier NX (Edge Device)
 | Parameter | Value |
 |-----------|-------|
 | HTTP Method | `POST` |
-| Path | `agent/deployment/resnet50/start` |
+| Path | `agent/deployment/efficientnet/start` |
 | Response Mode | `When Last Node Finishes` |
 | Response Code | `202` |
 
 **Expected Input**:
 ```json
 {
-  "run_id": "resnet50_emotion_xxx",
+  "run_id": "efficientnet_b0_emotion_xxx",
   "gate_a_passed": true,
   "onnx_path": "/workspace/exports/xxx/model.onnx",
   "correlation_id": "string"
@@ -184,8 +184,8 @@ const onnxPath = $json.onnx_path ||
   `/home/rusty_admin/projects/reachy_08.4.2/experiments/${runId}/model.onnx`;
 
 const timestamp = Date.now();
-const enginePath = '/opt/reachy/models/emotion_resnet50.engine';
-const backupPath = `/opt/reachy/models/backup/emotion_resnet50_${timestamp}.engine`;
+const enginePath = '/opt/reachy/models/emotion_efficientnet.engine';
+const backupPath = `/opt/reachy/models/backup/emotion_efficientnet_${timestamp}.engine`;
 
 return [{
   json: {
@@ -194,7 +194,7 @@ return [{
     engine_path: enginePath,
     backup_path: backupPath,
     config_path: '/opt/reachy/config/emotion_inference.txt',
-    model_placeholder: 'resnet50-affectnet-raf-db',
+    model_placeholder: 'efficientnet-b0-hsemotion',
     deployment_stage: 'shadow',
     jetson_host: '10.0.4.150',
     jetson_user: 'jetson'
@@ -413,7 +413,7 @@ Connect: IF Gate_B.pass? (True branch) → emit.success
 {
   "event_type": "deployment.completed",
   "run_id": "={{$json.run_id}}",
-  "model": "resnet50-affectnet-raf-db",
+  "model": "efficientnet-b0-hsemotion",
   "engine_path": "={{$json.engine_path}}",
   "fps": "={{$json.metrics.fps}}",
   "latency_p50_ms": "={{$json.metrics.latency_p50_ms}}",

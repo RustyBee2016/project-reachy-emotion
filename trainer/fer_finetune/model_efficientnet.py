@@ -33,9 +33,9 @@ HSEMOTION_CLASSES = [
     "happy", "neutral", "sad", "surprise"
 ]
 
-# Binary mapping for Phase 1
-BINARY_CLASSES = ["happy", "sad"]
-BINARY_TO_HSEMOTION = {"happy": 4, "sad": 6}  # Indices in HSEMOTION_CLASSES
+# 3-class mapping for Phase 1 (happy, sad, neutral)
+PHASE1_CLASSES = ["happy", "sad", "neutral"]
+PHASE1_TO_HSEMOTION = {"happy": 4, "sad": 6, "neutral": 5}  # Indices in HSEMOTION_CLASSES
 
 
 class HSEmotionEfficientNet(nn.Module):
@@ -46,7 +46,7 @@ class HSEmotionEfficientNet(nn.Module):
     specifically designed for facial emotion recognition tasks.
     
     Supports:
-    - Binary classification (happy/sad) for Phase 1
+    - 3-class classification (happy/sad/neutral) for Phase 1
     - Multi-class classification (8 emotions) for Phase 2+
     - Optional multi-task learning (emotions + valence/arousal)
     
@@ -57,7 +57,7 @@ class HSEmotionEfficientNet(nn.Module):
     
     def __init__(
         self,
-        num_classes: int = 2,
+        num_classes: int = 3,
         dropout_rate: float = 0.3,
         pretrained_weights: str = MODEL_NAME,
         use_multi_task: bool = False,
@@ -67,7 +67,7 @@ class HSEmotionEfficientNet(nn.Module):
         Initialize HSEmotion EfficientNet-B0 classifier.
         
         Args:
-            num_classes: Number of emotion classes (2 for binary, 8 for full)
+            num_classes: Number of emotion classes (3 for Phase 1, 8 for full)
             dropout_rate: Dropout probability before classification head
             pretrained_weights: Weight source - MODEL_NAME or "imagenet"
             use_multi_task: Enable multi-task head (emotions + VA regression)
@@ -384,7 +384,7 @@ class HSEmotionEfficientNet(nn.Module):
 
 
 def create_efficientnet_model(
-    num_classes: int = 2,
+    num_classes: int = 3,
     dropout_rate: float = 0.3,
     pretrained: bool = True,
     weights_path: Optional[str] = None,
@@ -412,6 +412,44 @@ def create_efficientnet_model(
         use_multi_task=use_multi_task,
         weights_path=weights_path,
     )
+
+
+def load_pretrained_model(
+    checkpoint_path: str,
+    num_classes: int = 3,
+    device: str = "cuda",
+    dropout_rate: float = 0.3,
+    use_multi_task: bool = False,
+    weights_path: Optional[str] = None,
+) -> HSEmotionEfficientNet:
+    """Load a trained EfficientNet-B0 model from checkpoint."""
+    import torch
+
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    config = checkpoint.get("config", {})
+
+    model = create_efficientnet_model(
+        num_classes=config.get("num_classes", num_classes),
+        dropout_rate=config.get("dropout_rate", dropout_rate),
+        pretrained=False,
+        weights_path=weights_path,
+        use_multi_task=config.get("use_multi_task", use_multi_task),
+    )
+
+    if "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+    elif "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    else:
+        state_dict = checkpoint
+
+    state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
+
+    logger.info(f"Loaded EfficientNet checkpoint: {checkpoint_path}")
+    return model
 
 
 def get_hsemotion_class_mapping(target_classes: List[str]) -> Dict[int, int]:

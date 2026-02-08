@@ -1,11 +1,11 @@
 {
-  "name": "Agent 6 — Evaluation Agent ResNet-50 (Reachy 08.4.2)",
-  "description": "Evaluates trained ResNet-50 emotion classifier. Computes metrics including calibration (ECE, Brier) for Gate A validation.",
+  "name": "Agent 6 — Evaluation Agent EfficientNet-B0 (Reachy 08.4.2)",
+  "description": "Evaluates trained EfficientNet-B0 emotion classifier. Computes metrics including calibration (ECE, Brier) for Gate A validation.",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "agent/evaluation/resnet50/start",
+        "path": "agent/evaluation/efficientnet/start",
         "responseMode": "onReceived"
       },
       "id": "webhook_eval",
@@ -13,7 +13,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 3,
       "position": [-600, 300],
-      "webhookId": "resnet50-eval-start"
+      "webhookId": "efficientnet-eval-start"
     },
     {
       "parameters": {
@@ -44,7 +44,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Prepare evaluation command\nconst runId = $json.run_id || 'latest';\nconst checkpointPath = $json.checkpoint_path || `/workspace/checkpoints/resnet50_emotion/best_model.pth`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    run_id: runId,\n    checkpoint_path: checkpointPath,\n    model_placeholder: 'resnet50-affectnet-raf-db'\n  }\n}];"
+        "jsCode": "// Prepare evaluation command\nconst runId = $json.run_id || 'latest';\nconst checkpointPath = $json.checkpoint_path || `/workspace/checkpoints/efficientnet_b0_emotion/best_model.pth`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    run_id: runId,\n    checkpoint_path: checkpointPath,\n    model_placeholder: 'efficientnet-b0-hsemotion'\n  }\n}];"
       },
       "id": "prepare_eval",
       "name": "Code: prepare.evaluation",
@@ -114,7 +114,7 @@
           "parameters": [
             {"name": "event_type", "value": "=evaluation.completed"},
             {"name": "run_id", "value": "={{$json.run_id}}"},
-            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
             {"name": "gate_a_passed", "value": "={{$json.gate_a.passed}}"},
             {"name": "f1_macro", "value": "={{$json.metrics.f1_macro}}"},
             {"name": "ece", "value": "={{$json.metrics.ece}}"},
@@ -136,7 +136,7 @@
           "parameters": [
             {"name": "event_type", "value": "=evaluation.gate_failed"},
             {"name": "run_id", "value": "={{$json.run_id}}"},
-            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
             {"name": "gate_a_details", "value": "={{JSON.stringify($json.gate_a)}}"},
             {"name": "metrics", "value": "={{JSON.stringify($json.metrics)}}"}
           ]
@@ -165,7 +165,7 @@
     }
   },
   "settings": {"executionOrder": "v1"},
-  "tags": [{"name": "agent"}, {"name": "evaluation"}, {"name": "resnet50"}, {"name": "ml-v1"}],
+  "tags": [{"name": "agent"}, {"name": "evaluation"}, {"name": "efficientnet"}, {"name": "ml-v1"}],
   "updatedAt": "2025-11-29T00:00:00.000Z",
   "versionId": "1"
 }

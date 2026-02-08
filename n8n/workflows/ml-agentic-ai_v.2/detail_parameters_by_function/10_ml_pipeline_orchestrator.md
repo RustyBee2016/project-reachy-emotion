@@ -1,4 +1,4 @@
-# ML Pipeline Orchestrator — ResNet-50 (Reachy 08.4.2)
+# ML Pipeline Orchestrator — EfficientNet-B0 (Reachy 08.4.2)
 
 > **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/10_ml_pipeline_orchestrator.json`  
 > **Version:** 08.4.2  
@@ -8,8 +8,8 @@
 
 The ML Pipeline Orchestrator coordinates the entire ML pipeline from dataset preparation to deployment. It checks dataset readiness, triggers Training Agent (05), Evaluation Agent (06), and optionally Deployment Agent (07) in sequence. It supports auto-deploy mode for fully automated pipelines.
 
-**Model:** `resnet50-affectnet-raf-db`  
-**Storage Path:** `/media/rusty_admin/project_data/ml_models/resnet50`
+**Model:** `efficientnet-b0-hsemotion`  
+**Storage Path:** `/media/rusty_admin/project_data/ml_models/efficientnet`
 
 ## Node Inventory (Alphabetical)
 
@@ -105,7 +105,7 @@ IF: dataset.ready?
 
 ```json
 {
-  "config": "fer_finetune/specs/resnet50_emotion_2cls.yaml",  // Optional
+  "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",  // Optional
   "auto_deploy": false,                                        // Optional
   "correlation_id": "string"                                   // Optional
 }
@@ -131,11 +131,11 @@ const pipelineId = `ml_pipeline_${timestamp}`;
 return [{
   json: {
     pipeline_id: pipelineId,
-    model: 'resnet50-affectnet-raf-db',
-    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50',
+    model: 'efficientnet-b0-hsemotion',
+    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet',
     stages: ['dataset_check', 'training', 'evaluation', 'deployment'],
     current_stage: 'dataset_check',
-    config: $json.config || 'fer_finetune/specs/resnet50_emotion_2cls.yaml',
+    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml',
     auto_deploy: $json.auto_deploy || false,
     correlation_id: $json.correlation_id || pipelineId
   }
@@ -147,11 +147,11 @@ return [{
 ```json
 {
   "pipeline_id": "ml_pipeline_20251129150000",
-  "model": "resnet50-affectnet-raf-db",
-  "model_storage_path": "/media/rusty_admin/project_data/ml_models/resnet50",
+  "model": "efficientnet-b0-hsemotion",
+  "model_storage_path": "/media/rusty_admin/project_data/ml_models/efficientnet",
   "stages": ["dataset_check", "training", "evaluation", "deployment"],
   "current_stage": "dataset_check",
-  "config": "fer_finetune/specs/resnet50_emotion_2cls.yaml",
+  "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
   "auto_deploy": false,
   "correlation_id": "ml_pipeline_20251129150000"
 }
@@ -283,7 +283,7 @@ return [{
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `url` | `={{$env.N8N_HOST}}/webhook/agent/training/resnet50/start` | Training webhook |
+| `url` | `={{$env.N8N_HOST}}/webhook/agent/training/efficientnet/start` | Training webhook |
 
 #### Body Parameters
 
@@ -333,7 +333,7 @@ return [{
 ```json
 {
   "status": "completed",
-  "run_id": "resnet50_emotion_xxx",
+  "run_id": "efficientnet_b0_emotion_xxx",
   "gate_a_passed": true,
   "onnx_path": "/workspace/exports/xxx/model.onnx"
 }
@@ -378,7 +378,7 @@ return [{
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `url` | `={{$env.N8N_HOST}}/webhook/agent/evaluation/resnet50/start` | Evaluation webhook |
+| `url` | `={{$env.N8N_HOST}}/webhook/agent/evaluation/efficientnet/start` | Evaluation webhook |
 
 #### Body Parameters
 
@@ -443,7 +443,7 @@ return [{
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `url` | `={{$env.N8N_HOST}}/webhook/agent/deployment/resnet50/start` | Deployment webhook |
+| `url` | `={{$env.N8N_HOST}}/webhook/agent/deployment/efficientnet/start` | Deployment webhook |
 
 #### Body Parameters
 
@@ -471,7 +471,7 @@ return [{
 |-----------|-------|---------|
 | `event_type` | `pipeline.completed` | Event type |
 | `pipeline_id` | `={{$json.pipeline_id}}` | Pipeline ID |
-| `model` | `resnet50-affectnet-raf-db` | Model |
+| `model` | `efficientnet-b0-hsemotion` | Model |
 | `final_stage` | `={{$json.current_stage}}` | Last stage |
 | `gate_a_passed` | `={{$json.gate_a_passed}}` | Gate A result |
 | `deployed` | `={{$json.deployed \|\| false}}` | Deployment status |
@@ -521,7 +521,7 @@ return [{
 
 - `orchestrator`
 - `ml-pipeline`
-- `resnet50`
+- `efficientnet`
 - `ml-v1`
 
 ---
@@ -531,7 +531,7 @@ return [{
 | Stage | Agent | Description |
 |-------|-------|-------------|
 | `dataset_check` | Orchestrator | Validate dataset readiness |
-| `training` | Agent 05 | Fine-tune ResNet-50 |
+| `training` | Agent 05 | Fine-tune EfficientNet-B0 |
 | `evaluation` | Agent 06 | Evaluate model, Gate A |
 | `deployment` | Agent 07 | Deploy to Jetson, Gate B |
 
@@ -593,7 +593,7 @@ When `auto_deploy: false` (default):
 curl -X POST http://localhost:5678/webhook/ml/pipeline/start \
   -H "Content-Type: application/json" \
   -d '{
-    "config": "fer_finetune/specs/resnet50_emotion_2cls.yaml",
+    "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
     "auto_deploy": false
   }'
 ```
