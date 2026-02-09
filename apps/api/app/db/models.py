@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    JSON,
     Index,
     Numeric,
     String,
@@ -47,6 +48,12 @@ class Video(TimestampMixin, Base):
     height: Mapped[Optional[int]] = mapped_column(nullable=True)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    extra_data: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=True
+    )
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     promotions: Mapped[List["PromotionLog"]] = relationship(
         back_populates="video",
@@ -91,10 +98,41 @@ class TrainingRun(TimestampMixin, Base):
     test_fraction: Mapped[float] = mapped_column(Float, nullable=False)
     seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    metrics: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     selections: Mapped[List["TrainingSelection"]] = relationship(
         back_populates="training_run",
         cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "train_fraction > 0 AND train_fraction < 1",
+            name="chk_train_fraction_range",
+        ),
+        CheckConstraint(
+            "train_fraction + test_fraction <= 1.0",
+            name="chk_valid_fractions",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'sampling', 'training', 'evaluating', "
+            "'completed', 'failed', 'cancelled')",
+            name="chk_training_status",
+        ),
+        Index("ix_training_run_status", "status"),
+        Index("ix_training_run_created", "created_at"),
     )
 
 
@@ -134,11 +172,21 @@ class PromotionLog(TimestampMixin, Base):
     intended_label: Mapped[Optional[str]] = mapped_column(EmotionEnum, nullable=True)
     actor: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, nullable=True
+    )
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extra_data: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=True
+    )
 
     video: Mapped[Video] = relationship(back_populates="promotions")
 
     __table_args__ = (
         Index("ix_promotion_log_video_time", "video_id", "created_at"),
+        Index("ix_promotion_log_idempotency", "idempotency_key"),
     )
 
 

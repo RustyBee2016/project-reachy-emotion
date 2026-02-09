@@ -1,6 +1,13 @@
+-- DEPRECATED: This file is retained for historical reference only.
+-- Schema is now managed by SQLAlchemy models + Alembic migrations.
+-- See: apps/api/app/db/models.py
+-- See: apps/api/app/db/alembic/versions/202510280000_initial_schema.py
+-- DO NOT use this file to create or modify the database schema.
+--
+-- Original header:
 -- Phase 1 Database Schema Migration
 -- Complete schema for Reachy_Local_08.4.2
--- Run with: psql -d reachy_emotion -f 001_phase1_schema.sql
+-- Previously run with: psql -d reachy_emotion -f 001_phase1_schema.sql
 
 BEGIN;
 

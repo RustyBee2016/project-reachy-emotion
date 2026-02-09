@@ -24,6 +24,7 @@ EmotionEnum = Enum(
     "sad",
     "angry",
     "surprise",
+    "fearful",
     name=EMOTION_ENUM_NAME,
     create_constraint=True,
     native_enum=False,
