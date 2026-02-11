@@ -9,6 +9,7 @@
 ## Learning Objectives
 
 By the end of this module, you will be able to:
+
 1. Explain the purpose of each table in the database
 2. Understand the video lifecycle from capture to training
 3. Navigate relationships between tables
@@ -39,7 +40,7 @@ The Reachy database tracks **metadata** about emotion recognition videos:
 
 ### Table Categories
 
-The 12 tables are organized into four functional groups:
+The <mark>12 tables </mark>are organized into f<mark>our functional groups:</mark>
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -71,12 +72,12 @@ The 12 tables are organized into four functional groups:
 
 ### Source Files Reference
 
-| Group | SQL File | Lines |
-|-------|----------|-------|
-| Core Data | `alembic/versions/001_phase1_schema.sql` | 31-80 |
-| Audit | `alembic/versions/001_phase1_schema.sql` | 81-117 |
-| User & Events | `alembic/versions/001_phase1_schema.sql` | 118-175 |
-| Operations | `alembic/versions/003_missing_tables.sql` | 1-297 |
+| Group         | SQL File                                  | Lines   |
+| ------------- | ----------------------------------------- | ------- |
+| Core Data     | `alembic/versions/001_phase1_schema.sql`  | 31-80   |
+| Audit         | `alembic/versions/001_phase1_schema.sql`  | 81-117  |
+| User & Events | `alembic/versions/001_phase1_schema.sql`  | 118-175 |
+| Operations    | `alembic/versions/003_missing_tables.sql` | 1-297   |
 
 ---
 
@@ -109,21 +110,21 @@ CREATE TABLE video (
 
 **Column Breakdown:**
 
-| Column | Type | Purpose | Example |
-|--------|------|---------|---------|
-| `video_id` | UUID | Unique identifier | `550e8400-e29b-41d4...` |
-| `file_path` | VARCHAR(500) | Relative path to MP4 | `videos/temp/001.mp4` |
-| `split` | ENUM | Lifecycle stage | `temp`, `dataset_all`, `train` |
-| `label` | ENUM | Emotion classification | `happy`, `sad`, `angry` |
-| `sha256` | CHAR(64) | File hash (deduplication) | `a1b2c3d4...` |
-| `duration_sec` | NUMERIC | Video length | `5.25` |
-| `width`, `height` | INTEGER | Video dimensions | `1920`, `1080` |
-| `fps` | NUMERIC | Frames per second | `29.97` |
-| `size_bytes` | BIGINT | File size | `1024000` |
-| `metadata` | JSONB | Flexible extra data | `{"source": "jetson"}` |
-| `created_at` | TIMESTAMPTZ | When added | `2025-01-05 14:30:00` |
-| `updated_at` | TIMESTAMPTZ | Last modified | Auto-updated |
-| `deleted_at` | TIMESTAMPTZ | Soft delete marker | NULL or timestamp |
+| Column            | Type         | Purpose                   | Example                        |
+| ----------------- | ------------ | ------------------------- | ------------------------------ |
+| `video_id`        | UUID         | Unique identifier         | `550e8400-e29b-41d4...`        |
+| `file_path`       | VARCHAR(500) | Relative path to MP4      | `videos/temp/001.mp4`          |
+| `split`           | ENUM         | Lifecycle stage           | `temp`, `dataset_all`, `train` |
+| `label`           | ENUM         | Emotion classification    | `happy`, `sad`, `angry`        |
+| `sha256`          | CHAR(64)     | File hash (deduplication) | `a1b2c3d4...`                  |
+| `duration_sec`    | NUMERIC      | Video length              | `5.25`                         |
+| `width`, `height` | INTEGER      | Video dimensions          | `1920`, `1080`                 |
+| `fps`             | NUMERIC      | Frames per second         | `29.97`                        |
+| `size_bytes`      | BIGINT       | File size                 | `1024000`                      |
+| `metadata`        | JSONB        | Flexible extra data       | `{"source": "jetson"}`         |
+| `created_at`      | TIMESTAMPTZ  | When added                | `2025-01-05 14:30:00`          |
+| `updated_at`      | TIMESTAMPTZ  | Last modified             | Auto-updated                   |
+| `deleted_at`      | TIMESTAMPTZ  | Soft delete marker        | NULL or timestamp              |
 
 **Key Constraints:**
 
@@ -142,45 +143,48 @@ CHECK (
 ---
 
 > ⚠️ **Known Issue #3: Check Constraint Inconsistency**
->
+> 
 > The split/label policy constraint differs between files:
->
+> 
 > **models.py** includes `'purged'`:
+> 
 > ```python
 > CheckConstraint(
 >     "(split IN ('temp', 'test', 'purged') AND label IS NULL) OR ..."
 > )
 > ```
->
+> 
 > **Alembic migration** is missing `'purged'`:
+> 
 > ```python
 > CheckConstraint(
 >     "(split IN ('temp', 'test') AND label IS NULL) OR ..."  # Missing 'purged'!
 > )
 > ```
->
+> 
 > **Impact**: Alembic-created databases reject purged videos.
->
+> 
 > **Fix**: Add `'purged'` to the Alembic constraint.
->
+> 
 > See: `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
 
 > ⚠️ **Known Issue #4: Missing Check Constraint in SQL**
->
+> 
 > The SQL schema files (`001_phase1_schema.sql`) don't include the split/label policy constraint.
->
+> 
 > **Impact**: Databases created with SQL files won't enforce business rules.
->
+> 
 > **Fix**: Add to `001_phase1_schema.sql`:
+> 
 > ```sql
 > ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
 >     (split IN ('temp', 'test', 'purged') AND label IS NULL)
 >     OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
 > );
 > ```
->
+> 
 > See: `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
@@ -306,17 +310,17 @@ CREATE TABLE training_selection (
 ---
 
 > ⚠️ **Known Issue #11: TrainingSelection PK Mismatch**
->
+> 
 > SQL and Python models define different primary key structures:
->
+> 
 > **SQL**: `id BIGSERIAL PRIMARY KEY` (single auto-increment column)
->
+> 
 > **models.py**: Composite PK `(run_id, video_id, target_split)`
->
+> 
 > **Impact**: Migration conflicts if both approaches are used.
->
+> 
 > **Fix**: Align on one approach. Recommend keeping SQL's `BIGSERIAL` for simplicity.
->
+> 
 > See: `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
@@ -447,13 +451,13 @@ CREATE TABLE label_event (
 
 **Action Types:**
 
-| Action | Description |
-|--------|-------------|
-| `label_only` | Add label without changing split |
+| Action          | Description                      |
+| --------------- | -------------------------------- |
+| `label_only`    | Add label without changing split |
 | `promote_train` | Label and move to training split |
-| `promote_test` | Label and move to test split |
-| `discard` | Mark for deletion/purge |
-| `relabel` | Change existing label |
+| `promote_test`  | Label and move to test split     |
+| `discard`       | Mark for deletion/purge          |
+| `relabel`       | Change existing label            |
 
 ---
 
@@ -541,6 +545,7 @@ CHECK (confidence >= 0 AND confidence <= 1)
 ```
 
 **Important**: This table grows FAST. Consider:
+
 - Partitioning by month
 - Archival policy
 - Aggregation views
@@ -612,6 +617,7 @@ shadow ───▶ canary ───▶ rollout
 ```
 
 **Gate B Requirements:**
+
 - FPS ≥ 25
 - P50 latency ≤ 120ms
 - P95 latency ≤ 250ms
@@ -639,13 +645,13 @@ CREATE TABLE audit_log (
 
 **Action Types:**
 
-| Action | Description |
-|--------|-------------|
-| `purge` | Data deleted (right to be forgotten) |
-| `access` | Data accessed (subject access request) |
-| `export` | Data exported |
-| `delete` | Logical deletion |
-| `anonymize` | Personal data removed |
+| Action      | Description                            |
+| ----------- | -------------------------------------- |
+| `purge`     | Data deleted (right to be forgotten)   |
+| `access`    | Data accessed (subject access request) |
+| `export`    | Data exported                          |
+| `delete`    | Logical deletion                       |
+| `anonymize` | Personal data removed                  |
 
 ### The `obs_samples` Table - System Metrics
 
@@ -666,10 +672,10 @@ CREATE TABLE obs_samples (
 
 **Example Data:**
 
-| ts | src | metric | value | labels |
-|----|-----|--------|-------|--------|
-| 2025-01-05 14:30:00 | jetson | gpu_temp_c | 67.2 | `{"device": "reachy-mini"}` |
-| 2025-01-05 14:30:01 | gateway | request_latency_ms | 45.3 | `{"endpoint": "/videos"}` |
+| ts                  | src     | metric             | value | labels                      |
+| ------------------- | ------- | ------------------ | ----- | --------------------------- |
+| 2025-01-05 14:30:00 | jetson  | gpu_temp_c         | 67.2  | `{"device": "reachy-mini"}` |
+| 2025-01-05 14:30:01 | gateway | request_latency_ms | 45.3  | `{"endpoint": "/videos"}`   |
 
 ### The `reconcile_report` Table - Consistency Checks
 
@@ -820,48 +826,53 @@ WHERE split = 'dataset_all';
 ### Tasks
 
 1. **Count videos by split and label:**
-```sql
-SELECT split, label, COUNT(*)
-FROM video
-GROUP BY split, label
-ORDER BY split, label;
-```
+   
+   ```sql
+   SELECT split, label, COUNT(*)
+   FROM video
+   GROUP BY split, label
+   ORDER BY split, label;
+   ```
 
 2. **Find the largest video:**
-```sql
-SELECT file_path, size_bytes,
+   
+   ```sql
+   SELECT file_path, size_bytes,
        pg_size_pretty(size_bytes::BIGINT) as human_size
-FROM video
-ORDER BY size_bytes DESC
-LIMIT 1;
-```
+   FROM video
+   ORDER BY size_bytes DESC
+   LIMIT 1;
+   ```
 
 3. **Calculate total training corpus size:**
-```sql
-SELECT
+   
+   ```sql
+   SELECT
     COUNT(*) as video_count,
     SUM(size_bytes) as total_bytes,
     pg_size_pretty(SUM(size_bytes)::BIGINT) as total_size
-FROM video
-WHERE split = 'dataset_all';
-```
+   FROM video
+   WHERE split = 'dataset_all';
+   ```
 
 4. **List videos in your training run with their labels:**
-```sql
-SELECT v.file_path, v.label, ts.target_split
-FROM training_selection ts
-JOIN video v ON ts.video_id = v.video_id
-WHERE ts.run_id = 'RUN_ID';
-```
+   
+   ```sql
+   SELECT v.file_path, v.label, ts.target_split
+   FROM training_selection ts
+   JOIN video v ON ts.video_id = v.video_id
+   WHERE ts.run_id = 'RUN_ID';
+   ```
 
 5. **Check train/test distribution:**
-```sql
-SELECT target_split, COUNT(*) as count,
+   
+   ```sql
+   SELECT target_split, COUNT(*) as count,
        ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
-FROM training_selection
-WHERE run_id = 'RUN_ID'
-GROUP BY target_split;
-```
+   FROM training_selection
+   WHERE run_id = 'RUN_ID'
+   GROUP BY target_split;
+   ```
 
 ---
 

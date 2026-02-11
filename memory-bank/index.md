@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-01-11
+**Last Updated**: 2026-02-10
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -33,14 +33,15 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## ML Training Pipeline (v08.4.2)
-- **Model**: ResNet-50 pre-trained on AffectNet + RAF-DB (placeholder: `resnet50-affectnet-raf-db`)
-- **Storage**: `/media/rusty_admin/project_data/ml_models/resnet50`
-- **Training Code**: `trainer/fer_finetune/` module
-- **Config**: `trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml`
-- **n8n Workflows**: `n8n/workflows/ml-agentic-ai_v.1/`
-  - `05_training_orchestrator_resnet50.json`
-  - `06_evaluation_agent_resnet50.json`
-  - `07_deployment_agent_resnet50.json`
+- **Model**: EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion `enet_b0_8_best_vgaf`)
+- **Classes**: `happy`, `sad`, `neutral` (3-class)
+- **Storage**: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
+- **Training Code**: `trainer/fer_finetune/` module, `trainer/train_efficientnet.py`
+- **Config**: `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`
+- **n8n Workflows**: `n8n/workflows/ml-agentic-ai_v.2/`
+  - `05_training_orchestrator_efficientnet.json`
+  - `06_evaluation_agent_efficientnet.json`
+  - `07_deployment_agent_efficientnet.json`
   - `10_ml_pipeline_orchestrator.json`
 
 ---
@@ -82,6 +83,16 @@ This index provides curated entry points to project context, decisions, and refe
 ## Testing & CI
 - **[Testing Strategy](./requirements.md#testing--ci-expectations)** — ruff, pyright, pytest, spec parser, benchmark recording.
 - **[Acceptance Criteria](./requirements.md#24-acceptance-criteria)** — Media-mover endpoints, MLflow lineage, NAS sync, performance targets.
+
+---
+
+## Database Tutorial Curriculum
+- **Location**: `docs/database/curriculum/` (9 modules, ~30 hours)
+- **Setup Guide**: `docs/database/08-SETUP-GUIDE.md` — Alembic-based setup (legacy SQL deprecated)
+- **Known Issues**: `docs/database/07-KNOWN-ISSUES.md` — 12 of 13 issues resolved; 1 legacy-only open
+- **Schema Source of Truth**: `apps/api/app/db/models.py` + `enums.py` + Alembic migration `202510280000_initial_schema.py`
+- **Tables**: 9 Alembic-managed (4 in initial migration, 5 pending migration) + 3 legacy-only
+- **Last Updated**: 2026-02-10 — All modules updated to reflect SQLAlchemy/Alembic as single authoritative path; all Known Issue warnings replaced with resolved notes.
 
 ---
 

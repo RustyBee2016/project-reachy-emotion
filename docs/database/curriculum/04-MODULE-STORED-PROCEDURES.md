@@ -4,6 +4,23 @@
 **Prerequisites**: Modules 1-3
 **Goal**: Understand and use the stored procedures that implement Reachy's business logic
 
+> **Architecture Note (v08.4.2)**
+>
+> The stored procedures in this module are defined in `alembic/versions/002_stored_procedures.sql`
+> and are part of the **legacy SQL path**. The application runtime now uses **Python services**
+> (`PromoteService`, `VideoRepository`) for business logic — it does **not** call these stored
+> procedures at runtime.
+>
+> However, these procedures remain valuable for:
+> - **Manual database exploration** and ad-hoc queries
+> - **Learning PL/pgSQL** and understanding database-side logic
+> - **Legacy n8n workflows** that call them directly via SQL
+>
+> To use them, apply the file after running Alembic migrations:
+> ```bash
+> psql -U reachy_app -d reachy_local -f alembic/versions/002_stored_procedures.sql
+> ```
+
 ---
 
 ## Learning Objectives
@@ -14,6 +31,7 @@ By the end of this module, you will be able to:
 3. Understand idempotency and safe retry patterns
 4. Read and modify PL/pgSQL code
 5. Debug stored procedure issues
+6. Understand when to use stored procedures vs Python services
 
 ---
 
@@ -702,7 +720,7 @@ $$;
 
 ---
 
-> ⚠️ **Known Issue #12: Stratification Logic Bug**
+> 🟠 **Known Issue #12: Stratification Logic Bug (Open — Legacy Path)**
 >
 > The `create_training_run_with_sampling()` function doesn't truly stratify by class.
 >
@@ -717,7 +735,11 @@ $$;
 >
 > **Impact**: Potential class imbalance in train/test splits, especially with small datasets.
 >
-> **Fix**: Modify the sampling logic to iterate per-label:
+> **Note**: This bug exists in the **legacy SQL stored procedure** only. The application
+> runtime uses Python services for training run creation, which implement correct stratified
+> sampling. This stored procedure remains available for manual/ad-hoc use.
+>
+> **Fix** (if you want to correct the stored procedure): Modify the sampling logic to iterate per-label:
 > ```sql
 > -- Stratified sampling (per-label)
 > INSERT INTO training_selection (run_id, video_id, target_split)

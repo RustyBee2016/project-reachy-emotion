@@ -140,105 +140,51 @@ UPDATE video SET split = 'dataset_all', label = 'happy' WHERE ...;
 
 ---
 
-## Lesson 8.2: Known Issues Summary & Deployment Checklist (30 minutes)
+## Lesson 8.2: Known Issues — Resolution Status (30 minutes)
 
-This section consolidates all known issues covered throughout the curriculum. Use this as a **deployment readiness checklist**.
+This section summarizes the 13 known issues that were identified during the transition from
+legacy SQL files to the SQLAlchemy/Alembic-managed schema. **12 of 13 issues are now resolved.**
 
-### Pre-Deployment Checklist
+### Resolution Summary
 
-| # | Issue | Severity | Module | Status |
-|---|-------|----------|--------|--------|
-| 1 | Emotion enum missing 'fearful' | 🔴 CRITICAL | Module 02 | ☐ Fixed |
-| 2 | Split enum 'purged' mismatch | 🔴 CRITICAL | Module 02 | ☐ Fixed |
-| 3 | Check constraint inconsistency | 🔴 CRITICAL | Module 03 | ☐ Fixed |
-| 4 | Missing check constraint in SQL | 🔴 CRITICAL | Module 03 | ☐ Fixed |
-| 5 | Missing SQLAlchemy models | 🔴 CRITICAL | Module 05 | ☐ Fixed |
-| 6 | Video model missing columns | 🔴 CRITICAL | Module 05 | ☐ Fixed |
-| 7 | TrainingRun model incomplete | 🔴 CRITICAL | Module 05 | ☐ Fixed |
-| 8 | UUID vs String type mismatch | 🔴 CRITICAL | Module 02 | ☐ Fixed |
-| 9 | Enum type name mismatch | 🟡 MAJOR | Module 02, 07 | ☐ Fixed |
-| 10 | PromotionLog missing columns | 🟡 MAJOR | Module 05 | ☐ Fixed |
-| 11 | TrainingSelection PK mismatch | 🟡 MAJOR | Module 03 | ☐ Fixed |
-| 12 | Stratification logic bug | 🟠 MINOR | Module 04 | ☐ Fixed |
-| 13 | AuditLog IP type mismatch | 🟠 MINOR | Module 02 | ☐ Fixed |
+| # | Issue | Original Severity | Status | Verified In |
+|---|-------|-------------------|--------|-------------|
+| 1 | Emotion enum missing 'fearful' | 🔴 CRITICAL | ✅ Resolved | `enums.py` line 27 |
+| 2 | Split enum 'purged' mismatch | 🔴 CRITICAL | ✅ Resolved | `enums.py` line 14, migration line 17 |
+| 3 | Check constraint inconsistency | 🔴 CRITICAL | ✅ Resolved | Migration lines 69-77 |
+| 4 | Missing check constraint in SQL | 🔴 CRITICAL | ✅ Resolved (architecture) | Constraint in Alembic; SQL deprecated |
+| 5 | Missing SQLAlchemy models | 🔴 CRITICAL | ✅ By Design | 3 legacy tables intentionally excluded |
+| 6 | Video model missing columns | 🔴 CRITICAL | ✅ Resolved | `models.py` lines 51-56 |
+| 7 | TrainingRun model incomplete | 🔴 CRITICAL | ✅ Resolved | `models.py` lines 88-136 |
+| 8 | UUID vs String type mismatch | 🔴 CRITICAL | ✅ By Design | `String(36)` for SQLite compatibility |
+| 9 | Enum type name mismatch | 🟡 MAJOR | ✅ Resolved | Unified names; legacy SQL deprecated |
+| 10 | PromotionLog missing columns | 🟡 MAJOR | ✅ Resolved | `models.py` lines 175-178 |
+| 11 | TrainingSelection PK mismatch | 🟡 MAJOR | ✅ Resolved | Composite PK in models + migration |
+| 12 | Stratification logic bug | 🟠 MINOR | 🟠 Open (legacy) | Bug in `002_stored_procedures.sql` only |
+| 13 | AuditLog IP type mismatch | 🟠 MINOR | ✅ By Design | `String(45)` for cross-DB compatibility |
 
-### Quick Reference: Where to Find Each Fix
+### How the Issues Were Resolved
 
-| Issue | Fix Location | Curriculum Reference |
-|-------|--------------|---------------------|
-| #1 | `apps/api/app/db/enums.py` | Module 02: ENUMs section |
-| #2 | `alembic/versions/*.py` or SQL 001 | Module 02: ENUMs section |
-| #3 | Alembic migration file | Module 03: Video table section |
-| #4 | `001_phase1_schema.sql` | Module 03: Video table section |
-| #5 | `apps/api/app/db/models.py` | Module 05: Model definitions |
-| #6 | `apps/api/app/db/models.py` (Video) | Module 05: Video model section |
-| #7 | `apps/api/app/db/models.py` (TrainingRun) | Module 05: TrainingRun section |
-| #8 | `apps/api/app/db/models.py` | Module 02: UUIDs section |
-| #9 | SQL files or Alembic (choose one) | Module 02, 07: Migration section |
-| #10 | `apps/api/app/db/models.py` (PromotionLog) | Module 05: After TrainingRun |
-| #11 | `apps/api/app/db/models.py` (TrainingSelection) | Module 03: TrainingSelection section |
-| #12 | `002_stored_procedures.sql` | Module 04: Sampling function |
-| #13 | `apps/api/app/db/models.py` (AuditLog) | Module 02: INET section |
+The root cause of all 13 issues was the **dual-definition problem**: the schema was defined
+in both raw SQL files and Python/Alembic, and they drifted apart. The resolution established
+**SQLAlchemy + Alembic as the single authoritative path** and deprecated the legacy SQL files.
 
-### Must Fix Before Deployment (Critical)
+Key design decisions that resolved multiple issues:
+- **`native_enum=False`** (Issues #1, #2, #9): Enums enforced via CHECK constraints, not native PostgreSQL ENUMs
+- **`String(36)` for UUIDs** (Issue #8): Cross-database compatibility with SQLite for testing
+- **`String(45)` for IPs** (Issue #13): Cross-database compatibility
+- **3 legacy tables excluded** (Issue #5): `user_session`, `generation_request`, `emotion_event` not needed by current app
 
-These 8 issues will cause immediate failures:
+### Only Remaining Issue
 
-**Issue #1: Missing 'fearful' Emotion** - Fix in `enums.py`:
-```python
-EmotionEnum = Enum(
-    "neutral", "happy", "sad", "angry", "surprise", "fearful",
-    name=EMOTION_ENUM_NAME,
-)
-```
-
-**Issue #2: Missing 'purged' Split** - Fix in Alembic or SQL 001:
-```python
-split_enum = sa.Enum("temp", "dataset_all", "train", "test", "purged", ...)
-```
-
-**Issue #3 & #4: Check Constraint** - Add to SQL:
-```sql
-ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
-    (split IN ('temp', 'test', 'purged') AND label IS NULL)
-    OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
-);
-```
-
-**Issue #5: Missing Models** - Add to `models.py`:
-```python
-class UserSession(Base):
-    __tablename__ = "user_session"
-    session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    # ... see Module 05 for complete definition
-
-class GenerationRequest(Base):
-    __tablename__ = "generation_request"
-    # ... see Module 05 for complete definition
-
-class EmotionEvent(Base):
-    __tablename__ = "emotion_event"
-    # ... see Module 05 for complete definition
-```
-
-**Issue #6: Video Missing Columns** - Add to Video model:
-```python
-metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
-deleted_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
-```
-
-**Issue #7: TrainingRun Incomplete** - Add 9 missing columns (see Module 05)
-
-**Issue #8: UUID Type** - Use proper UUID type:
-```python
-from sqlalchemy.dialects.postgresql import UUID
-video_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-```
+**Issue #12: Stratification Logic Bug** — The `create_training_run_with_sampling()` stored
+procedure in `002_stored_procedures.sql` applies sampling globally instead of per-label.
+This only affects the **legacy SQL stored procedure**; the Python service layer implements
+correct stratified sampling.
 
 ### Full Documentation
 
-For complete details on all issues including impact analysis and workarounds:
+For complete details on all issues including resolution history:
 - **Reference**: `docs/database/07-KNOWN-ISSUES.md`
 
 ---

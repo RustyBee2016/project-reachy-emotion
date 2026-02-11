@@ -97,11 +97,14 @@ created_at   | 2025-01-05 14:30:00+00
 ### Running SQL Files
 
 ```bash
-# From command line
+# From command line (legacy SQL — for reference/learning only)
 psql -d reachy_local -f alembic/versions/001_phase1_schema.sql
 
 # From within psql
 \i alembic/versions/001_phase1_schema.sql
+
+# NOTE: For actual schema setup, use Alembic instead:
+# alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
 ```
 
 ### Output to File
@@ -126,110 +129,81 @@ psql -d reachy_local -c "SELECT * FROM video" > results.txt
 
 An ENUM (enumerated type) restricts a column to specific allowed values.
 
-From `001_phase1_schema.sql` (lines 10-25):
+PostgreSQL supports two approaches for enforcing allowed values:
 
+**Approach 1: Native ENUM types** (used in the legacy SQL files)
 ```sql
--- Define the allowed video splits
+-- Legacy approach from 001_phase1_schema.sql (DEPRECATED)
 CREATE TYPE video_split AS ENUM (
-    'temp',         -- Incoming, unlabeled
-    'dataset_all',  -- Labeled corpus
-    'train',        -- Training set
-    'test',         -- Test set
-    'purged'        -- Privacy-deleted (added in 003)
+    'temp', 'dataset_all', 'train', 'test', 'purged'
 );
-
--- Define allowed emotion labels
 CREATE TYPE emotion_label AS ENUM (
-    'neutral',
-    'happy',
-    'sad',
-    'angry',
-    'surprise',
-    'fearful'
+    'neutral', 'happy', 'sad', 'angry', 'surprise', 'fearful'
 );
 ```
+
+**Approach 2: CHECK constraints** (used by the current Alembic migration)
+
+The Reachy project uses `native_enum=False` in SQLAlchemy, which means enums are enforced
+via CHECK constraints rather than native PostgreSQL ENUM types:
+
+```python
+# From apps/api/app/db/enums.py
+SplitEnum = Enum(
+    "temp", "dataset_all", "train", "test", "purged",
+    name="video_split_enum",
+    native_enum=False,     # ← Uses CHECK constraint, not native ENUM
+    create_constraint=True,
+)
+```
+
+This creates a CHECK constraint like:
+```sql
+CHECK (split IN ('temp', 'dataset_all', 'train', 'test', 'purged'))
+```
+
+**Why CHECK constraints instead of native ENUMs?**
+- ✅ Works with SQLite (used for testing) — native ENUMs are PostgreSQL-only
+- ✅ Easier to add/remove values (just update the constraint)
+- ✅ No `ALTER TYPE ... ADD VALUE` migration complexity
+- ❌ Slightly less storage-efficient than native ENUMs (negligible for this project)
+
+**The allowed values are:**
+
+| Enum | Values | Defined In |
+|------|--------|------------|
+| `video_split_enum` | `temp`, `dataset_all`, `train`, `test`, `purged` | `enums.py` line 9-20 |
+| `emotion_enum` | `neutral`, `happy`, `sad`, `angry`, `surprise`, `fearful` | `enums.py` line 22-33 |
+| `training_selection_target_enum` | `train`, `test` | `enums.py` line 35-41 |
 
 **Using ENUMs:**
 
 ```sql
 -- Valid insert
-INSERT INTO video (file_path, split) VALUES ('test.mp4', 'temp');
+INSERT INTO video (video_id, file_path, split, size_bytes, sha256)
+VALUES ('a0000001', 'test.mp4', 'temp', 1024, 'abc123...');
 
--- Invalid insert (will fail)
-INSERT INTO video (file_path, split) VALUES ('test.mp4', 'invalid_split');
--- ERROR: invalid input value for enum video_split: "invalid_split"
+-- Invalid insert (will fail with CHECK constraint violation)
+INSERT INTO video (video_id, file_path, split, size_bytes, sha256)
+VALUES ('a0000002', 'test.mp4', 'invalid_split', 1024, 'def456...');
+-- ERROR: new row for relation "video" violates check constraint
 ```
 
-**ENUM Benefits:**
-- ✅ Database enforces valid values
-- ✅ Smaller storage than VARCHAR
-- ✅ Readable queries
-- ✅ Compile-time checking in applications
-
-**ENUM Limitations:**
-- ❌ Adding new values requires ALTER TYPE
-- ❌ Can't easily remove values
-- ❌ Order is fixed when created
-
-**Viewing ENUM values:**
+**Viewing CHECK constraints on a table:**
 ```sql
-SELECT enum_range(NULL::video_split);
--- Result: {temp,dataset_all,train,test,purged}
-
-SELECT enum_range(NULL::emotion_label);
--- Result: {neutral,happy,sad,angry,surprise,fearful}
+-- Show all constraints on the video table
+\d video
+-- Look for lines like:
+--   Check constraints:
+--     "chk_video_split_label_policy" CHECK (...)
 ```
 
 ---
 
-> ⚠️ **Known Issue #1: Missing 'fearful' Emotion**
->
-> The Python enum in `apps/api/app/db/enums.py` is missing `'fearful'`.
-> The SQL has 6 values, but Python only has 5.
->
-> **Impact**: Python code will reject 'fearful' as invalid.
->
-> **Fix**: Add `"fearful"` to `EmotionEnum` in `enums.py`:
-> ```python
-> EmotionEnum = Enum(
->     "neutral", "happy", "sad", "angry", "surprise", "fearful",
->     name=EMOTION_ENUM_NAME,
-> )
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
-
----
-
-> ⚠️ **Known Issue #2: Split Enum 'purged' Mismatch**
->
-> The `video_split` enum is created with 4 values in SQL 001, but Python expects 5.
-> The `'purged'` value is added later in `003_missing_tables.sql`.
->
-> **Impact**: Order-dependent failures if SQL 003 not applied before Python runs.
->
-> **Fix Options**:
-> - A) Add `'purged'` to SQL 001 initially
-> - B) Ensure SQL 003 runs before any Python code
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
-
----
-
-> ⚠️ **Known Issue #9: Enum Type Name Mismatch**
->
-> SQL and Python use different enum type names:
->
-> | SQL Name | Python Name |
-> |----------|-------------|
-> | `video_split` | `video_split_enum` |
-> | `emotion_label` | `emotion_enum` |
->
-> **Impact**: If both SQL and Alembic run, duplicate types may be created.
->
-> **Fix**: Align naming conventions between SQL and Python.
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+> ✅ **Resolved**: Issues #1 (Missing 'fearful'), #2 (Missing 'purged'), and #9 (Enum name mismatch)
+> have all been fixed. The authoritative enum definitions are in `apps/api/app/db/enums.py`
+> and include all expected values. The legacy SQL files with different enum type names are
+> deprecated. See `docs/database/07-KNOWN-ISSUES.md` for the full resolution history.
 
 ---
 
@@ -272,29 +246,14 @@ RETURNING video_id;
 
 ---
 
-> ⚠️ **Known Issue #8: UUID vs String Type Mismatch**
+> ✅ **Resolved (by design)**: Issue #8 (UUID vs String Type Mismatch)
 >
-> SQL uses native PostgreSQL `UUID` type, but Python models use `String(36)`.
+> The project intentionally uses `String(36)` instead of native PostgreSQL `UUID` for
+> cross-database compatibility. This allows the same models to work with **SQLite** during
+> testing and **PostgreSQL** in production. The trade-off is minimal — UUID string comparison
+> is slightly slower than native UUID, but negligible at this project's scale.
 >
-> **SQL**:
-> ```sql
-> video_id UUID PRIMARY KEY
-> ```
->
-> **Python** (`models.py`):
-> ```python
-> video_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-> ```
->
-> **Impact**: Potential type conversion issues and performance differences.
->
-> **Fix**: Use SQLAlchemy's `UUID` type or PostgreSQL dialect's `UUID`:
-> ```python
-> from sqlalchemy.dialects.postgresql import UUID
-> video_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+> See `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
 
@@ -382,29 +341,14 @@ SELECT * FROM user_session WHERE ip_address << '192.168.0.0/16';  -- Subnet matc
 
 ---
 
-> ⚠️ **Known Issue #13: AuditLog IP Type Mismatch**
+> ✅ **Resolved (by design)**: Issue #13 (AuditLog IP Type Mismatch)
 >
-> SQL uses PostgreSQL's native `INET` type, but Python uses `String(45)`.
+> The project uses `String(45)` instead of native PostgreSQL `INET` for the same reason as
+> Issue #8: cross-database compatibility with SQLite during testing. `String(45)` accommodates
+> both IPv4 (`15 chars`) and IPv6 (`45 chars`) addresses. Subnet-match queries (`<<` operator)
+> are not needed by the application.
 >
-> **SQL**:
-> ```sql
-> ip_address INET
-> ```
->
-> **Python** (`models.py`):
-> ```python
-> ip_address: Mapped[str] = mapped_column(String(45))
-> ```
->
-> **Impact**: Cannot use PostgreSQL INET operators for IP range queries via ORM.
->
-> **Fix**: Use SQLAlchemy's PostgreSQL dialect:
-> ```python
-> from sqlalchemy.dialects.postgresql import INET
-> ip_address: Mapped[str] = mapped_column(INET)
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+> See `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
 

@@ -2,18 +2,19 @@
 
 **Duration**: 3 hours
 **Prerequisites**: Modules 1-6
-**Goal**: Manage database schema changes and deployment
+**Goal**: Manage database schema changes and deployment using Alembic
 
 ---
 
 ## Learning Objectives
 
 By the end of this module, you will be able to:
-1. Apply database migrations using SQL files
-2. Use Alembic for automated migrations
-3. Set up the database for development
-4. Backup and restore databases
-5. Monitor database health
+1. Understand how SQLAlchemy models become database tables via Alembic
+2. Apply and manage Alembic migrations
+3. Create new migrations when models change
+4. Set up the database for development
+5. Backup and restore databases
+6. Monitor database health
 
 ---
 
@@ -27,158 +28,173 @@ As your application evolves, the database schema changes:
 - Constraints modified
 - Indexes optimized
 
-**Migrations** track these changes in version control.
+**Migrations** track these changes in version control so every developer and environment
+gets the same schema.
 
-### Two Approaches in Reachy
+### The Reachy Migration Approach
 
-| Approach | Files | Best For |
-|----------|-------|----------|
-| Manual SQL | `alembic/versions/*.sql` | Production, PostgreSQL-specific features |
-| Alembic | `apps/api/app/db/alembic/` | Development, cross-database compatibility |
+Reachy uses **Alembic** (SQLAlchemy's migration tool) as the **single authoritative path**
+for schema management:
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  enums.py    │     │  models.py   │     │  Alembic     │     │  PostgreSQL  │
+│              │     │              │     │  migration   │     │              │
+│ Enum values  │────▶│ Python model │────▶│  upgrade()   │────▶│ CREATE TABLE │
+│              │     │ classes      │     │  functions   │     │ CREATE INDEX │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+```
+
+> **Historical note:** The repository also contains legacy SQL files (`001_phase1_schema.sql`,
+> `002_stored_procedures.sql`, `003_missing_tables.sql`) in `alembic/versions/`. These are
+> **deprecated** and retained for historical reference only. The file `001_phase1_schema.sql`
+> has a DEPRECATED header. Do not use these files to create or modify the schema.
+> See `docs/database/07-KNOWN-ISSUES.md` for the full story of why the project moved away
+> from the dual SQL/Alembic approach.
 
 ---
 
-## Lesson 7.2: Manual SQL Migrations (45 minutes)
+## Lesson 7.2: Legacy SQL Files (Reference Only) (15 minutes)
 
-### The SQL Migration Files
+> **⚠️ DEPRECATED — This section is for historical context only.**
+>
+> The legacy SQL files are no longer used for schema creation. They are retained so you can
+> see how the schema evolved and understand the stored procedures available for ad-hoc queries.
+
+### The Legacy SQL Files
 
 ```
 alembic/versions/
-├── 001_phase1_schema.sql      # Core tables (193 lines)
-├── 002_stored_procedures.sql  # Functions (362 lines)
-└── 003_missing_tables.sql     # Agent tables (297 lines)
+├── 001_phase1_schema.sql      # DEPRECATED — replaced by 202510280000_initial_schema.py
+├── 002_stored_procedures.sql  # Optional helper functions (still usable for ad-hoc queries)
+└── 003_missing_tables.sql     # DEPRECATED — tables now defined in models.py
 ```
 
-### Applying Migrations
+**`001_phase1_schema.sql`** — Originally created the core tables using raw SQL with native
+PostgreSQL ENUM types. Now replaced by the Alembic migration backed by `models.py` and `enums.py`.
 
-```bash
-# Connect to PostgreSQL
-psql -U reachy_app -d reachy_local
+**`002_stored_procedures.sql`** — Contains SQL functions (`get_class_distribution`,
+`check_dataset_balance`, `promote_video_safe`, `create_training_run_with_sampling`). These
+are **not required** by the application (business logic runs in Python services) but remain
+useful for manual database exploration. You may optionally apply this file after running
+Alembic migrations.
 
-# Apply in order
-\i alembic/versions/001_phase1_schema.sql
-\i alembic/versions/002_stored_procedures.sql
-\i alembic/versions/003_missing_tables.sql
+**`003_missing_tables.sql`** — Originally added agent workflow tables. These tables are now
+defined in `models.py` and will be created by a future Alembic migration.
 
-# Or from command line
-psql -d reachy_local -f alembic/versions/001_phase1_schema.sql
-psql -d reachy_local -f alembic/versions/002_stored_procedures.sql
-psql -d reachy_local -f alembic/versions/003_missing_tables.sql
-```
+### Idempotent SQL
 
-### Idempotent Migrations
-
-The SQL files use `IF NOT EXISTS` for safety:
+The legacy SQL files used `IF NOT EXISTS` for safety:
 
 ```sql
--- From 001_phase1_schema.sql
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 CREATE TABLE IF NOT EXISTS video (
     video_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     ...
 );
-
-CREATE INDEX IF NOT EXISTS idx_video_split ON video(split);
 ```
 
-**Idempotent** = Can run multiple times safely without errors.
-
-### Creating New Migrations
-
-When adding new features:
-
-```sql
--- 004_new_feature.sql
-
--- Add new column
-ALTER TABLE video ADD COLUMN IF NOT EXISTS
-    processing_status VARCHAR(50) DEFAULT 'pending';
-
--- Add new table
-CREATE TABLE IF NOT EXISTS processing_job (
-    job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    video_id UUID REFERENCES video(video_id),
-    status VARCHAR(50) NOT NULL DEFAULT 'queued',
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Add new index
-CREATE INDEX IF NOT EXISTS idx_processing_job_status
-ON processing_job(status);
-```
+**Idempotent** = Can run multiple times safely without errors. Alembic achieves this
+differently — it tracks which migrations have been applied in the `alembic_version` table.
 
 ---
 
-## Lesson 7.3: Alembic Migrations (45 minutes)
+## Lesson 7.3: Alembic Migrations (60 minutes)
 
 ### What is Alembic?
 
 **Alembic** is SQLAlchemy's migration tool. It:
 - Auto-generates migrations from model changes
-- Tracks applied migrations in database
-- Supports upgrade and downgrade
+- Tracks applied migrations in the `alembic_version` database table
+- Supports upgrade (apply) and downgrade (rollback)
+- Ensures every environment gets the exact same schema
+
+### How Alembic Knows the Target Schema
+
+The key is in `env.py`:
+
+**Source**: `apps/api/app/db/alembic/env.py` (lines 9-10)
+```python
+from apps.api.app.db.base import Base  # noqa: F401 - metadata import
+from apps.api.app.db import models  # noqa: F401 - ensures model metadata is registered
+```
+
+By importing `Base` and `models`, Alembic loads all table definitions from `models.py` into
+`Base.metadata`. When you run `alembic revision --autogenerate`, Alembic compares this
+metadata against the actual database and generates the SQL needed to bring them in sync.
 
 ### Alembic Structure
 
 ```
 apps/api/app/db/alembic/
-├── alembic.ini              # Configuration
-├── env.py                   # Migration environment
+├── alembic.ini              # Configuration (database URL, script location)
+├── env.py                   # Migration environment (imports models)
 └── versions/
-    └── 202510280000_initial_schema.py  # Migration file
+    └── 202510280000_initial_schema.py  # Initial migration (creates 4 core tables)
 ```
 
 ### Configuration
 
-**Source**: `alembic.ini`
+**Source**: `apps/api/app/db/alembic/alembic.ini`
 ```ini
 [alembic]
 script_location = apps/api/app/db/alembic
 sqlalchemy.url = postgresql+asyncpg://reachy_app:password@localhost/reachy_local
 ```
 
+> **Tip:** You can override the database URL with the `REACHY_DATABASE_URL` environment
+> variable instead of editing `alembic.ini`.
+
 ### Running Migrations
 
 ```bash
-# Navigate to project root
-cd /home/user/project-reachy-emotion
+# All commands run from the project root directory
+# Always specify the config file path:
 
-# Check current version
-alembic current
+# Check current migration version
+alembic -c apps/api/app/db/alembic/alembic.ini current
 
-# See pending migrations
-alembic history
+# See migration history
+alembic -c apps/api/app/db/alembic/alembic.ini history
 
-# Apply all migrations
-alembic upgrade head
+# Apply all pending migrations
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
 
-# Apply one migration
-alembic upgrade +1
+# Apply one migration forward
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade +1
 
 # Rollback one migration
-alembic downgrade -1
+alembic -c apps/api/app/db/alembic/alembic.ini downgrade -1
 
-# Rollback to specific version
-alembic downgrade abc123
+# Rollback to empty database
+alembic -c apps/api/app/db/alembic/alembic.ini downgrade base
 ```
 
 ### Creating New Migrations
 
-```bash
-# Auto-generate from model changes
-alembic revision --autogenerate -m "add processing status"
+When you modify `models.py` (add a table, add a column, change a constraint), you need
+a new migration:
 
-# Create empty migration
-alembic revision -m "custom migration"
+```bash
+# Step 1: Make your changes in models.py
+
+# Step 2: Auto-generate a migration from the diff
+alembic -c apps/api/app/db/alembic/alembic.ini revision --autogenerate -m "add processing status column"
+
+# Step 3: Review the generated file in versions/
+#         Alembic is good but not perfect — always review!
+
+# Step 4: Apply the migration
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
 ```
 
-### Migration File Structure
+### The Initial Migration — Walkthrough
 
 **Source**: `apps/api/app/db/alembic/versions/202510280000_initial_schema.py`
 
+This migration creates the 4 core tables. Here is the structure (simplified):
+
 ```python
-"""Initial schema
+"""Initial schema for Media Mover
 
 Revision ID: 202510280000
 Revises:
@@ -186,85 +202,85 @@ Create Date: 2025-10-28 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
-# Revision identifiers
-revision = '202510280000'
-down_revision = None
+revision = "202510280000"
+down_revision = None          # This is the first migration
 branch_labels = None
 depends_on = None
 
 def upgrade():
-    # Create enum types
-    split_enum = sa.Enum('temp', 'dataset_all', 'train', 'test',
-                         name='video_split_enum')
-    split_enum.create(op.get_bind(), checkfirst=True)
-
-    # Create tables
-    op.create_table(
-        'video',
-        sa.Column('video_id', sa.String(36), primary_key=True),
-        sa.Column('file_path', sa.String(500), nullable=False),
-        sa.Column('split', split_enum, nullable=False, server_default='temp'),
-        sa.Column('label', sa.String(50), nullable=True),
-        sa.Column('size_bytes', sa.BigInteger, nullable=False, server_default='0'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
+    # 1. Create enum-like constraints (using native_enum=False approach)
+    split_enum = sa.Enum(
+        "temp", "dataset_all", "train", "test", "purged",
+        name="video_split_enum", create_constraint=True, native_enum=False
     )
 
-    # Create indexes
-    op.create_index('idx_video_split', 'video', ['split'])
+    # 2. Create the video table
+    op.create_table(
+        "video",
+        sa.Column("video_id", sa.String(length=36), primary_key=True),
+        sa.Column("file_path", sa.String(length=1024), nullable=False),
+        sa.Column("split", split_enum, nullable=False, server_default="temp"),
+        sa.Column("label", emotion_enum, nullable=True),
+        sa.Column("size_bytes", sa.BigInteger(), nullable=False),
+        sa.Column("sha256", sa.String(length=64), nullable=False),
+        sa.Column("metadata", sa.JSON(), nullable=True),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.CheckConstraint(
+            "(split IN ('temp', 'test', 'purged') AND label IS NULL) OR "
+            "(split IN ('dataset_all', 'train') AND label IS NOT NULL)",
+            name="chk_video_split_label_policy",
+        ),
+        sa.UniqueConstraint("sha256", "size_bytes", name="uq_video_sha256_size"),
+    )
+
+    # 3. Create indexes
+    op.create_index("ix_video_split", "video", ["split"])
+    op.create_index("ix_video_label", "video", ["label"])
+
+    # 4. Create training_run, training_selection, promotion_log tables...
+    # (similar op.create_table calls)
 
 def downgrade():
-    # Drop in reverse order
-    op.drop_index('idx_video_split')
-    op.drop_table('video')
-
-    # Drop enum
-    sa.Enum(name='video_split_enum').drop(op.get_bind(), checkfirst=True)
+    # Drop everything in reverse order
+    op.drop_table("promotion_log")
+    op.drop_table("training_selection")
+    op.drop_table("training_run")
+    op.drop_index("ix_video_label")
+    op.drop_index("ix_video_split")
+    op.drop_table("video")
 ```
 
----
+**Key points:**
+- `upgrade()` creates tables — runs when you do `alembic upgrade head`
+- `downgrade()` drops tables — runs when you do `alembic downgrade`
+- `revision` and `down_revision` form a linked chain of migrations
+- Enums use `native_enum=False` — enforced via CHECK constraints, not native PostgreSQL ENUMs
 
-### Migration Pitfalls: Known Issues
+### Current Migration Gap
 
-When working with migrations, be aware of these synchronization issues:
+The initial migration creates **4 tables**: `video`, `training_run`, `training_selection`,
+`promotion_log`.
 
-> ⚠️ **Reminder: Issue #3 - Check Constraint Inconsistency**
->
-> The Alembic migration is missing `'purged'` in the check constraint.
-> Ensure your migration includes:
-> ```python
-> CheckConstraint(
->     "(split IN ('temp', 'test', 'purged') AND label IS NULL) OR ..."
-> )
-> ```
->
-> See: Module 03 and `docs/database/07-KNOWN-ISSUES.md` for details.
+However, `models.py` defines **9 tables** (the above 4 plus `label_event`, `deployment_log`,
+`audit_log`, `obs_samples`, `reconcile_report`).
 
-> ⚠️ **Reminder: Issue #4 - Missing Check Constraint in SQL**
->
-> The SQL schema files don't include the split/label policy constraint.
-> If using SQL migrations, add:
-> ```sql
-> ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
->     (split IN ('temp', 'test', 'purged') AND label IS NULL)
->     OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
-> );
-> ```
->
-> See: Module 03 and `docs/database/07-KNOWN-ISSUES.md` for details.
+**The 5 additional tables need a new migration:**
 
-> ⚠️ **Reminder: Issue #9 - Enum Type Name Mismatch**
->
-> SQL uses `video_split` and `emotion_label`, but Alembic uses `video_split_enum` and `emotion_enum`.
->
-> **Risk**: Running both SQL and Alembic migrations creates duplicate enum types.
->
-> **Best Practice**: Choose ONE migration approach per environment:
-> - **Production**: Use SQL files only
-> - **Development/Testing**: Use Alembic only
->
-> See: Module 02 and `docs/database/07-KNOWN-ISSUES.md` for details.
+```bash
+# Generate the missing migration
+alembic -c apps/api/app/db/alembic/alembic.ini revision --autogenerate -m "add agent workflow tables"
+
+# Review the generated file, then apply
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+```
+
+> **Historical note:** Issues #3, #4, and #9 from the Known Issues document described
+> inconsistencies between the legacy SQL files and the Alembic migration. These are now
+> **resolved** — the Alembic migration includes `purged` in the check constraint, and the
+> legacy SQL files are deprecated. See `docs/database/07-KNOWN-ISSUES.md` for details.
 
 ---
 
@@ -285,13 +301,14 @@ docker run -d \
 # Wait for startup
 sleep 5
 
-# Apply migrations
-psql -h localhost -U reachy_app -d reachy_local \
-  -f alembic/versions/001_phase1_schema.sql
-psql -h localhost -U reachy_app -d reachy_local \
-  -f alembic/versions/002_stored_procedures.sql
-psql -h localhost -U reachy_app -d reachy_local \
-  -f alembic/versions/003_missing_tables.sql
+# Install Python dependencies (if not already done)
+pip install -r requirements-phase1.txt
+
+# Apply schema via Alembic
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+
+# Verify
+psql -h localhost -U reachy_app -d reachy_local -c "\dt"
 ```
 
 ### Bootstrap Script
@@ -309,11 +326,11 @@ CREATE ROLE reachy_app WITH LOGIN PASSWORD 'dev_password';
 GRANT ALL PRIVILEGES ON DATABASE reachy_local TO reachy_app;
 EOF
 
-# Apply migrations
-for sql_file in alembic/versions/*.sql; do
-    echo "Applying: $sql_file"
-    psql -d reachy_local -f "$sql_file"
-done
+# Apply schema via Alembic
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+
+# Optionally apply stored procedures for ad-hoc queries
+# psql -U reachy_app -d reachy_local -f alembic/versions/002_stored_procedures.sql
 
 # Create directories
 mkdir -p /mnt/videos/{temp,dataset_all,train,test}
@@ -493,9 +510,10 @@ async def db_health(db: AsyncSession = Depends(get_db)):
 
 In this module, you learned:
 
-- ✅ Apply SQL migrations manually
-- ✅ Use Alembic for automated migrations
-- ✅ Set up development environment
+- ✅ How SQLAlchemy models become database tables via Alembic
+- ✅ Apply and manage Alembic migrations (`upgrade head`, `downgrade`, `history`)
+- ✅ Create new migrations when models change (`revision --autogenerate`)
+- ✅ Set up development environment using Alembic
 - ✅ Backup and restore databases
 - ✅ Monitor database health
 

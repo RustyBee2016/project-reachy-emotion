@@ -57,14 +57,15 @@ Week 1                    Week 2                    Week 3
 - Understand transactions and ACID properties
 
 ### By End of Week 2
-- Know all 12 tables in the Reachy database
+- Know all 9 tables in the Alembic-managed schema (plus 3 legacy-only tables)
 - Understand the video lifecycle (temp → dataset_all → train/test → purged)
 - Use stored procedures for business operations
 - Write Python code using SQLAlchemy ORM
 
 ### By End of Week 3
 - Build API endpoints that interact with the database
-- Manage database migrations with SQL and Alembic
+- Manage database migrations with Alembic
+- Understand how SQLAlchemy models translate to database tables
 - Debug common database issues
 - Deploy the database to development/production
 
@@ -87,22 +88,30 @@ Before starting, ensure you have:
 
 Throughout this curriculum, you'll work with these files:
 
-### SQL Schema Files
-```
-alembic/versions/
-├── 001_phase1_schema.sql      # Core tables (193 lines)
-├── 002_stored_procedures.sql  # Business logic (362 lines)
-└── 003_missing_tables.sql     # Agent support tables (297 lines)
-```
-
-### Python Files
+### Schema Definition (Authoritative)
 ```
 apps/api/app/db/
-├── models.py                  # SQLAlchemy ORM models
-├── enums.py                   # Python enum definitions
-├── base.py                    # SQLAlchemy base class
-└── session.py                 # Database session factory
+├── models.py                  # SQLAlchemy ORM models — defines all 9 tables
+├── enums.py                   # Enum definitions (split, emotion, target_split)
+├── base.py                    # Base class and TimestampMixin
+├── session.py                 # Database session factory
+└── alembic/
+    ├── alembic.ini            # Alembic configuration
+    ├── env.py                 # Migration environment (imports Base.metadata)
+    └── versions/
+        └── 202510280000_initial_schema.py  # Initial migration (creates 4 core tables)
+```
 
+### Legacy SQL Files (Reference Only — DEPRECATED)
+```
+alembic/versions/
+├── 001_phase1_schema.sql      # DEPRECATED — replaced by Alembic migration
+├── 002_stored_procedures.sql  # Optional helper functions for ad-hoc queries
+└── 003_missing_tables.sql     # DEPRECATED — tables now in models.py
+```
+
+### Application Layer
+```
 apps/api/app/
 ├── routers/promote.py         # Promotion API endpoints
 ├── services/promote_service.py # Business logic
@@ -177,6 +186,7 @@ Before each session:
    ```bash
    psql -U postgres -c "DROP DATABASE IF EXISTS reachy_local;"
    psql -U postgres -c "CREATE DATABASE reachy_local OWNER reachy_app;"
+   alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
    ```
 3. Have sample data ready (see exercises file)
 
@@ -191,7 +201,7 @@ Before each session:
 ## Getting Help
 
 - **Documentation**: `docs/database/` folder
-- **Known Issues**: `docs/database/07-KNOWN-ISSUES.md`
+- **Known Issues**: `docs/database/07-KNOWN-ISSUES.md` (most issues now resolved)
 - **Setup Guide**: `docs/database/08-SETUP-GUIDE.md`
 
 ---

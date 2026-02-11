@@ -15,8 +15,11 @@ sudo systemctl status postgresql
 # Database created
 psql -U reachy_app -d reachy_local -c "SELECT 1;"
 
-# Migrations applied
-psql -d reachy_local -c "\dt"  # Should show 12 tables
+# Alembic migrations applied
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+
+# Verify tables exist (should show video, training_run, training_selection, promotion_log, alembic_version)
+psql -U reachy_app -d reachy_local -c "\dt"
 ```
 
 ---

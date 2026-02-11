@@ -100,19 +100,35 @@ Reachy uses **SQLAlchemy 2.0** with the new syntax:
 
 ## Lesson 5.2: Defining Models (45 minutes)
 
-### The Base Class
+### The Base Class and TimestampMixin
 
 **Source**: `apps/api/app/db/base.py`
 
 ```python
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from datetime import datetime
 
 class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy models."""
-    pass
+    """Declarative base for Media Mover models."""
+
+class TimestampMixin:
+    """Adds created/updated timestamp columns with server defaults."""
+
+    created_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 ```
 
-All models inherit from this base class.
+All models inherit from `Base`. Models that need timestamps also inherit from `TimestampMixin`
+(e.g., `class Video(TimestampMixin, Base)`). The mixin uses `server_default=func.now()` so
+PostgreSQL generates the timestamps, not Python.
 
 ### Defining Enums
 
@@ -142,13 +158,16 @@ EmotionEnum = Enum(
     "sad",
     "angry",
     "surprise",
-    # Note: 'fearful' is MISSING - see Known Issues!
+    "fearful",
     name=EMOTION_ENUM_NAME,
-    native_enum=False
+    create_constraint=True,
+    native_enum=False,
+    validate_strings=True,
 )
 ```
 
-> ⚠️ **Reminder**: Issue #1 (Missing 'fearful') applies here. See Module 02 for the fix.
+> ✅ **Resolved**: Issue #1 (Missing 'fearful') has been fixed. `enums.py` now includes all 6 values.
+> See `docs/database/07-KNOWN-ISSUES.md` for the full resolution history.
 
 **Why `native_enum=False`?**
 - Creates CHECK constraints instead of PostgreSQL ENUM types
@@ -157,90 +176,88 @@ EmotionEnum = Enum(
 
 ### The Video Model
 
-**Source**: `apps/api/app/db/models.py` (lines 20-82)
+**Source**: `apps/api/app/db/models.py` (lines 34-85)
 
 ```python
-from sqlalchemy import String, BigInteger, Numeric, CheckConstraint, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    String, BigInteger, Float, JSON, DateTime,
+    CheckConstraint, UniqueConstraint, Index,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 import uuid
 
-from .base import Base
+from .base import Base, TimestampMixin
 from .enums import SplitEnum, EmotionEnum
 
-class Video(Base):
+class Video(TimestampMixin, Base):
     __tablename__ = "video"
 
-    # Primary Key
+    # Primary Key — String(36) for cross-DB compatibility (SQLite in tests)
     video_id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,
-        default=lambda: str(uuid.uuid4())
+        default=lambda: str(uuid.uuid4()),
     )
 
     # Required fields
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     split: Mapped[str] = mapped_column(SplitEnum, nullable=False, default="temp")
-    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # Optional fields
     label: Mapped[Optional[str]] = mapped_column(EmotionEnum, nullable=True)
-    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    duration_sec: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    duration_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    fps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     width: Mapped[Optional[int]] = mapped_column(nullable=True)
     height: Mapped[Optional[int]] = mapped_column(nullable=True)
-    fps: Mapped[Optional[float]] = mapped_column(Numeric(5, 2), nullable=True)
 
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow
+    # Flexible metadata (mapped to column name "metadata" in DB)
+    extra_data: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=True
     )
+
+    # Soft delete support (GDPR compliance)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    promotions: Mapped[List["PromotionLog"]] = relationship(
+        back_populates="video", cascade="all, delete-orphan",
+    )
+    selections: Mapped[List["TrainingSelection"]] = relationship(
+        back_populates="video", cascade="all, delete-orphan",
+    )
+    label_events: Mapped[List["LabelEvent"]] = relationship(
+        back_populates="video", cascade="all, delete-orphan",
+    )
+
+    # Timestamps inherited from TimestampMixin: created_at, updated_at
 
     # Table-level constraints
     __table_args__ = (
         UniqueConstraint("sha256", "size_bytes", name="uq_video_sha256_size"),
         CheckConstraint(
             """
-            (split IN ('temp', 'test', 'purged') AND label IS NULL)
-            OR
-            (split IN ('dataset_all', 'train') AND label IS NOT NULL)
+            (
+                split IN ('temp', 'test', 'purged') AND label IS NULL
+            ) OR (
+                split IN ('dataset_all', 'train') AND label IS NOT NULL
+            )
             """,
             name="chk_video_split_label_policy",
         ),
+        Index("ix_video_split", "split"),
+        Index("ix_video_label", "label"),
     )
-
-    def __repr__(self):
-        return f"<Video(video_id={self.video_id}, path={self.file_path}, split={self.split})>"
 ```
 
----
-
-> ⚠️ **Known Issue #6: Video Model Missing Columns**
->
-> The Video model above is missing columns that exist in the SQL schema:
->
-> **Missing columns**:
-> - `metadata JSONB` - Flexible extra data storage
-> - `deleted_at TIMESTAMPTZ` - For soft deletes (GDPR compliance)
->
-> **Impact**: Cannot use soft deletes or flexible metadata via ORM.
->
-> **Fix**: Add the missing columns to the Video model:
-> ```python
-> from sqlalchemy.dialects.postgresql import JSONB
->
-> class Video(Base):
->     # ... existing columns ...
->
->     # ADD THESE:
->     metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
->     deleted_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+> ✅ **Resolved**: Issue #6 (Video Model Missing Columns) has been fixed. The model now
+> includes `extra_data` (mapped to `metadata` column) and `deleted_at` for soft deletes.
+> See `docs/database/07-KNOWN-ISSUES.md` for the full resolution history.
 
 ---
 
@@ -272,143 +289,82 @@ updated_at: Mapped[datetime] = mapped_column(
 
 ### The TrainingRun Model
 
-**Source**: `apps/api/app/db/models.py` (lines 85-120)
+**Source**: `apps/api/app/db/models.py` (lines 88-136)
 
 ```python
-class TrainingRun(Base):
+class TrainingRun(TimestampMixin, Base):
     __tablename__ = "training_run"
 
     run_id: Mapped[str] = mapped_column(
-        String(36),
-        primary_key=True,
-        default=lambda: str(uuid.uuid4())
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
     )
     strategy: Mapped[str] = mapped_column(String(100), nullable=False)
-    train_fraction: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False)
-    test_fraction: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False)
+    train_fraction: Mapped[float] = mapped_column(Float, nullable=False)
+    test_fraction: Mapped[float] = mapped_column(Float, nullable=False)
     seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    status: Mapped[str] = mapped_column(
-        TrainingStatusEnum,
-        nullable=False,
-        default="pending"
+    dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    selections: Mapped[List["TrainingSelection"]] = relationship(
+        back_populates="training_run", cascade="all, delete-orphan",
     )
 
     __table_args__ = (
         CheckConstraint(
             "train_fraction + test_fraction <= 1.0",
-            name="chk_training_run_fractions"
+            name="chk_training_run_fractions",
         ),
     )
 ```
 
----
-
-> ⚠️ **Known Issue #7: TrainingRun Model Incomplete**
->
-> The TrainingRun model has only 6 columns but SQL has 15+.
->
-> **Missing columns**:
-> - `dataset_hash CHAR(64)` - Hash of all videos used
-> - `mlflow_run_id VARCHAR(255)` - Link to MLflow
-> - `model_path VARCHAR(500)` - Path to .tlt model
-> - `engine_path VARCHAR(500)` - Path to TensorRT .engine
-> - `metrics JSONB` - F1, accuracy, etc.
-> - `config JSONB` - Hyperparameters
-> - `error_message TEXT` - If failed
-> - `started_at TIMESTAMPTZ`
-> - `completed_at TIMESTAMPTZ`
->
-> **Impact**: MLflow integration and metrics storage broken via ORM.
->
-> **Fix**: Add the missing columns:
-> ```python
-> class TrainingRun(Base):
->     # ... existing columns ...
->
->     # ADD THESE:
->     dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
->     mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
->     model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
->     engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
->     metrics: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
->     config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
->     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
->     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
->     completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+> ✅ **Resolved**: Issue #7 (TrainingRun Model Incomplete) has been fixed. The model now
+> includes all 15+ columns: `dataset_hash`, `mlflow_run_id`, `model_path`, `engine_path`,
+> `metrics`, `config`, `error_message`, `started_at`, `completed_at`, etc.
 
 ---
 
-> ⚠️ **Known Issue #5: Missing SQLAlchemy Models**
->
-> Three tables exist in SQL but have no ORM models:
-> - `user_session` (SQL line 118)
-> - `generation_request` (SQL line 136)
-> - `emotion_event` (SQL line 155)
->
-> **Impact**: Cannot access these tables via Python ORM.
->
-> **Fix**: Add model classes to `apps/api/app/db/models.py`:
-> ```python
-> class UserSession(Base):
->     __tablename__ = "user_session"
->     session_id: Mapped[str] = mapped_column(String(36), primary_key=True)
->     user_id: Mapped[str] = mapped_column(String(255), nullable=False)
->     device_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
->     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
->     started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
->     ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
->     actions_count: Mapped[int] = mapped_column(default=0)
->
-> class GenerationRequest(Base):
->     __tablename__ = "generation_request"
->     request_id: Mapped[str] = mapped_column(String(36), primary_key=True)
->     prompt: Mapped[str] = mapped_column(Text, nullable=False)
->     emotion: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
->     status: Mapped[str] = mapped_column(String(50), default="pending")
->     video_id: Mapped[Optional[str]] = mapped_column(ForeignKey("video.video_id"), nullable=True)
->
-> class EmotionEvent(Base):
->     __tablename__ = "emotion_event"
->     event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
->     device_id: Mapped[str] = mapped_column(String(255), nullable=False)
->     emotion: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
->     confidence: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
->     timestamp: Mapped[datetime] = mapped_column(nullable=False)
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+### Legacy-Only Tables (Not in ORM)
+
+Three tables from the original SQL schema do **not** have ORM models:
+`user_session`, `generation_request`, `emotion_event`.
+
+This is an **intentional architectural decision** — these tables supported features that
+are not yet implemented in the current app runtime. They exist only in the legacy SQL path
+(`001_phase1_schema.sql`). If needed in the future, they should be added to `models.py`
+and a new Alembic migration generated.
+
+> ✅ **Resolved (by design)**: Issue #5 (Missing SQLAlchemy Models) — the 9 tables in
+> `models.py` represent the complete operational schema.
 
 ---
 
-> ⚠️ **Known Issue #10: PromotionLog Missing Columns**
->
-> The PromotionLog model is missing idempotency columns:
-> - `idempotency_key VARCHAR(64) UNIQUE`
-> - `correlation_id UUID`
->
-> **Impact**: Idempotency support broken via ORM.
->
-> **Fix**: Add the missing columns:
-> ```python
-> class PromotionLog(Base):
->     # ... existing columns ...
->
->     # ADD THESE:
->     idempotency_key: Mapped[Optional[str]] = mapped_column(
->         String(64), unique=True, nullable=True
->     )
->     correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
-> ```
->
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
+### Additional Models in models.py
+
+Beyond `Video` and `TrainingRun`, `models.py` also defines:
+
+- **`TrainingSelection`** — Maps videos to training runs with a composite PK `(run_id, video_id, target_split)`
+- **`PromotionLog`** — Audit trail for video promotions, includes `idempotency_key` and `correlation_id`
+- **`LabelEvent`** — Tracks labeling actions (label, relabel, discard)
+- **`DeploymentLog`** — Records model deployments to Jetson
+- **`AuditLog`** — Privacy-sensitive operations (purge, access, export)
+- **`ObsSample`** — Time-series observability metrics
+- **`ReconcileReport`** — Filesystem/database consistency checks
+
+> ✅ **Resolved**: Issue #10 (PromotionLog Missing Columns) — `idempotency_key` and
+> `correlation_id` are now present in the `PromotionLog` model.
 
 ---
 
