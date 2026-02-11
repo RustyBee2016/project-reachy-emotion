@@ -112,14 +112,34 @@ def ensure_api_version(x_api_version: Optional[str]):
         )
 
 
+def _health_response() -> str:
+    """Shared health response for legacy and /api variants."""
+    return "ok"
+
+
+def _ready_response() -> str:
+    """Shared ready response for legacy and /api variants."""
+    return "ready"
+
+
 @router.get("/health", response_class=PlainTextResponse)
 async def health() -> str:
-    return "ok"
+    return _health_response()
+
+
+@router.get("/api/health", response_class=PlainTextResponse)
+async def api_health() -> str:
+    return _health_response()
 
 
 @router.get("/ready", response_class=PlainTextResponse)
 async def ready() -> str:
-    return "ready"
+    return _ready_response()
+
+
+@router.get("/api/ready", response_class=PlainTextResponse)
+async def api_ready() -> str:
+    return _ready_response()
 
 
 @router.get("/metrics")
