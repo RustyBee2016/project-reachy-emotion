@@ -168,6 +168,14 @@ REACHY_VIDEOS_ROOT=/mnt/videos
 REACHY_API_PORT=8083
 ```
 
+> **Ubuntu 2 mount requirement:** mount the Ubuntu 1 export to `/mnt/videos` so both Media Mover and the gateway see the same files. In `/etc/fstab` on Ubuntu 2 add:
+>
+> ```fstab
+> 10.0.4.130:/media/rusty_admin/project_data/reachy_emotion/videos  /mnt/videos  nfs  defaults  0  0
+> ```
+>
+> After saving run `sudo mount -a` and verify `ls /mnt/videos` shows `temp/`, `dataset_all/`, etc.
+
 ### Python Configuration
 
 The database URL is configured in `apps/api/app/config.py`:
@@ -177,13 +185,15 @@ class Settings(BaseSettings):
     REACHY_DATABASE_URL: str = "postgresql+asyncpg://reachy_app:password@localhost:5432/reachy_local"
 ```
 
-### Connection Strings
+### Connection Strings & Gateway Health
 
 | Use Case | Connection String |
 |----------|-------------------|
 | psql CLI | `psql -U reachy_app -d reachy_local` |
 | Python sync | `postgresql://reachy_app:pass@localhost:5432/reachy_local` |
 | Python async | `postgresql+asyncpg://reachy_app:pass@localhost:5432/reachy_local` |
+
+**Gateway health endpoints:** Ubuntu 2 exposes `/health` and `/ready` (no `/api` prefix). When Nginx fronts the service, these appear externally as `/healthz` and `/readyz`, while Media Mover on Ubuntu 1 uses `/api/v1/health`. Keep the distinction in mind when writing monitoring checks.
 
 ---
 

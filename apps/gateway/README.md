@@ -14,8 +14,14 @@ The Gateway service runs on **Ubuntu 2** and provides a unified API surface for:
 │  ┌──────────────┐         ┌──────────────────────────┐    │
 │  │ Streamlit UI │────────▶│  Gateway (port 8000)     │    │
 │  │ (port 8501)  │         │  apps/gateway/main.py    │    │
-│  └──────────────┘         └──────────┬───────────────┘    │
-│                                       │                     │
+│  └──────────────┘         └───────┬────────┬────────┘    │
+│                                    │        │             │
+│                              (localhost)    │             │
+│                              ┌──────────────▼───────┐     │
+│                              │  Nginx (ports 80/443)│     │
+│                              │  TLS + static files  │     │
+│                              └──────────────┬───────┘     │
+│                                             │             │
 └───────────────────────────────────────┼─────────────────────┘
                                         │
                                         │ HTTP proxy
@@ -39,7 +45,7 @@ The Gateway service runs on **Ubuntu 2** and provides a unified API surface for:
 | Feature | Media Mover (Ubuntu 1) | Gateway (Ubuntu 2) |
 |---------|------------------------|-------------------|
 | **Purpose** | Direct file operations | API proxy |
-| **Storage** | `/mnt/videos` (NFS mount) | None (proxies to Ubuntu 1) |
+| **Storage** | `/mnt/videos` (NFS mount) | Reads `/mnt/videos` over NFS (no local writes) |
 | **Port** | 8083 | 8000 |
 | **Entry Point** | `apps/api/app/main.py` | `apps/gateway/main.py` |
 | **Dependencies** | Filesystem, thumbnails, DB | HTTP client only |
@@ -67,6 +73,42 @@ GATEWAY_API_PORT=8000
 GATEWAY_ENABLE_CORS=true
 GATEWAY_UI_ORIGINS=http://localhost:8501,http://10.0.4.140:8501
 ```
+
+### Filesystem & NFS Mount
+
+- Ubuntu 2 must mount Ubuntu 1's exported videos directory at **`/mnt/videos`** (see `/etc/exports` on Ubuntu 1). Add an `/etc/fstab` entry such as:
+
+  ```fstab
+  10.0.4.130:/media/rusty_admin/project_data/reachy_emotion/videos  /mnt/videos  nfs  defaults  0  0
+  ```
+
+- After adding the entry run `sudo mount -a` (or reboot) and verify `ls /mnt/videos` shows the expected `temp/`, `dataset_all/`, etc. Without this mount, thumbnail and proxy routes will fail because the gateway cannot read the shared media tree.
+
+### Reverse Proxy / TLS
+
+- Nginx on Ubuntu 2 terminates HTTPS on **443** (optionally redirecting 80→443) and proxies `/api/*` to the FastAPI gateway on `http://127.0.0.1:8000`.
+- A typical server block:
+
+  ```nginx
+  server {
+      listen 443 ssl;
+      server_name 10.0.4.140;
+
+      ssl_certificate     /etc/ssl/certs/reachy.crt;
+      ssl_certificate_key /etc/ssl/private/reachy.key;
+
+      location /api/ {
+          proxy_pass http://127.0.0.1:8000/;
+          proxy_set_header Authorization $http_authorization;
+      }
+
+      location /thumbs/ {
+          alias /mnt/videos/thumbs/;
+      }
+  }
+  ```
+
+- Restart Nginx whenever the configuration changes: `sudo systemctl reload nginx`.
 
 ## Running the Gateway
 
@@ -109,8 +151,8 @@ source venv/bin/activate
 The gateway exposes the following endpoints:
 
 ### Health & Monitoring
-- `GET /health` - Health check (returns "ok")
-- `GET /ready` - Readiness check (returns "ready")
+- `GET /health` - Health check (returns "ok"); note **no `/api` prefix**. When fronted by Nginx the external route is usually `/healthz`.
+- `GET /ready` - Readiness check (returns "ready"); proxied externally as `/readyz`.
 - `GET /metrics` - Prometheus metrics
 
 ### Emotion Events (from Jetson)
