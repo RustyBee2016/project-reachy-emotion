@@ -1,9 +1,25 @@
+from __future__ import annotations
+
 """
 Reachy Emotion Recognition - Landing Page (Streamlit)
 Ubuntu 2 - Web UI for video generation, upload, and emotion labeling
 """
 
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
+
+# Page configuration must be the first Streamlit command (guarded for reruns)
+try:
+    st.set_page_config(
+        page_title="Capstone Video App",
+        page_icon="🎥",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+except StreamlitAPIException:
+    # Streamlit may auto-run another page first; ignore duplicate configuration
+    pass
+
 import uuid
 from pathlib import Path
 from datetime import datetime
@@ -89,7 +105,10 @@ load_dotenv(WEB_ENV_PATH, override=False)
 # These can be overridden by creating a .env file (see .env.template)
 GATEWAY_URL = os.getenv("REACHY_GATEWAY_BASE", "http://10.0.4.140:8000")
 MEDIA_MOVER_URL = os.getenv("REACHY_API_BASE", "http://10.0.4.130:8083")
-VIDEO_DATA_DIR = "/media/rusty_admin/project_data/reachy_emotion/videos/temp"
+# VIDEO_DATA_DIR previously pointed at the Ubuntu 1 local path:
+# VIDEO_DATA_DIR = "/media/rusty_admin/project_data/reachy_emotion/videos/temp"
+# Switch Streamlit writes to the Ubuntu 2 NFS mount so gateway + UI share storage.
+VIDEO_DATA_DIR = "/mnt/videos/temp"
 
 # n8n Configuration
 N8N_HOST = os.getenv("N8N_HOST", "10.0.4.130")
@@ -100,14 +119,6 @@ N8N_INGEST_TOKEN = os.getenv("N8N_INGEST_TOKEN", "")
 
 # Luma AI Configuration
 LUMAAI_API_KEY = os.getenv("LUMAAI_API_KEY", "")
-
-# Page configuration
-st.set_page_config(
-    page_title="Capstone Video App",
-    page_icon="🎥",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
 
 # Custom CSS for modern, minimalistic design
 st.markdown(
