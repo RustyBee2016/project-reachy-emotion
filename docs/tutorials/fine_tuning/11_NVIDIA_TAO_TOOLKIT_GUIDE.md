@@ -56,7 +56,24 @@
 | **Pruning Support** | Remove unnecessary weights |
 | **NVIDIA Support** | Professional-grade pipeline |
 
-### 1.3 TAO Architecture Overview
+### 1.3 Important: TAO Uses ResNet-18, Not EfficientNet-B0
+
+You'll notice that the TAO configuration uses **ResNet-18** as its backbone, while the rest of this curriculum uses **EfficientNet-B0 (HSEmotion)**. This is intentional:
+
+| Aspect | PyTorch Pipeline (Guides 01-07) | TAO Pipeline (this guide) |
+|--------|--------------------------------|---------------------------|
+| **Backbone** | EfficientNet-B0 | ResNet-18 |
+| **Weights** | HSEmotion `enet_b0_8_best_vgaf` | ImageNet |
+| **Why** | Best accuracy with HSEmotion emotion-specific pre-training | TAO 4.x classification task has built-in ResNet support with optimized TensorRT export |
+| **Export** | PyTorch → ONNX → TensorRT | TAO → .etlt → TensorRT (direct) |
+| **Use case** | Development, experimentation, custom training | Production Jetson deployment when TAO's optimization matters |
+
+**Which should you use?**
+- **Start with PyTorch + EfficientNet-B0** for development and Gate A validation
+- **Use TAO + ResNet-18** when you need maximum Jetson optimization and are ready for production deployment
+- Both must independently pass Gate A (F1 ≥ 0.84) and Gate B (latency ≤ 120 ms) before deployment
+
+### 1.4 TAO Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐

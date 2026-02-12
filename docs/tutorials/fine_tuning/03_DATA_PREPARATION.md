@@ -19,13 +19,50 @@ By the end of this guide, you will:
 
 ## 1. Data Format Requirements
 
-### Directory Structure
+### Full Data Flow: `temp → dataset_all → train/test`
 
-The training code expects images organized by class:
+Before looking at directory structure, understand the complete data pipeline:
 
 ```
-data/
-├── train/                  # Training images (80% of data)
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     DATA STAGING PIPELINE                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  /videos/temp/          New videos land here (uploads or generated)      │
+│       │                                                                  │
+│       ▼  (human labeling in web UI)                                     │
+│                                                                          │
+│  /videos/dataset_all/   Accepted & labeled clips persist here            │
+│       │                 This is the MASTER corpus — never deleted         │
+│       │                                                                  │
+│       ▼  (randomized per-run sampling)                                  │
+│                                                                          │
+│  /videos/train/         Regenerated EACH fine-tuning run                 │
+│  /videos/test/          Regenerated EACH fine-tuning run                 │
+│                                                                          │
+│  Key rule: train/ and test/ are EPHEMERAL.                              │
+│  dataset_all/ is the source of truth.                                    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why `dataset_all`?** Keeping all accepted clips in one place allows randomized train/test splits to be regenerated each run, preventing data leakage and ensuring reproducible experiments.
+
+### Directory Structure (Training Input)
+
+The training code expects images organized by class in `train/` and `test/`:
+
+```
+/media/project_data/reachy_emotion/videos/
+├── dataset_all/            # Master corpus (persistent)
+│   ├── happy/
+│   │   ├── video_001.mp4
+│   │   └── ...
+│   └── sad/
+│       ├── video_001.mp4
+│       └── ...
+│
+├── train/                  # Training images (~80%, regenerated per run)
 │   ├── happy/              # Class folder
 │   │   ├── image_001.jpg
 │   │   ├── image_002.jpg
@@ -35,7 +72,7 @@ data/
 │       ├── image_002.jpg
 │       └── ...
 │
-└── val/                    # Validation images (20% of data)
+└── test/                   # Test images (~20%, regenerated per run)
     ├── happy/
     │   ├── image_101.jpg
     │   └── ...

@@ -217,7 +217,7 @@ import numpy as np
 from pathlib import Path
 from sklearn.metrics import f1_score, balanced_accuracy_score, confusion_matrix
 
-from trainer.fer_finetune.model import load_pretrained_model
+from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 from trainer.fer_finetune.dataset import create_dataloaders
 
 def evaluate_model(checkpoint_path, data_dir, class_names):

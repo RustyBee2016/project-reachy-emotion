@@ -268,9 +268,12 @@ print(f"Class distribution: {Counter(all_labels)}")
 ```python
 # Verify model works
 import torch
-from trainer.fer_finetune.model import EmotionClassifier
+from trainer.fer_finetune.model_efficientnet import EfficientNetEmotionClassifier
 
-model = EmotionClassifier(num_classes=2)
+model = EfficientNetEmotionClassifier(
+    num_classes=2,
+    pretrained_weights='enet_b0_8_best_vgaf',
+)
 device = torch.device('cuda')
 model = model.to(device)
 
@@ -282,7 +285,7 @@ print(f"Output shape: {output['logits'].shape}")  # Should be [1, 2]
 # Check gradients flow
 loss = output['logits'].sum()
 loss.backward()
-print(f"Gradients computed: {model.fc.weight.grad is not None}")
+print(f"Gradients computed: {model.classifier.weight.grad is not None}")
 ```
 
 ### Step 3: Check Config
