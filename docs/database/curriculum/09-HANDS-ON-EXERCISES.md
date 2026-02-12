@@ -31,11 +31,11 @@ psql -U reachy_app -d reachy_local -c "\dt"
 -- Connect to database
 psql -U reachy_app -d reachy_local
 
--- Insert test videos
-INSERT INTO video (file_path, split, size_bytes) VALUES
-    ('videos/lab1/001.mp4', 'temp', 1024000),
-    ('videos/lab1/002.mp4', 'temp', 2048000),
-    ('videos/lab1/003.mp4', 'temp', 512000);
+-- Insert test videos (sha256 and size_bytes are required NOT NULL columns)
+INSERT INTO video (video_id, file_path, split, size_bytes, sha256) VALUES
+    ('lab1-0001-0001-0001-000000000001', 'videos/lab1/001.mp4', 'temp', 1024000, 'lab1aaaalab1aaaalab1aaaalab1aaaalab1aaaalab1aaaalab1aaaalab1aaaa'),
+    ('lab1-0001-0001-0001-000000000002', 'videos/lab1/002.mp4', 'temp', 2048000, 'lab1bbbblab1bbbblab1bbbblab1bbbblab1bbbblab1bbbblab1bbbblab1bbbb'),
+    ('lab1-0001-0001-0001-000000000003', 'videos/lab1/003.mp4', 'temp', 512000, 'lab1cccclab1cccclab1cccclab1cccclab1cccclab1cccclab1cccclab1cccc');
 ```
 
 ### Exercises
@@ -96,16 +96,18 @@ WHERE file_path = 'videos/lab1/002.mp4';
 
 ### Setup
 ```sql
-INSERT INTO video (file_path, split, size_bytes, metadata) VALUES
-    ('videos/lab2/001.mp4', 'temp', 1000000,
+INSERT INTO video (video_id, file_path, split, size_bytes, sha256, metadata) VALUES
+    ('lab2-0001-0001-0001-000000000001', 'videos/lab2/001.mp4', 'temp', 1000000,
+     'lab2aaaalab2aaaalab2aaaalab2aaaalab2aaaalab2aaaalab2aaaalab2aaaa',
      '{"source": "jetson", "camera": "front"}'),
-    ('videos/lab2/002.mp4', 'temp', 2000000,
+    ('lab2-0001-0001-0001-000000000002', 'videos/lab2/002.mp4', 'temp', 2000000,
+     'lab2bbbblab2bbbblab2bbbblab2bbbblab2bbbblab2bbbblab2bbbblab2bbbb',
      '{"source": "upload", "user": "alice"}');
 ```
 
 ### Exercises
 
-**2.1** List all enum values for video_split:
+**2.1** List the allowed values for the `split` column by querying the CHECK constraint:
 ```sql
 -- Your answer:
 
@@ -138,8 +140,12 @@ DELETE FROM video WHERE file_path LIKE 'videos/lab2/%';
 <summary>Solutions</summary>
 
 ```sql
--- 2.1
-SELECT enum_range(NULL::video_split);
+-- 2.1 (Reachy uses CHECK constraints, not native ENUMs, so query the constraint catalog)
+SELECT conname, consrc
+FROM pg_constraint
+WHERE conrelid = 'video'::regclass
+  AND conname LIKE '%split%';
+-- Or simply check enums.py: temp, dataset_all, train, test, purged
 
 -- 2.2
 SELECT file_path, metadata

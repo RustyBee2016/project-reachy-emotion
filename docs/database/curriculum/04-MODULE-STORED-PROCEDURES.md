@@ -6,20 +6,19 @@
 
 > **Architecture Note (v08.4.2)**
 >
-> The stored procedures in this module are defined in `alembic/versions/002_stored_procedures.sql`
-> and are part of the **legacy SQL path**. The application runtime now uses **Python services**
-> (`PromoteService`, `VideoRepository`) for business logic — it does **not** call these stored
-> procedures at runtime.
+> - **Authoritative schema**: `apps/api/app/db/models.py`, `enums.py`, and the Alembic migration
+>   `202510280000_initial_schema.py`. These files drive the production database and the Python
+>   services (`PromoteService`, `VideoRepository`, etc.).
+> - **Legacy helper SQL**: The stored procedures below live in
+>   `alembic/versions/002_stored_procedures.sql`. They are optional utilities for ad-hoc analysis
+>   and experimentation. The runtime code path does **not** call them.
 >
-> However, these procedures remain valuable for:
-> - **Manual database exploration** and ad-hoc queries
-> - **Learning PL/pgSQL** and understanding database-side logic
-> - **Legacy n8n workflows** that call them directly via SQL
+> Recommended workflow:
 >
-> To use them, apply the file after running Alembic migrations:
-> ```bash
-> psql -U reachy_app -d reachy_local -f alembic/versions/002_stored_procedures.sql
-> ```
+> 1. Run Alembic so the schema defined by the ORM exists:  
+>    `alembic -c apps/api/app/db/alembic/alembic.ini upgrade head`
+> 2. (Optional) Load the legacy procedures for manual use:  
+>    `psql -U reachy_app -d reachy_local -f alembic/versions/002_stored_procedures.sql`
 
 ---
 

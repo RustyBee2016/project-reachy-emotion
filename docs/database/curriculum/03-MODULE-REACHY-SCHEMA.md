@@ -2,7 +2,7 @@
 
 **Duration**: 4 hours
 **Prerequisites**: Modules 1-2
-**Goal**: Master all 12 tables in the Reachy database and understand their relationships
+**Goal**: Master the 9 ORM-managed tables in the Reachy database and understand their relationships
 
 ---
 
@@ -10,15 +10,16 @@
 
 By the end of this module, you will be able to:
 
-1. Explain the purpose of each table in the database
+1. Explain the purpose of each ORM-managed table in the database
 2. Understand the video lifecycle from capture to training
-3. Navigate relationships between tables
+3. Navigate relationships between tables using foreign keys
 4. Write queries to answer business questions
 5. Identify which table to use for each use case
+6. Explain how the three source-of-truth files work together to define the schema
 
 ---
 
-## Lesson 3.1: The Big Picture (30 minutes)
+## Lesson 3.1: The Big Picture (45 minutes)
 
 ### Database Purpose
 
@@ -40,11 +41,13 @@ The Reachy database tracks **metadata** about emotion recognition videos:
 
 ### Table Categories
 
-The <mark>12 tables </mark>are organized into f<mark>our functional groups:</mark>
+The database has **9 ORM-managed tables** organized into four functional groups.
+These are the tables that the Python application creates, reads, and writes through
+SQLAlchemy. Each one has a corresponding Python class in `models.py`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        12 REACHY TABLES                              │
+│                   9 ORM-MANAGED REACHY TABLES                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │   CORE DATA (3 tables)                                              │
@@ -56,11 +59,6 @@ The <mark>12 tables </mark>are organized into f<mark>our functional groups:</mar
 │   ├── promotion_log      - Video lifecycle changes                  │
 │   └── label_event        - Human labeling decisions                 │
 │                                                                      │
-│   USER & EVENTS (3 tables)                                          │
-│   ├── user_session       - Web UI user sessions                     │
-│   ├── generation_request - AI video generation tracking             │
-│   └── emotion_event      - Real-time emotion detections             │
-│                                                                      │
 │   OPERATIONS (4 tables)                                             │
 │   ├── deployment_log     - Model deployments to Jetson              │
 │   ├── audit_log          - GDPR/privacy compliance                  │
@@ -70,14 +68,73 @@ The <mark>12 tables </mark>are organized into f<mark>our functional groups:</mar
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Source Files Reference
+> **What about `user_session`, `generation_request`, and `emotion_event`?**
+>
+> These three tables exist in the legacy SQL files (`001_phase1_schema.sql`) but
+> are **not** represented in the current SQLAlchemy models. They were designed for
+> future features (web UI sessions, AI video generation, real-time Jetson streaming)
+> that have not yet been implemented. If those features are built later, new ORM
+> models and Alembic migrations will be created for them. For now, ignore them —
+> they are not part of the active schema.
 
-| Group         | SQL File                                  | Lines   |
-| ------------- | ----------------------------------------- | ------- |
-| Core Data     | `alembic/versions/001_phase1_schema.sql`  | 31-80   |
-| Audit         | `alembic/versions/001_phase1_schema.sql`  | 81-117  |
-| User & Events | `alembic/versions/001_phase1_schema.sql`  | 118-175 |
-| Operations    | `alembic/versions/003_missing_tables.sql` | 1-297   |
+### Source of Truth: Three Files That Define the Schema
+
+Understanding **where** the schema is defined is just as important as understanding
+the tables themselves. The Reachy project uses three files that work together:
+
+| File | Path | Role |
+| ---- | ---- | ---- |
+| **`models.py`** | `apps/api/app/db/models.py` | Defines the 9 Python classes that map to database tables. This is the **primary** source of truth — every column, constraint, index, and relationship is declared here. When you need to know what a table looks like, read this file first. |
+| **`enums.py`** | `apps/api/app/db/enums.py` | Defines the three shared enum types (`SplitEnum`, `EmotionEnum`, `SelectionTargetEnum`) used across multiple tables. These are implemented as **CHECK constraints** (not native PostgreSQL ENUMs) for cross-database compatibility. |
+| **`202510280000_initial_schema.py`** | `apps/api/app/db/alembic/versions/` | The Alembic migration that **creates** the tables in PostgreSQL. It translates the Python model definitions into actual `CREATE TABLE` DDL. When you run `alembic upgrade head`, this file executes. |
+
+**How they work together:**
+
+```
+┌──────────────┐     imports      ┌──────────────┐
+│  enums.py    │◀────────────────│  models.py   │
+│              │                  │              │
+│  SplitEnum   │                  │  Video       │
+│  EmotionEnum │                  │  TrainingRun │
+│  Selection   │                  │  ...7 more   │
+│  TargetEnum  │                  │              │
+└──────────────┘                  └──────┬───────┘
+                                         │
+                                         │ Alembic reads models.py
+                                         │ to auto-generate migrations
+                                         ▼
+                              ┌────────────────────┐
+                              │  202510280000_     │
+                              │  initial_schema.py │
+                              │                    │
+                              │  upgrade():        │
+                              │    CREATE TABLE... │
+                              │    CREATE INDEX... │
+                              │                    │
+                              │  downgrade():      │
+                              │    DROP TABLE...   │
+                              └────────────────────┘
+                                         │
+                                         │ alembic upgrade head
+                                         ▼
+                              ┌────────────────────┐
+                              │   PostgreSQL DB     │
+                              │   (actual tables)   │
+                              └────────────────────┘
+```
+
+**Why this matters for you as an implementer:**
+
+- **To understand a table's structure** → read `models.py`
+- **To understand allowed enum values** → read `enums.py`
+- **To see exactly what SQL runs against the database** → read the Alembic migration
+- **To add a new column or table** → modify `models.py` first, then generate a new Alembic migration
+
+> ⚠️ **Important**: The legacy SQL files in `alembic/versions/` (`001_phase1_schema.sql`,
+> `002_stored_procedures.sql`, `003_missing_tables.sql`) are **deprecated**. They were
+> the original hand-written schema but have been superseded by the SQLAlchemy + Alembic
+> approach. Do not use them to create or modify the database. They remain in the repo
+> for historical reference only.
 
 ---
 
@@ -85,109 +142,110 @@ The <mark>12 tables </mark>are organized into f<mark>our functional groups:</mar
 
 ### The `video` Table - Central Registry
 
-**Source**: `001_phase1_schema.sql` lines 31-52
+**Source**: `models.py` → class `Video` (lines 34-85)
 
 This is the most important table. Every video clip has one row here.
 
+The Python model defines the table like this:
+
+```python
+class Video(TimestampMixin, Base):
+    __tablename__ = "video"
+
+    video_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    split: Mapped[str] = mapped_column(SplitEnum, nullable=False, default="temp")
+    label: Mapped[Optional[str]] = mapped_column(EmotionEnum, nullable=True)
+    duration_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    fps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    width: Mapped[Optional[int]] = mapped_column(nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(nullable=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=dict, nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+```
+
+Which translates to this SQL when the Alembic migration runs:
+
 ```sql
 CREATE TABLE video (
-    video_id     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    file_path    VARCHAR(500) NOT NULL,
-    split        video_split NOT NULL DEFAULT 'temp',
-    label        emotion_label,
-    sha256       CHAR(64),
-    duration_sec NUMERIC(10,2),
+    video_id     VARCHAR(36) PRIMARY KEY,       -- UUID stored as string for portability
+    file_path    VARCHAR(1024) NOT NULL,
+    split        VARCHAR(10) NOT NULL DEFAULT 'temp',  -- CHECK constraint, not native ENUM
+    label        VARCHAR(10),                          -- CHECK constraint, not native ENUM
+    duration_sec FLOAT,
+    fps          FLOAT,
     width        INTEGER,
     height       INTEGER,
-    fps          NUMERIC(5,2),
-    size_bytes   BIGINT,
-    metadata     JSONB DEFAULT '{}'::JSONB,
-    created_at   TIMESTAMPTZ DEFAULT now(),
-    updated_at   TIMESTAMPTZ DEFAULT now(),
-    deleted_at   TIMESTAMPTZ  -- For soft deletes (GDPR)
+    size_bytes   BIGINT NOT NULL,
+    sha256       VARCHAR(64) NOT NULL,
+    metadata     JSON,                          -- Note: column name is "metadata" in DB
+    deleted_at   TIMESTAMPTZ,                   -- Soft deletes (GDPR)
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),   -- From TimestampMixin
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()    -- From TimestampMixin
 );
 ```
 
 **Column Breakdown:**
 
-| Column            | Type         | Purpose                   | Example                        |
-| ----------------- | ------------ | ------------------------- | ------------------------------ |
-| `video_id`        | UUID         | Unique identifier         | `550e8400-e29b-41d4...`        |
-| `file_path`       | VARCHAR(500) | Relative path to MP4      | `videos/temp/001.mp4`          |
-| `split`           | ENUM         | Lifecycle stage           | `temp`, `dataset_all`, `train` |
-| `label`           | ENUM         | Emotion classification    | `happy`, `sad`, `angry`        |
-| `sha256`          | CHAR(64)     | File hash (deduplication) | `a1b2c3d4...`                  |
-| `duration_sec`    | NUMERIC      | Video length              | `5.25`                         |
-| `width`, `height` | INTEGER      | Video dimensions          | `1920`, `1080`                 |
-| `fps`             | NUMERIC      | Frames per second         | `29.97`                        |
-| `size_bytes`      | BIGINT       | File size                 | `1024000`                      |
-| `metadata`        | JSONB        | Flexible extra data       | `{"source": "jetson"}`         |
-| `created_at`      | TIMESTAMPTZ  | When added                | `2025-01-05 14:30:00`          |
-| `updated_at`      | TIMESTAMPTZ  | Last modified             | Auto-updated                   |
-| `deleted_at`      | TIMESTAMPTZ  | Soft delete marker        | NULL or timestamp              |
+| Column         | Python Type       | DB Type        | Purpose                   | Example                        |
+| -------------- | ----------------- | -------------- | ------------------------- | ------------------------------ |
+| `video_id`     | `String(36)`      | VARCHAR(36)    | UUID as string            | `"550e8400-e29b-41d4..."`      |
+| `file_path`    | `String(1024)`    | VARCHAR(1024)  | Path to MP4 on disk       | `"videos/temp/001.mp4"`        |
+| `split`        | `SplitEnum`       | VARCHAR + CHECK | Lifecycle stage          | `"temp"`, `"train"`, `"test"`  |
+| `label`        | `EmotionEnum`     | VARCHAR + CHECK | Emotion classification   | `"happy"`, `"sad"`, `"neutral"`|
+| `duration_sec` | `Float`           | FLOAT          | Video length in seconds   | `5.25`                         |
+| `fps`          | `Float`           | FLOAT          | Frames per second         | `29.97`                        |
+| `width`        | `int` (nullable)  | INTEGER        | Video width in pixels     | `1920`                         |
+| `height`       | `int` (nullable)  | INTEGER        | Video height in pixels    | `1080`                         |
+| `size_bytes`   | `BigInteger`      | BIGINT         | File size (required)      | `1024000`                      |
+| `sha256`       | `String(64)`      | VARCHAR(64)    | File hash (required)      | `"a1b2c3d4..."`                |
+| `extra_data`   | `JSON`            | JSON           | Flexible extra data       | `{"source": "jetson"}`         |
+| `deleted_at`   | `DateTime(tz)`    | TIMESTAMPTZ    | Soft delete marker        | `NULL` or timestamp            |
+| `created_at`   | via `TimestampMixin` | TIMESTAMPTZ | When row was created      | Auto-set by DB                 |
+| `updated_at`   | via `TimestampMixin` | TIMESTAMPTZ | When row was last changed | Auto-updated by SQLAlchemy     |
 
-**Key Constraints:**
+> **Design decisions to understand:**
+>
+> - **`String(36)` for UUIDs** instead of PostgreSQL's native `UUID` type. This makes
+>   the schema portable across databases (SQLite for testing, PostgreSQL for production).
+> - **`SplitEnum` and `EmotionEnum` are CHECK constraints**, not native PostgreSQL ENUMs.
+>   See `enums.py` — each enum is created with `native_enum=False, create_constraint=True`.
+>   This means the DB column is a plain `VARCHAR` with a `CHECK` constraint that limits
+>   the allowed values. This avoids the complexity of `ALTER TYPE` when adding new values.
+> - **`extra_data` maps to a DB column named `"metadata"`**. The Python attribute is called
+>   `extra_data` to avoid shadowing SQLAlchemy's internal `.metadata` attribute, but the
+>   actual database column name is `metadata`.
+> - **`TimestampMixin`** (from `base.py`) automatically adds `created_at` and `updated_at`
+>   columns with `server_default=func.now()`. The `updated_at` column also has
+>   `onupdate=func.now()` so SQLAlchemy refreshes it on every UPDATE.
 
-```sql
--- Unique file (same hash + size = same file)
-UNIQUE (sha256, size_bytes)
+**Key Constraints (from `models.py` `__table_args__`):**
 
--- Business rule: Label required for dataset_all/train
-CHECK (
+```python
+# Unique file: same hash + size = same file (deduplication)
+UniqueConstraint("sha256", "size_bytes", name="uq_video_sha256_size")
+
+# Business rule: label is required for dataset_all/train, forbidden for temp/test/purged
+CheckConstraint(
+    """
     (split IN ('temp', 'test', 'purged') AND label IS NULL)
     OR
     (split IN ('dataset_all', 'train') AND label IS NOT NULL)
+    """,
+    name="chk_video_split_label_policy",
 )
+
+# Indexes for fast lookups
+Index("ix_video_split", "split")
+Index("ix_video_label", "label")
 ```
 
----
-
-> ⚠️ **Known Issue #3: Check Constraint Inconsistency**
-> 
-> The split/label policy constraint differs between files:
-> 
-> **models.py** includes `'purged'`:
-> 
-> ```python
-> CheckConstraint(
->     "(split IN ('temp', 'test', 'purged') AND label IS NULL) OR ..."
-> )
-> ```
-> 
-> **Alembic migration** is missing `'purged'`:
-> 
-> ```python
-> CheckConstraint(
->     "(split IN ('temp', 'test') AND label IS NULL) OR ..."  # Missing 'purged'!
-> )
-> ```
-> 
-> **Impact**: Alembic-created databases reject purged videos.
-> 
-> **Fix**: Add `'purged'` to the Alembic constraint.
-> 
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
-
----
-
-> ⚠️ **Known Issue #4: Missing Check Constraint in SQL**
-> 
-> The SQL schema files (`001_phase1_schema.sql`) don't include the split/label policy constraint.
-> 
-> **Impact**: Databases created with SQL files won't enforce business rules.
-> 
-> **Fix**: Add to `001_phase1_schema.sql`:
-> 
-> ```sql
-> ALTER TABLE video ADD CONSTRAINT chk_video_split_label_policy CHECK (
->     (split IN ('temp', 'test', 'purged') AND label IS NULL)
->     OR (split IN ('dataset_all', 'train') AND label IS NOT NULL)
-> );
-> ```
-> 
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
-
----
+The `chk_video_split_label_policy` constraint is a critical business rule. It ensures
+that videos in `temp`, `test`, or `purged` splits **cannot** have a label, while videos
+in `dataset_all` or `train` **must** have one. This prevents accidental data leakage
+(e.g., a labeled video sneaking into the test set) and enforces the promotion workflow.
 
 **Common Queries:**
 
@@ -217,34 +275,42 @@ GROUP BY label;
 
 ### The `training_run` Table - ML Job Tracking
 
-**Source**: `001_phase1_schema.sql` lines 59-67
+**Source**: `models.py` → class `TrainingRun` (lines 88-136)
 
 Tracks each model training attempt:
 
-```sql
-CREATE TABLE training_run (
-    run_id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    strategy       VARCHAR(100) NOT NULL,      -- 'balanced_random', 'stratified'
-    train_fraction NUMERIC(3,2) NOT NULL,      -- 0.70 = 70% train
-    test_fraction  NUMERIC(3,2) NOT NULL,      -- 0.30 = 30% test
-    seed           BIGINT NOT NULL,            -- For reproducibility
-    dataset_hash   CHAR(64),                   -- Hash of all videos used
-    status         training_status NOT NULL DEFAULT 'pending',
-    mlflow_run_id  VARCHAR(255),               -- Link to MLflow
-    model_path     VARCHAR(500),               -- Path to .tlt model
-    engine_path    VARCHAR(500),               -- Path to TensorRT .engine
-    metrics        JSONB,                      -- F1, accuracy, etc.
-    config         JSONB,                      -- Hyperparameters
-    error_message  TEXT,                       -- If failed
-    started_at     TIMESTAMPTZ,
-    completed_at   TIMESTAMPTZ,
-    created_at     TIMESTAMPTZ DEFAULT now(),
-    updated_at     TIMESTAMPTZ DEFAULT now()
-);
+```python
+class TrainingRun(TimestampMixin, Base):
+    __tablename__ = "training_run"
 
--- Constraint: fractions can't exceed 100%
-CHECK (train_fraction + test_fraction <= 1.0)
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy: Mapped[str] = mapped_column(String(64), nullable=False)
+    train_fraction: Mapped[float] = mapped_column(Float, nullable=False)
+    test_fraction: Mapped[float] = mapped_column(Float, nullable=False)
+    seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    metrics: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 ```
+
+> **Design decisions to understand:**
+>
+> - **`seed` is nullable** (`Optional[int]`). Not every training run uses a fixed seed.
+>   The legacy SQL had `BIGINT NOT NULL`, which would reject unseeded runs.
+> - **`status` uses a CHECK constraint** (not a native ENUM) to restrict values to:
+>   `pending`, `sampling`, `training`, `evaluating`, `completed`, `failed`, `cancelled`.
+> - **`train_fraction` and `test_fraction` are `Float`**, not `NUMERIC(3,2)`. Two CHECK
+>   constraints enforce that `train_fraction` is between 0 and 1, and that the sum of
+>   both fractions does not exceed 1.0.
+> - **`metrics` and `config` are JSON columns** that store structured data (F1 scores,
+>   hyperparameters) without needing dedicated columns for each value.
 
 **Status Lifecycle:**
 
@@ -293,37 +359,38 @@ WHERE status = 'failed';
 
 ### The `training_selection` Table - Video Assignments
 
-**Source**: `001_phase1_schema.sql` lines 69-80
+**Source**: `models.py` → class `TrainingSelection` (lines 139-158)
 
 Junction table linking videos to training runs:
 
-```sql
-CREATE TABLE training_selection (
-    id           BIGSERIAL PRIMARY KEY,
-    run_id       UUID NOT NULL REFERENCES training_run(run_id) ON DELETE CASCADE,
-    video_id     UUID NOT NULL REFERENCES video(video_id) ON DELETE CASCADE,
-    target_split video_split NOT NULL,  -- 'train' or 'test'
-    selected_at  TIMESTAMPTZ DEFAULT now()
-);
+```python
+class TrainingSelection(TimestampMixin, Base):
+    __tablename__ = "training_selection"
+
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("training_run.run_id", ondelete="CASCADE"), primary_key=True,
+    )
+    video_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("video.video_id", ondelete="CASCADE"), primary_key=True,
+    )
+    target_split: Mapped[str] = mapped_column(SelectionTargetEnum, primary_key=True)
+
+    training_run: Mapped[TrainingRun] = relationship(back_populates="selections")
+    video: Mapped[Video] = relationship(back_populates="selections")
 ```
 
----
-
-> ⚠️ **Known Issue #11: TrainingSelection PK Mismatch**
-> 
-> SQL and Python models define different primary key structures:
-> 
-> **SQL**: `id BIGSERIAL PRIMARY KEY` (single auto-increment column)
-> 
-> **models.py**: Composite PK `(run_id, video_id, target_split)`
-> 
-> **Impact**: Migration conflicts if both approaches are used.
-> 
-> **Fix**: Align on one approach. Recommend keeping SQL's `BIGSERIAL` for simplicity.
-> 
-> See: `docs/database/07-KNOWN-ISSUES.md` for details.
-
----
+> **Design decisions to understand:**
+>
+> - **Composite primary key** `(run_id, video_id, target_split)` — there is no
+>   auto-increment `id` column. The combination of these three columns uniquely
+>   identifies each row. This means the same video can appear in the same run
+>   twice only if it has different `target_split` values (e.g., once as `train`
+>   and once as `test` — though in practice this shouldn't happen).
+> - **`SelectionTargetEnum`** restricts `target_split` to just `"train"` or `"test"`
+>   (defined in `enums.py`). This is a smaller set than `SplitEnum` because
+>   selection assignments only make sense for those two splits.
+> - **`ON DELETE CASCADE`** on both foreign keys means that if a training run or
+>   video is deleted, all related selection rows are automatically removed.
 
 **Relationship Diagram:**
 
@@ -331,14 +398,14 @@ CREATE TABLE training_selection (
 ┌─────────────────┐       ┌─────────────────────┐       ┌─────────────────┐
 │  training_run   │       │  training_selection │       │     video       │
 │─────────────────│       │─────────────────────│       │─────────────────│
-│ run_id (PK)     │───┐   │ id (PK)             │   ┌───│ video_id (PK)   │
-│ strategy        │   │   │ run_id (FK)         │───┘   │ file_path       │
-│ train_fraction  │   └──▶│ video_id (FK)       │       │ label           │
-└─────────────────┘       │ target_split        │       └─────────────────┘
-                          └─────────────────────┘
+│ run_id (PK)     │───┐   │ run_id (PK, FK)     │   ┌───│ video_id (PK)   │
+│ strategy        │   │   │ video_id (PK, FK)───│───┘   │ file_path       │
+│ train_fraction  │   └──▶│ target_split (PK)   │       │ label           │
+└─────────────────┘       └─────────────────────┘       └─────────────────┘
 
 One run has MANY selections
 One video can be in MANY runs
+Composite PK: (run_id, video_id, target_split)
 ```
 
 **Common Queries:**
@@ -370,26 +437,43 @@ WHERE ts.video_id = 'xyz-789-ghi';
 
 ### The `promotion_log` Table - Video Lifecycle Changes
 
-**Source**: `001_phase1_schema.sql` lines 81-103
+**Source**: `models.py` → class `PromotionLog` (lines 161-190)
 
 Immutable audit trail of all video split changes:
 
-```sql
-CREATE TABLE promotion_log (
-    id              BIGSERIAL PRIMARY KEY,
-    video_id        UUID NOT NULL REFERENCES video(video_id) ON DELETE CASCADE,
-    from_split      video_split NOT NULL,
-    to_split        video_split NOT NULL,
-    label           emotion_label,
-    user_id         VARCHAR(255),           -- Who initiated
-    correlation_id  UUID,                   -- Groups related operations
-    idempotency_key VARCHAR(64) UNIQUE,     -- Prevents duplicates
-    dry_run         BOOLEAN DEFAULT FALSE,
-    success         BOOLEAN NOT NULL,
-    error_message   TEXT,
-    promoted_at     TIMESTAMPTZ DEFAULT now()
-);
+```python
+class PromotionLog(TimestampMixin, Base):
+    __tablename__ = "promotion_log"
+
+    promotion_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    video_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("video.video_id", ondelete="CASCADE"), nullable=False,
+    )
+    from_split: Mapped[str] = mapped_column(SplitEnum, nullable=False)
+    to_split: Mapped[str] = mapped_column(SplitEnum, nullable=False)
+    intended_label: Mapped[Optional[str]] = mapped_column(EmotionEnum, nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=dict, nullable=True)
 ```
+
+> **Design decisions to understand:**
+>
+> - **`promotion_id` is an auto-increment integer**, not a UUID. Promotion logs are
+>   append-only audit records, so a simple sequential ID is sufficient and more
+>   efficient for ordering.
+> - **`intended_label`** (not `label`) — the column name clarifies that this is the
+>   label the promoter *intended* to apply, which may differ from the video's current
+>   label if the promotion failed.
+> - **`actor`** (not `user_id`) — a shorter `String(120)` that identifies who or what
+>   triggered the promotion (could be a username, an n8n workflow ID, or `"system"`).
+> - **`dry_run`** flag allows testing promotions without actually moving files. When
+>   `dry_run=True`, the log records what *would* happen without side effects.
+> - **`extra_data`** (DB column `metadata`) stores any additional context as JSON.
 
 **Key Concept: Idempotency**
 
@@ -397,10 +481,10 @@ The `idempotency_key` ensures the same operation can be safely retried:
 
 ```sql
 -- First call: inserts successfully
-INSERT INTO promotion_log (video_id, from_split, to_split, label, idempotency_key)
+INSERT INTO promotion_log (video_id, from_split, to_split, intended_label, idempotency_key)
 VALUES ('abc', 'temp', 'dataset_all', 'happy', 'promo-001');
 
--- Second call with same key: fails silently (unique violation)
+-- Second call with same key: fails (unique constraint violation)
 -- No duplicate promotion occurs!
 ```
 
@@ -408,17 +492,17 @@ VALUES ('abc', 'temp', 'dataset_all', 'happy', 'promo-001');
 
 ```sql
 -- Promotion history for a video
-SELECT from_split, to_split, label, user_id, promoted_at
+SELECT from_split, to_split, intended_label, actor, created_at
 FROM promotion_log
 WHERE video_id = 'abc-123-def'
-ORDER BY promoted_at;
+ORDER BY created_at;
 
--- Who has been labeling today?
-SELECT user_id, COUNT(*) as promotions
+-- Who has been promoting today?
+SELECT actor, COUNT(*) as promotions
 FROM promotion_log
-WHERE promoted_at > now() - INTERVAL '24 hours'
+WHERE created_at > now() - INTERVAL '24 hours'
   AND success = TRUE
-GROUP BY user_id;
+GROUP BY actor;
 
 -- Failed promotions (for debugging)
 SELECT video_id, from_split, to_split, error_message
@@ -428,186 +512,123 @@ WHERE success = FALSE;
 
 ### The `label_event` Table - Human Labeling Decisions
 
-**Source**: `003_missing_tables.sql` lines 1-30
+**Source**: `models.py` → class `LabelEvent` (lines 198-230)
 
-Detailed tracking of labeling actions:
+Audit log for all labeling actions performed by human raters:
 
-```sql
-CREATE TABLE label_event (
-    event_id        BIGSERIAL PRIMARY KEY,
-    video_id        UUID NOT NULL REFERENCES video(video_id) ON DELETE CASCADE,
-    action          VARCHAR(50) NOT NULL,   -- 'label_only', 'promote_train', 'discard'
-    label           emotion_label,
-    source_split    video_split,
-    target_split    video_split,
-    user_id         VARCHAR(255),
-    session_id      UUID,
-    confidence      NUMERIC(5,4),           -- 0.0000 to 1.0000
-    notes           TEXT,
-    idempotency_key VARCHAR(64) UNIQUE,
-    created_at      TIMESTAMPTZ DEFAULT now()
-);
+```python
+class LabelEvent(Base):
+    """Audit log for labeling actions (Labeling Agent - Agent 2)."""
+    __tablename__ = "label_event"
+
+    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    video_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("video.video_id", ondelete="SET NULL"), nullable=True,
+    )
+    label: Mapped[str] = mapped_column(EmotionEnum, nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    rater_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False,
+    )
 ```
 
-**Action Types:**
+> **Design decisions to understand:**
+>
+> - **`LabelEvent` does NOT use `TimestampMixin`** — it has its own `created_at` but
+>   no `updated_at`. Label events are immutable audit records: once written, they are
+>   never modified. This is an intentional design choice.
+> - **`video_id` uses `ON DELETE SET NULL`** (not `CASCADE`). If a video is deleted,
+>   the label event record survives with `video_id = NULL`. This preserves the audit
+>   trail even after the video is purged for privacy compliance.
+> - **`label` is NOT NULL** — every label event must record which emotion was assigned.
+> - **`action` is constrained by a CHECK** to one of five values (see table below).
+> - **`rater_id`** (not `user_id`) — identifies the human who performed the labeling.
+
+**Action Types (enforced by `chk_label_event_action`):**
 
 | Action          | Description                      |
 | --------------- | -------------------------------- |
 | `label_only`    | Add label without changing split |
 | `promote_train` | Label and move to training split |
-| `promote_test`  | Label and move to test split     |
+| `promote_test`  | Move to test split (no label)    |
 | `discard`       | Mark for deletion/purge          |
 | `relabel`       | Change existing label            |
 
 ---
 
-## Lesson 3.4: User & Event Tables (45 minutes)
+## Lesson 3.4: Legacy-Only Tables (15 minutes)
 
-### The `user_session` Table - Web UI Sessions
+The legacy SQL file `001_phase1_schema.sql` defined three additional tables that are
+**not part of the current ORM models**. They were designed for features that have not
+yet been implemented. You will encounter them in the legacy SQL files but should not
+expect to find corresponding Python classes in `models.py`.
 
-**Source**: `001_phase1_schema.sql` lines 118-133
+| Legacy Table | Intended Purpose | Why It's Not in the ORM |
+| ------------ | ---------------- | ----------------------- |
+| `user_session` | Track web UI user sessions (login, activity, logout) | The web UI (Streamlit) manages its own session state. No database-backed sessions are needed yet. |
+| `generation_request` | Track AI video generation requests (Luma, Runway API calls) | Video generation is handled externally. If integrated later, a new ORM model and migration will be created. |
+| `emotion_event` | Store real-time emotion detections from Jetson (high-volume streaming data) | Real-time inference results are consumed by the gateway and LLM pipeline, not persisted to PostgreSQL. If persistence is needed later, a time-series database or partitioned table would be more appropriate. |
 
-Tracks user activity in the labeling web interface:
-
-```sql
-CREATE TABLE user_session (
-    session_id       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id          VARCHAR(255) NOT NULL,
-    device_id        VARCHAR(255),
-    ip_address       INET,                   -- PostgreSQL IP type
-    user_agent       TEXT,
-    started_at       TIMESTAMPTZ DEFAULT now(),
-    last_activity_at TIMESTAMPTZ DEFAULT now(),
-    ended_at         TIMESTAMPTZ,
-    actions_count    INTEGER DEFAULT 0,
-    metadata         JSONB DEFAULT '{}'
-);
-```
-
-**Common Queries:**
-
-```sql
--- Active sessions
-SELECT user_id, started_at, actions_count
-FROM user_session
-WHERE ended_at IS NULL
-  AND last_activity_at > now() - INTERVAL '30 minutes';
-
--- User activity stats
-SELECT user_id, COUNT(*) as sessions, SUM(actions_count) as total_actions
-FROM user_session
-GROUP BY user_id
-ORDER BY total_actions DESC;
-```
-
-### The `generation_request` Table - AI Video Generation
-
-**Source**: `001_phase1_schema.sql` lines 136-152
-
-Tracks synthetic video generation requests (Luma, Runway):
-
-```sql
-CREATE TABLE generation_request (
-    request_id    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    prompt        TEXT NOT NULL,            -- "Person smiling"
-    emotion       emotion_label NOT NULL,   -- Target emotion
-    duration_sec  INTEGER DEFAULT 5,
-    provider      VARCHAR(50) NOT NULL,     -- 'luma', 'runway'
-    status        VARCHAR(50) DEFAULT 'pending',
-    video_id      UUID REFERENCES video(video_id),  -- Result, if any
-    api_response  JSONB,
-    error_message TEXT,
-    created_at    TIMESTAMPTZ DEFAULT now(),
-    completed_at  TIMESTAMPTZ
-);
-```
-
-### The `emotion_event` Table - Real-time Detections
-
-**Source**: `001_phase1_schema.sql` lines 155-175
-
-High-volume streaming data from Jetson edge devices:
-
-```sql
-CREATE TABLE emotion_event (
-    event_id      BIGSERIAL PRIMARY KEY,
-    device_id     VARCHAR(255) NOT NULL,
-    emotion       emotion_label NOT NULL,
-    confidence    NUMERIC(5,4) NOT NULL,    -- 0.0000 to 1.0000
-    inference_ms  NUMERIC(8,2),             -- Inference time
-    frame_number  BIGINT,
-    timestamp     TIMESTAMPTZ NOT NULL,
-    metadata      JSONB
-);
-
--- Constraint: valid confidence
-CHECK (confidence >= 0 AND confidence <= 1)
-```
-
-**Important**: This table grows FAST. Consider:
-
-- Partitioning by month
-- Archival policy
-- Aggregation views
-
-**Common Queries:**
-
-```sql
--- Recent detections
-SELECT emotion, confidence, timestamp
-FROM emotion_event
-WHERE timestamp > now() - INTERVAL '1 hour'
-ORDER BY timestamp DESC
-LIMIT 100;
-
--- Emotion distribution over time
-SELECT
-    date_trunc('hour', timestamp) as hour,
-    emotion,
-    COUNT(*) as count
-FROM emotion_event
-WHERE timestamp > now() - INTERVAL '24 hours'
-GROUP BY hour, emotion
-ORDER BY hour;
-
--- Average confidence by emotion
-SELECT emotion, ROUND(AVG(confidence)::NUMERIC, 4) as avg_confidence
-FROM emotion_event
-GROUP BY emotion;
-```
+> **Why mention them at all?**
+>
+> You may see these tables referenced in older documentation, the legacy SQL files, or
+> in the relationship diagram from the original design. Understanding that they exist
+> but are intentionally excluded from the active schema prevents confusion when you
+> encounter them. If any of these features are built in the future, the correct approach
+> is to add new ORM model classes to `models.py` and generate a new Alembic migration —
+> **not** to run the legacy SQL files.
 
 ---
 
 ## Lesson 3.5: Operations Tables (45 minutes)
 
+These four tables support the operational agents (Deployment, Privacy, Observability,
+Reconciler). Like `LabelEvent`, they do **not** use `TimestampMixin` — each manages
+its own timestamp column because they are append-only records with no `updated_at`.
+
 ### The `deployment_log` Table - Model Deployments
 
-**Source**: `003_missing_tables.sql` lines 32-75
+**Source**: `models.py` → class `DeploymentLog` (lines 233-270)
 
-Tracks TensorRT model deployments to Jetson:
+Tracks TensorRT model deployments to Jetson (Agent 7):
 
-```sql
-CREATE TABLE deployment_log (
-    deployment_id   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    run_id          UUID REFERENCES training_run(run_id),
-    device_id       VARCHAR(255) NOT NULL,
-    engine_path     VARCHAR(500) NOT NULL,
-    deploy_stage    VARCHAR(50) NOT NULL DEFAULT 'shadow',
+```python
+class DeploymentLog(Base):
+    __tablename__ = "deployment_log"
 
-    -- Gate B Performance Metrics
-    fps_measured    NUMERIC(10,2),
-    latency_p50_ms  NUMERIC(10,2),
-    latency_p95_ms  NUMERIC(10,2),
-    gpu_memory_gb   NUMERIC(5,2),
-    gate_b_passed   BOOLEAN,
-
-    status          VARCHAR(50) DEFAULT 'pending',
-    deployed_by     VARCHAR(255),
-    deployed_at     TIMESTAMPTZ DEFAULT now(),
-    rolled_back_at  TIMESTAMPTZ,
-    notes           TEXT
-);
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    engine_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    model_version: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    target_stage: Mapped[str] = mapped_column(String(50), nullable=False)
+    deployed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    metrics: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+    rollback_from: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    gate_b_passed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    fps_measured: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)
+    latency_p50_ms: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    latency_p95_ms: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    gpu_memory_gb: Mapped[Optional[float]] = mapped_column(Numeric(4, 2), nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 ```
+
+> **Design decisions to understand:**
+>
+> - **Auto-increment `id`** (not UUID) — deployment logs are sequential records.
+> - **`target_stage`** is constrained by `chk_deployment_stage` to: `shadow`, `canary`, `rollout`.
+> - **`status`** is constrained by `chk_deployment_status` to: `pending`, `deploying`,
+>   `success`, `failed`, `rolled_back`.
+> - **Gate B metrics** (`fps_measured`, `latency_p50_ms`, etc.) use `Numeric` for
+>   precise decimal storage. `gate_b_passed` is a boolean summary.
+> - **`rollback_from`** records the previous engine path when a rollback occurs.
+> - **No foreign key to `training_run`** — the deployment links to the training run
+>   via `mlflow_run_id` instead, keeping the tables loosely coupled.
 
 **Deployment Stages:**
 
@@ -625,50 +646,65 @@ shadow ───▶ canary ───▶ rollout
 
 ### The `audit_log` Table - Privacy Compliance
 
-**Source**: `003_missing_tables.sql` lines 77-105
+**Source**: `models.py` → class `AuditLog` (lines 273-297)
 
-GDPR audit trail for data access and deletion:
+GDPR audit trail for data access and deletion (Agent 8):
 
-```sql
-CREATE TABLE audit_log (
-    audit_id     BIGSERIAL PRIMARY KEY,
-    action       VARCHAR(50) NOT NULL,      -- 'purge', 'access', 'export'
-    resource     VARCHAR(100) NOT NULL,     -- 'video', 'user_session'
-    resource_id  VARCHAR(255),
-    user_id      VARCHAR(255),
-    ip_address   VARCHAR(45),
-    reason       TEXT,
-    details      JSONB,
-    created_at   TIMESTAMPTZ DEFAULT now()
-);
+```python
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, default="video")
+    entity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    operator: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict, nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 ```
 
-**Action Types:**
-
-| Action      | Description                            |
-| ----------- | -------------------------------------- |
-| `purge`     | Data deleted (right to be forgotten)   |
-| `access`    | Data accessed (subject access request) |
-| `export`    | Data exported                          |
-| `delete`    | Logical deletion                       |
-| `anonymize` | Personal data removed                  |
+> **Design decisions to understand:**
+>
+> - **`entity_type` + `entity_id`** is a polymorphic pattern — the audit log can
+>   track actions on any entity type (video, user, model) without needing a separate
+>   foreign key for each. `entity_type` defaults to `"video"`.
+> - **`operator`** (not `user_id`) — identifies who performed the action. Could be
+>   a human, an n8n workflow, or `"system"` for automated purges.
+> - **`ip_address` is `String(45)`** — long enough for IPv6 addresses (max 45 chars).
+> - **`extra_data`** (DB column `metadata`) uses `JSONB` (not plain `JSON`) for
+>   indexed, queryable storage of additional audit details.
 
 ### The `obs_samples` Table - System Metrics
 
-**Source**: `003_missing_tables.sql` lines 107-130
+**Source**: `models.py` → class `ObsSample` (lines 300-318)
 
-Time-series metrics for system monitoring:
+Time-series metrics for system monitoring (Agent 9):
 
-```sql
-CREATE TABLE obs_samples (
-    id      BIGSERIAL PRIMARY KEY,
-    ts      TIMESTAMPTZ NOT NULL,
-    src     VARCHAR(100),           -- 'n8n', 'jetson', 'gateway'
-    metric  VARCHAR(100),           -- 'gpu_temp', 'request_latency'
-    value   NUMERIC(15,4),
-    labels  JSONB                   -- Additional tags
-);
+```python
+class ObsSample(Base):
+    __tablename__ = "obs_samples"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    src: Mapped[str] = mapped_column(String(100), nullable=False)
+    metric: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[Optional[float]] = mapped_column(Numeric(15, 4), nullable=True)
+    labels: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
 ```
+
+> **Design decisions to understand:**
+>
+> - **Minimal columns by design** — this table is optimized for high-volume inserts.
+>   The `src` + `metric` pair identifies what is being measured, `value` is the
+>   measurement, and `labels` holds any additional tags as JSONB.
+> - **`Numeric(15, 4)`** for `value` — supports very large numbers (up to 10^11)
+>   with 4 decimal places of precision.
+> - **Indexed on `(ts)` and `(src, metric)`** for efficient time-range and
+>   source-filtered queries.
 
 **Example Data:**
 
@@ -679,91 +715,116 @@ CREATE TABLE obs_samples (
 
 ### The `reconcile_report` Table - Consistency Checks
 
-**Source**: `003_missing_tables.sql` lines 132-160
+**Source**: `models.py` → class `ReconcileReport` (lines 321-348)
 
-Results of filesystem/database reconciliation:
+Results of filesystem/database reconciliation (Agent 4):
 
-```sql
-CREATE TABLE reconcile_report (
-    report_id       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    run_at          TIMESTAMPTZ DEFAULT now(),
-    root_path       VARCHAR(500) NOT NULL,
+```python
+class ReconcileReport(Base):
+    __tablename__ = "reconcile_report"
 
-    -- Counts
-    files_scanned   INTEGER,
-    db_records      INTEGER,
-    orphan_files    INTEGER,       -- On disk but not in DB
-    missing_files   INTEGER,       -- In DB but not on disk
-    mismatches      INTEGER,       -- Hash/size doesn't match
-
-    -- Details
-    orphan_list     JSONB,
-    missing_list    JSONB,
-    mismatch_list   JSONB,
-
-    status          VARCHAR(50),
-    error_message   TEXT
-);
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    orphan_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    missing_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    mismatch_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    drift_detected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_fixed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    details: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 ```
+
+> **Design decisions to understand:**
+>
+> - **`trigger_type`** is constrained by `chk_reconcile_trigger` to: `scheduled`,
+>   `manual`, `webhook`. This tells you *why* the reconciliation ran.
+> - **Three count columns** (`orphan_count`, `missing_count`, `mismatch_count`)
+>   give a quick summary without needing to parse the `details` JSONB.
+>   - **Orphan**: file exists on disk but has no DB record
+>   - **Missing**: DB record exists but file is gone from disk
+>   - **Mismatch**: file exists but hash/size doesn't match the DB record
+> - **`drift_detected`** is a boolean summary — `True` if any count > 0.
+> - **`auto_fixed`** indicates whether the reconciler automatically corrected
+>   the drift (e.g., by removing orphan DB records).
+> - **`duration_ms`** tracks how long the reconciliation took, useful for
+>   monitoring performance as the dataset grows.
 
 ---
 
 ## Lesson 3.6: Complete Relationship Diagram (30 minutes)
 
+The diagram below shows all 9 ORM-managed tables and their relationships.
+Tables connected by arrows have foreign key relationships. Tables in the
+"Standalone" section have no foreign keys — they are independent records.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              REACHY DATABASE RELATIONSHIPS                           │
+│                     REACHY DATABASE RELATIONSHIPS (9 ORM Tables)                     │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
 │                              ┌─────────────────┐                                    │
 │                              │  training_run   │                                    │
 │                              │─────────────────│                                    │
-│                              │ run_id (PK)     │◀─────────────────┐                │
-│                              │ strategy        │                  │                │
-│                              │ metrics         │                  │                │
-│                              └────────┬────────┘                  │                │
-│                                       │                           │                │
-│                                       │ 1:M                       │                │
-│                                       ▼                           │                │
-│ ┌─────────────────┐         ┌─────────────────────┐      ┌─────────────────┐       │
-│ │ promotion_log   │         │ training_selection  │      │ deployment_log  │       │
-│ │─────────────────│         │─────────────────────│      │─────────────────│       │
-│ │ video_id (FK)───│────┐    │ run_id (FK)         │      │ run_id (FK)─────│───────┘
-│ │ from_split      │    │    │ video_id (FK)───────│──┐   │ device_id       │
-│ │ to_split        │    │    │ target_split        │  │   │ gate_b_passed   │
-│ └─────────────────┘    │    └─────────────────────┘  │   └─────────────────┘
-│                        │                             │
-│ ┌─────────────────┐    │    ┌─────────────────┐     │
-│ │  label_event    │    │    │     video       │◀────┘
-│ │─────────────────│    └───▶│─────────────────│
-│ │ video_id (FK)───│────────▶│ video_id (PK)   │◀────┐
-│ │ action          │         │ file_path       │     │
-│ │ label           │         │ split           │     │
-│ └─────────────────┘         │ label           │     │
-│                             └────────┬────────┘     │
-│                                      │              │
-│                                      │ 1:1         │
-│                                      ▼              │
-│                             ┌─────────────────┐     │
-│                             │generation_request│    │
-│                             │─────────────────│     │
-│                             │ video_id (FK)───│─────┘
-│                             │ prompt          │
-│                             │ provider        │
-│                             └─────────────────┘
+│                              │ run_id (PK)     │                                    │
+│                              │ strategy        │                                    │
+│                              │ status          │                                    │
+│                              │ metrics (JSON)  │                                    │
+│                              └────────┬────────┘                                    │
+│                                       │                                              │
+│                                       │ 1:M                                          │
+│                                       ▼                                              │
+│ ┌─────────────────┐         ┌─────────────────────┐                                 │
+│ │ promotion_log   │         │ training_selection  │                                 │
+│ │─────────────────│         │─────────────────────│                                 │
+│ │ promotion_id(PK)│         │ run_id (PK, FK)     │                                 │
+│ │ video_id (FK)───│────┐    │ video_id (PK, FK)───│──┐                              │
+│ │ from_split      │    │    │ target_split (PK)   │  │                              │
+│ │ intended_label  │    │    └─────────────────────┘  │                              │
+│ │ actor           │    │                             │                              │
+│ │ idempotency_key │    │                             │                              │
+│ └─────────────────┘    │                             │                              │
+│                        │    ┌─────────────────┐      │                              │
+│ ┌─────────────────┐    │    │     video       │◀─────┘                              │
+│ │  label_event    │    └───▶│─────────────────│                                     │
+│ │─────────────────│         │ video_id (PK)   │                                     │
+│ │ event_id (PK)   │         │ file_path       │                                     │
+│ │ video_id (FK)───│────────▶│ split           │                                     │
+│ │ label           │         │ label           │                                     │
+│ │ action          │         │ sha256          │                                     │
+│ │ rater_id        │         │ size_bytes      │                                     │
+│ └─────────────────┘         └─────────────────┘                                     │
+│   (ON DELETE SET NULL)        ▲  ▲  ▲                                               │
+│                               │  │  │  (all ON DELETE CASCADE except label_event)    │
 │                                                                                      │
-│   STANDALONE TABLES (no FKs):                                                       │
-│   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐│
-│   │  user_session   │  │  emotion_event  │  │   audit_log     │  │   obs_samples   ││
-│   │─────────────────│  │─────────────────│  │─────────────────│  │─────────────────││
-│   │ session_id      │  │ event_id        │  │ audit_id        │  │ id              ││
-│   │ user_id         │  │ device_id       │  │ action          │  │ ts              ││
-│   │ ip_address      │  │ emotion         │  │ resource_id     │  │ metric          ││
-│   └─────────────────┘  │ confidence      │  └─────────────────┘  │ value           ││
-│                        └─────────────────┘                       └─────────────────┘│
+│   STANDALONE TABLES (no foreign keys):                                              │
+│   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────┐│
+│   │ deployment_log  │  │   audit_log     │  │   obs_samples   │  │reconcile_report││
+│   │─────────────────│  │─────────────────│  │─────────────────│  │────────────────││
+│   │ id (PK)         │  │ id (PK)         │  │ id (PK)         │  │ id (PK)        ││
+│   │ engine_path     │  │ action          │  │ ts              │  │ run_at         ││
+│   │ target_stage    │  │ entity_type     │  │ src             │  │ trigger_type   ││
+│   │ gate_b_passed   │  │ entity_id       │  │ metric          │  │ drift_detected ││
+│   │ mlflow_run_id   │  │ operator        │  │ value           │  │ orphan_count   ││
+│   └─────────────────┘  └─────────────────┘  └─────────────────┘  └────────────────┘│
 │                                                                                      │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Key relationships to remember:**
+
+- **`video`** is the central table — three other tables reference it via foreign keys:
+  `training_selection`, `promotion_log`, and `label_event`.
+- **`training_run` → `training_selection` → `video`** is the training data pipeline.
+  A run selects many videos; a video can be in many runs (many-to-many via junction table).
+- **`promotion_log`** and **`label_event`** are audit tables that reference `video`
+  but serve different purposes: promotions track *split changes*, label events track
+  *labeling actions*.
+- **`label_event`** uses `ON DELETE SET NULL` so audit records survive video deletion.
+  All other FK relationships use `ON DELETE CASCADE`.
+- The four **standalone tables** have no foreign keys. They are independent operational
+  records that can be queried without joining to other tables.
 
 ---
 
@@ -779,18 +840,26 @@ CREATE TABLE reconcile_report (
 
 5. Which table would you query to check if the Jetson is meeting performance requirements?
 
+6. Name the three source-of-truth files and explain the role of each.
+
+7. Why does `label_event` use `ON DELETE SET NULL` instead of `ON DELETE CASCADE`?
+
 <details>
 <summary>Click to see answers</summary>
 
 1. **None!** The database stores metadata only. Video files are on the filesystem.
 
-2. To prevent duplicate promotions. If the same idempotency_key is used twice, the second insert fails silently.
+2. To prevent duplicate promotions. If the same `idempotency_key` is used twice, the second insert fails due to the unique constraint.
 
-3. `video` and `training_selection`. Join them to find videos with label='happy' that appear in training_selection.
+3. `video` and `training_selection`. Join them to find videos with `label='happy'` that appear in `training_selection`.
 
 4. They are deleted automatically due to `ON DELETE CASCADE` on the foreign key.
 
-5. `deployment_log` - check the `fps_measured`, `latency_p50_ms`, `latency_p95_ms`, and `gate_b_passed` columns.
+5. `deployment_log` — check `fps_measured`, `latency_p50_ms`, `latency_p95_ms`, and `gate_b_passed`.
+
+6. **`models.py`** defines the 9 Python classes (primary source of truth for table structure). **`enums.py`** defines the three shared enum types as CHECK constraints. **`202510280000_initial_schema.py`** is the Alembic migration that creates the actual tables in PostgreSQL.
+
+7. So that audit records survive video deletion. If a video is purged for privacy compliance, the `label_event` rows remain (with `video_id = NULL`) to preserve the audit trail.
 
 </details>
 
@@ -801,23 +870,21 @@ CREATE TABLE reconcile_report (
 ### Setup: Load Sample Data
 
 ```sql
--- Insert test videos
-INSERT INTO video (file_path, split, label, size_bytes, duration_sec) VALUES
-    ('videos/dataset/happy_001.mp4', 'dataset_all', 'happy', 1024000, 5.0),
-    ('videos/dataset/happy_002.mp4', 'dataset_all', 'happy', 1048576, 6.2),
-    ('videos/dataset/sad_001.mp4', 'dataset_all', 'sad', 2097152, 4.5),
-    ('videos/dataset/sad_002.mp4', 'dataset_all', 'sad', 1500000, 5.8),
-    ('videos/temp/unlabeled_001.mp4', 'temp', NULL, 500000, 3.0);
+-- Insert test videos (note: sha256 and size_bytes are required NOT NULL columns)
+INSERT INTO video (video_id, file_path, split, label, size_bytes, sha256, duration_sec) VALUES
+    ('aaaaaaaa-0001-0001-0001-000000000001', 'videos/dataset/happy_001.mp4', 'dataset_all', 'happy', 1024000, 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 5.0),
+    ('aaaaaaaa-0001-0001-0001-000000000002', 'videos/dataset/happy_002.mp4', 'dataset_all', 'happy', 1048576, 'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3', 6.2),
+    ('aaaaaaaa-0001-0001-0001-000000000003', 'videos/dataset/sad_001.mp4', 'dataset_all', 'sad', 2097152, 'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 4.5),
+    ('aaaaaaaa-0001-0001-0001-000000000004', 'videos/dataset/sad_002.mp4', 'dataset_all', 'sad', 1500000, 'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5', 5.8),
+    ('aaaaaaaa-0001-0001-0001-000000000005', 'videos/temp/unlabeled_001.mp4', 'temp', NULL, 500000, 'e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6', 3.0);
 
--- Create a training run
-INSERT INTO training_run (strategy, train_fraction, test_fraction, seed, status)
-VALUES ('balanced_random', 0.70, 0.30, 42, 'completed')
-RETURNING run_id;
--- Note the returned run_id
+-- Create a training run (seed is nullable in the current schema)
+INSERT INTO training_run (run_id, strategy, train_fraction, test_fraction, seed, status)
+VALUES ('bbbbbbbb-0001-0001-0001-000000000001', 'balanced_random', 0.70, 0.30, 42, 'completed');
 
--- Link videos to run (replace 'RUN_ID' with actual UUID)
+-- Link videos to run using the composite PK (run_id, video_id, target_split)
 INSERT INTO training_selection (run_id, video_id, target_split)
-SELECT 'RUN_ID', video_id,
+SELECT 'bbbbbbbb-0001-0001-0001-000000000001', video_id,
        CASE WHEN random() < 0.7 THEN 'train' ELSE 'test' END
 FROM video
 WHERE split = 'dataset_all';
@@ -861,7 +928,7 @@ WHERE split = 'dataset_all';
    SELECT v.file_path, v.label, ts.target_split
    FROM training_selection ts
    JOIN video v ON ts.video_id = v.video_id
-   WHERE ts.run_id = 'RUN_ID';
+   WHERE ts.run_id = 'bbbbbbbb-0001-0001-0001-000000000001';
    ```
 
 5. **Check train/test distribution:**
@@ -870,7 +937,7 @@ WHERE split = 'dataset_all';
    SELECT target_split, COUNT(*) as count,
        ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
    FROM training_selection
-   WHERE run_id = 'RUN_ID'
+   WHERE run_id = 'bbbbbbbb-0001-0001-0001-000000000001'
    GROUP BY target_split;
    ```
 
@@ -880,10 +947,12 @@ WHERE split = 'dataset_all';
 
 In this module, you learned:
 
-- ✅ The purpose of all 12 tables in the Reachy database
+- ✅ The purpose of all 9 ORM-managed tables in the Reachy database
+- ✅ How the three source-of-truth files (`models.py`, `enums.py`, Alembic migration) work together
 - ✅ The video lifecycle: temp → dataset_all → train/test → purged
-- ✅ How tables relate through foreign keys
+- ✅ How tables relate through foreign keys (CASCADE vs SET NULL)
 - ✅ Which table to query for different use cases
-- ✅ How to write complex queries across multiple tables
+- ✅ Why 3 legacy tables exist but are not part of the active schema
+- ✅ Key design decisions: String UUIDs, CHECK-constraint enums, composite PKs, TimestampMixin
 
 **Next**: [Module 4: Stored Procedures & Business Logic](./04-MODULE-STORED-PROCEDURES.md)

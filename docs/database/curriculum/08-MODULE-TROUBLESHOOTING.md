@@ -83,13 +83,32 @@ ERROR: invalid input value for enum video_split: "purged"
 
 **Cause:** The enum doesn't include that value.
 
-**Fix:**
+**Fix (for native ENUMs — legacy approach):**
 ```sql
--- Add missing value
 ALTER TYPE video_split ADD VALUE 'purged';
+```
 
--- Check current values
-SELECT enum_range(NULL::video_split);
+**Fix (for CHECK constraints — current Reachy approach):**
+
+Since Reachy uses `native_enum=False` (CHECK constraints, not native ENUMs), this
+error appears as a CHECK constraint violation instead. To add a new allowed value,
+update the enum definition in `apps/api/app/db/enums.py` and generate a new Alembic
+migration:
+
+```python
+# In enums.py, add the new value to the appropriate Enum:
+SplitEnum = Enum(
+    "temp", "dataset_all", "train", "test", "purged", "new_value",  # ← add here
+    name="video_split_enum",
+    native_enum=False,
+    create_constraint=True,
+)
+```
+
+Then generate and apply a migration:
+```bash
+alembic -c apps/api/app/db/alembic/alembic.ini revision --autogenerate -m "add new split value"
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
 ```
 
 ### Foreign Key Violation
@@ -411,7 +430,7 @@ async def get_recent_activity(db: AsyncSession = Depends(get_db)):
 
 1. Check if PostgreSQL is running: `sudo systemctl status postgresql`
 
-2. `ALTER TYPE enum_name ADD VALUE 'new_value';`
+2. Since Reachy uses CHECK constraints (not native ENUMs), update the enum in `enums.py` and generate a new Alembic migration. For native ENUMs: `ALTER TYPE enum_name ADD VALUE 'new_value';`
 
 3. The query execution plan and actual timing - helps identify if indexes are being used and where time is spent.
 
@@ -428,7 +447,7 @@ You should now be able to:
 - [ ] Explain relational database concepts
 - [ ] Write SQL queries (SELECT, INSERT, UPDATE, DELETE)
 - [ ] Navigate PostgreSQL with psql
-- [ ] Understand all 12 Reachy tables
+- [ ] Understand all 9 ORM-managed Reachy tables (and why 3 legacy tables are excluded)
 - [ ] Call stored procedures
 - [ ] Define SQLAlchemy models
 - [ ] Build FastAPI endpoints with database access

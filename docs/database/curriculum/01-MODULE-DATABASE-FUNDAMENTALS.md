@@ -127,32 +127,35 @@ Every column has a **data type** that defines what values it can hold:
 
 ### Reachy Example: The Video Table
 
-From `alembic/versions/001_phase1_schema.sql` (lines 31-52):
+From `apps/api/app/db/models.py` → class `Video`:
 
 ```sql
 CREATE TABLE video (
-    video_id     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    file_path    VARCHAR(500) NOT NULL,        -- Required
-    split        video_split NOT NULL DEFAULT 'temp',
-    label        emotion_label,                 -- Optional (can be NULL)
-    sha256       CHAR(64),                      -- Exactly 64 characters
-    duration_sec NUMERIC(10,2),                 -- Up to 10 digits, 2 decimal
+    video_id     VARCHAR(36) PRIMARY KEY,       -- UUID stored as string
+    file_path    VARCHAR(1024) NOT NULL,         -- Required
+    split        VARCHAR(10) NOT NULL DEFAULT 'temp',  -- CHECK constraint enum
+    label        VARCHAR(10),                    -- Optional (can be NULL)
+    sha256       VARCHAR(64) NOT NULL,           -- File hash for deduplication
+    duration_sec FLOAT,                          -- Video length in seconds
     width        INTEGER,
     height       INTEGER,
-    fps          NUMERIC(5,2),
-    size_bytes   BIGINT,
-    created_at   TIMESTAMPTZ DEFAULT now(),
-    updated_at   TIMESTAMPTZ DEFAULT now()
+    fps          FLOAT,
+    size_bytes   BIGINT NOT NULL,                -- File size (required)
+    metadata     JSON,                           -- Flexible extra data
+    deleted_at   TIMESTAMPTZ,                    -- Soft delete marker
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
 **Breaking this down:**
 
-- `video_id UUID PRIMARY KEY` - Unique identifier, auto-generated
-- `VARCHAR(500) NOT NULL` - Required text field, max 500 chars
-- `NUMERIC(10,2)` - Number like `12345678.90`
+- `video_id VARCHAR(36) PRIMARY KEY` - UUID stored as a string for cross-DB portability
+- `VARCHAR(1024) NOT NULL` - Required text field, max 1024 chars
+- `FLOAT` - Floating-point number (used for `duration_sec`, `fps`)
 - `DEFAULT 'temp'` - If not specified, use 'temp'
 - No `NOT NULL` on `label` - It can be empty (NULL)
+- `sha256` and `size_bytes` are both `NOT NULL` — every video must have a hash and size
 
 ### NULL: The Absence of Value
 
@@ -222,15 +225,16 @@ training_selection table:
                                            run-003 doesn't exist!
 ```
 
-From `001_phase1_schema.sql` (lines 69-80):
+From `apps/api/app/db/models.py` → class `TrainingSelection`:
 
 ```sql
 CREATE TABLE training_selection (
-    id           BIGSERIAL PRIMARY KEY,
-    run_id       UUID NOT NULL REFERENCES training_run(run_id) ON DELETE CASCADE,
-    video_id     UUID NOT NULL REFERENCES video(video_id) ON DELETE CASCADE,
-    target_split video_split NOT NULL,
-    selected_at  TIMESTAMPTZ DEFAULT now()
+    run_id       VARCHAR(36) NOT NULL REFERENCES training_run(run_id) ON DELETE CASCADE,
+    video_id     VARCHAR(36) NOT NULL REFERENCES video(video_id) ON DELETE CASCADE,
+    target_split VARCHAR(10) NOT NULL,  -- CHECK constraint: 'train' or 'test'
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (run_id, video_id, target_split)  -- Composite PK (no auto-increment id)
 );
 ```
 
@@ -447,17 +451,17 @@ GROUP BY tr.run_id, tr.strategy;
 
 ### Reachy Constraint Examples
 
-From `001_phase1_schema.sql`:
+From `apps/api/app/db/models.py`:
 
 ```sql
--- Unique constraint: Same hash + size = same file
-UNIQUE (sha256, size_bytes)
+-- Unique constraint: Same hash + size = same file (deduplication)
+UNIQUE (sha256, size_bytes)                     -- on video table
 
 -- Check constraint: Train + test fraction can't exceed 100%
-CHECK (train_fraction + test_fraction <= 1.0)
+CHECK (train_fraction + test_fraction <= 1.0)    -- on training_run table
 
--- Check constraint: Confidence must be 0-1
-CHECK (confidence >= 0 AND confidence <= 1)
+-- Check constraint: Deployment stage must be valid
+CHECK (target_stage IN ('shadow', 'canary', 'rollout'))  -- on deployment_log table
 ```
 
 ### The Video Split/Label Policy
@@ -465,7 +469,8 @@ CHECK (confidence >= 0 AND confidence <= 1)
 The most important business rule in Reachy:
 
 ```sql
--- From models.py (line 66-75) - should be in SQL too!
+-- Defined in models.py and enforced by the Alembic migration as:
+-- CONSTRAINT chk_video_split_label_policy
 CHECK (
     (split IN ('temp', 'test', 'purged') AND label IS NULL)
     OR
@@ -520,7 +525,7 @@ UPDATE video SET split = 'dataset_all', label = 'happy'
 WHERE video_id = 'abc-123';
 
 -- Step 2: Log the promotion
-INSERT INTO promotion_log (video_id, from_split, to_split, label, user_id)
+INSERT INTO promotion_log (video_id, from_split, to_split, intended_label, actor)
 VALUES ('abc-123', 'temp', 'dataset_all', 'happy', 'alice@example.com');
 
 COMMIT;  -- All or nothing!
@@ -620,13 +625,13 @@ psql -U reachy_app -d reachy_local
 
 ### Tasks
 
-1. **Insert test videos:**
+1. **Insert test videos** (note: `sha256` and `size_bytes` are required NOT NULL):
    
    ```sql
-   INSERT INTO video (file_path, split, size_bytes) VALUES
-    ('videos/exercise/001.mp4', 'temp', 1024000),
-    ('videos/exercise/002.mp4', 'temp', 2048000),
-    ('videos/exercise/003.mp4', 'temp', 512000);
+   INSERT INTO video (video_id, file_path, split, size_bytes, sha256) VALUES
+    ('11111111-1111-1111-1111-111111111111', 'videos/exercise/001.mp4', 'temp', 1024000, 'aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aaa111aa'),
+    ('22222222-2222-2222-2222-222222222222', 'videos/exercise/002.mp4', 'temp', 2048000, 'bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bbb222bb'),
+    ('33333333-3333-3333-3333-333333333333', 'videos/exercise/003.mp4', 'temp', 512000, 'ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333cc');
    ```
 
 2. **Promote one video to dataset_all:**

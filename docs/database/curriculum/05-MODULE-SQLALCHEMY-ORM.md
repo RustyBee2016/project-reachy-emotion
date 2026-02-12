@@ -298,24 +298,24 @@ class TrainingRun(TimestampMixin, Base):
     run_id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
     )
-    strategy: Mapped[str] = mapped_column(String(100), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(64), nullable=False)
     train_fraction: Mapped[float] = mapped_column(Float, nullable=False)
     test_fraction: Mapped[float] = mapped_column(Float, nullable=False)
-    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)  # nullable!
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     started_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    dataset_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    mlflow_run_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    model_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    engine_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    metrics: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     selections: Mapped[List["TrainingSelection"]] = relationship(
@@ -324,9 +324,20 @@ class TrainingRun(TimestampMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "train_fraction + test_fraction <= 1.0",
-            name="chk_training_run_fractions",
+            "train_fraction > 0 AND train_fraction < 1",
+            name="chk_train_fraction_range",
         ),
+        CheckConstraint(
+            "train_fraction + test_fraction <= 1.0",
+            name="chk_valid_fractions",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'sampling', 'training', 'evaluating', "
+            "'completed', 'failed', 'cancelled')",
+            name="chk_training_status",
+        ),
+        Index("ix_training_run_status", "status"),
+        Index("ix_training_run_created", "created_at"),
     )
 ```
 
@@ -341,13 +352,17 @@ class TrainingRun(TimestampMixin, Base):
 Three tables from the original SQL schema do **not** have ORM models:
 `user_session`, `generation_request`, `emotion_event`.
 
-This is an **intentional architectural decision** — these tables supported features that
-are not yet implemented in the current app runtime. They exist only in the legacy SQL path
-(`001_phase1_schema.sql`). If needed in the future, they should be added to `models.py`
-and a new Alembic migration generated.
+This is an **intentional architectural decision**:
 
-> ✅ **Resolved (by design)**: Issue #5 (Missing SQLAlchemy Models) — the 9 tables in
-> `models.py` represent the complete operational schema.
+- **`user_session`** — The Streamlit web UI manages its own session state; no DB-backed sessions needed yet.
+- **`generation_request`** — Video generation is handled externally; if integrated later, a new model will be added.
+- **`emotion_event`** — Real-time inference results flow through the gateway/LLM pipeline, not persisted to PostgreSQL.
+
+These tables exist only in the deprecated legacy SQL files (`001_phase1_schema.sql`).
+If any of these features are built in the future, the correct approach is to add new
+model classes to `models.py` and generate a new Alembic migration.
+
+> The 9 tables in `models.py` represent the complete operational schema.
 
 ---
 

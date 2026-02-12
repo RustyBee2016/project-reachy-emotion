@@ -97,14 +97,15 @@ created_at   | 2025-01-05 14:30:00+00
 ### Running SQL Files
 
 ```bash
-# From command line (legacy SQL — for reference/learning only)
-psql -d reachy_local -f alembic/versions/001_phase1_schema.sql
+# Running a SQL file from the command line
+psql -d reachy_local -f my_script.sql
 
-# From within psql
-\i alembic/versions/001_phase1_schema.sql
+# Running a SQL file from within psql
+\i my_script.sql
 
-# NOTE: For actual schema setup, use Alembic instead:
-# alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+# IMPORTANT: For actual schema setup, always use Alembic:
+alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+# The legacy SQL files (001_phase1_schema.sql, etc.) are deprecated.
 ```
 
 ### Output to File
@@ -263,9 +264,10 @@ RETURNING video_id;
 
 JSONB stores JSON data in a binary format, allowing queries into the JSON structure.
 
-From `001_phase1_schema.sql` (line 51):
-```sql
-metadata JSONB DEFAULT '{}'::JSONB
+From `models.py` — the `video` table stores flexible extra data as JSON:
+```python
+extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=dict, nullable=True)
+# DB column name is "metadata"; Python attribute is "extra_data" to avoid shadowing
 ```
 
 **Storing JSONB:**
@@ -360,11 +362,16 @@ SELECT * FROM user_session WHERE ip_address << '192.168.0.0/16';  -- Subnet matc
 -- scale = decimal places
 
 NUMERIC(10, 2)  -- Up to 99999999.99
-NUMERIC(5, 4)   -- Up to 9.9999 (for confidence scores)
+NUMERIC(5, 4)   -- Up to 9.9999
 
--- Example from video table:
-duration_sec NUMERIC(10, 2)  -- e.g., 12345678.99 seconds
-fps NUMERIC(5, 2)            -- e.g., 29.97 fps
+-- Examples from Reachy models.py:
+-- video table uses Float for duration_sec and fps (approximate is fine)
+-- deployment_log uses Numeric for precise Gate B metrics:
+fps_measured    NUMERIC(6, 2)   -- e.g., 30.00 fps
+latency_p50_ms  NUMERIC(8, 2)   -- e.g., 115.50 ms
+gpu_memory_gb   NUMERIC(4, 2)   -- e.g., 2.10 GB
+-- obs_samples uses Numeric for high-precision metric values:
+value           NUMERIC(15, 4)  -- e.g., 67.2000
 ```
 
 ---
@@ -391,18 +398,25 @@ With index:    Binary search → Fast!
 
 ### Creating Indexes
 
-From `001_phase1_schema.sql` (lines 54-58):
+From `models.py` — indexes are declared in `__table_args__` and created by the Alembic migration:
+
+```python
+# In models.py, Video class:
+__table_args__ = (
+    Index("ix_video_split", "split"),
+    Index("ix_video_label", "label"),
+)
+```
+
+Which translates to this SQL when the migration runs:
 
 ```sql
 -- Simple index on one column
-CREATE INDEX idx_video_split ON video(split);
-CREATE INDEX idx_video_label ON video(label);
+CREATE INDEX ix_video_split ON video(split);
+CREATE INDEX ix_video_label ON video(label);
 
--- Index for descending time queries (newest first)
-CREATE INDEX idx_video_created ON video(created_at DESC);
-
--- Unique index (enforces uniqueness)
-CREATE UNIQUE INDEX idx_video_sha256 ON video(sha256);
+-- Composite index (from promotion_log)
+CREATE INDEX ix_promotion_log_video_time ON promotion_log(video_id, created_at);
 ```
 
 ### Composite Indexes
