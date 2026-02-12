@@ -131,7 +131,7 @@ class AppConfig:
     database_url: str = field(
         default_factory=lambda: os.getenv(
             "REACHY_DATABASE_URL",
-            "postgresql+asyncpg://reachy_app:reachy_app@localhost:5432/reachy_local"
+            "postgresql+asyncpg://reachy_dev:tweetwd4959@localhost:5432/reachy_emotion"
         )
     )
     

@@ -77,7 +77,7 @@ EOF
 pip install -r requirements-phase1.txt
 
 # Apply schema via Alembic
-alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
+alembic -c apps/api/app/db/alembic.ini upgrade head
 ```
 
 ---
@@ -182,7 +182,7 @@ The current Alembic migration (`202510280000_initial_schema.py`) creates these *
 After running `alembic upgrade head`, connect and verify:
 
 ```bash
-psql -U reachy_app -d reachy_local
+psql -U reachy_dev -d reachy_emotion
 ```
 
 ```sql
@@ -208,6 +208,14 @@ psql -U reachy_app -d reachy_local
 -- Exit psql
 \q
 ```
+
+### To change the owner of the tables to reachy_dev:
+#### log in as the OS postgres user:
+sudo -u postgres psql -d reachy_emotion
+
+ALTER TABLE promotion_log      OWNER TO reachy_dev;
+ALTER TABLE training_run       OWNER TO reachy_dev;
+ALTER TABLE training_selection OWNER TO reachy_dev;
 
 ---
 
@@ -330,8 +338,18 @@ Create `.env` file in `apps/api/`:
 
 ```bash
 # apps/api/.env
-REACHY_DATABASE_URL=postgresql+asyncpg://reachy_app:dev_password@localhost:5432/reachy_local
-REACHY_VIDEOS_ROOT=/mnt/videos
+
+# previous config:
+# REACHY_DATABASE_URL=postgresql+asyncpg://reachy_app:dev_password@localhost:5432/reachy_local
+# auto-generated config:
+# REACHY_DATABASE_URL=postgresql+asyncpg://reachy_dev:dev_password@localhost:5432/reachy_emotion
+# actual config:
+REACHY_DATABASE_URL=postgresql+asyncpg://reachy_dev:tweetwd4959@/reachy_emotion?host=/var/run/postgresql
+
+# previous config:
+# REACHY_VIDEOS_ROOT=/mnt/videos
+# actual config:
+REACHY_VIDEOS_ROOT=/media/rusty_admin/project_data/reachy_emotion/videos
 REACHY_API_PORT=8083
 ```
 
@@ -347,6 +365,8 @@ REACHY_API_PORT=8083
 
 The database URL is configured in `apps/api/app/config.py`:
 
+
+# Previous config is wrong:
 ```python
 class Settings(BaseSettings):
     REACHY_DATABASE_URL: str = "postgresql+asyncpg://reachy_app:password@localhost:5432/reachy_local"
@@ -356,9 +376,9 @@ class Settings(BaseSettings):
 
 | Use Case | Connection String |
 |----------|-------------------|
-| psql CLI | `psql -U reachy_app -d reachy_local` |
-| Python sync | `postgresql://reachy_app:pass@localhost:5432/reachy_local` |
-| Python async | `postgresql+asyncpg://reachy_app:pass@localhost:5432/reachy_local` |
+| psql CLI | `psql -U reachy_dev -d reachy_emotion` |
+| Python sync | `postgresql://reachy_dev:tweetwd4959@localhost:5432/reachy_emotion` |
+| Python async | `postgresql+asyncpg://reachy_dev:tweetwd4959@localhost:5432/reachy_emotion` |
 | Alembic | Configured in `apps/api/app/db/alembic/alembic.ini` or via `REACHY_DATABASE_URL` env var |
 
 **Gateway health endpoints:** Ubuntu 2 exposes `/health` and `/ready` (no `/api` prefix). When Nginx fronts the service, these appear externally as `/healthz` and `/readyz`, while Media Mover on Ubuntu 1 uses `/api/v1/health`. Keep the distinction in mind when writing monitoring checks.
@@ -377,7 +397,7 @@ from sqlalchemy import text
 
 async def test():
     engine = create_async_engine(
-        "postgresql+asyncpg://reachy_app:dev_password@localhost/reachy_local"
+        "postgresql+asyncpg://reachy_dev:tweetwd4959@/reachy_emotion?host=/var/run/postgresql"
     )
     async with engine.connect() as conn:
         result = await conn.execute(text("SELECT version()"))
@@ -385,6 +405,13 @@ async def test():
 
 asyncio.run(test())
 ```
+
+##### Call the script:
+```bash
+python scripts/diagnostics/test_connection.py
+```
+
+
 
 ### Test Table Existence
 
