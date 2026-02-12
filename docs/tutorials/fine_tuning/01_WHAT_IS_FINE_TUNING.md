@@ -130,6 +130,18 @@ When fine-tuning:
 | **High accuracy** | State-of-the-art on emotion benchmarks |
 | **Edge-optimized** | Runs well on Jetson Xavier NX |
 | **HSEmotion pre-trained** | VGGFace2 + AffectNet weights available |
+| **3× latency headroom** | ~40 ms vs 120 ms budget — leaves room for gesture planning |
+| **3× memory headroom** | ~0.8 GB vs 2.5 GB budget — protects future multimodal features |
+
+### What About EfficientNet-B2?
+
+HSEmotion also provides `enet_b2_8` weights, which offer higher accuracy in unconstrained settings. However, **B2 is not approved for production** because:
+
+- Expected to **exceed** Jetson latency limit (≤120 ms)
+- Expected to **exceed** Jetson GPU memory limit (≤2.5 GB)
+- Requirements mandate a full **benchmark/validation cycle** and Gate B re-establishment before any promotion to B2
+
+**Bottom line**: Use B0 unless the hardware constraints change. See `requirements.md §6.7` for the full rationale.
 
 ### EfficientNet-B0 Architecture (Simplified)
 

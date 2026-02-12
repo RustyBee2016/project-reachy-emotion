@@ -95,7 +95,7 @@ Before starting, ensure you have:
 ### Key Commands
 
 ```bash
-# Train 2-class model (happy/sad) - EfficientNet-B0 (RECOMMENDED)
+# Train 2-class model (happy/sad) — EfficientNet-B0
 python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
 
 # Train 8-class model (all emotions)
@@ -106,9 +106,6 @@ python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0
 
 # Export to ONNX
 python trainer/train_efficientnet.py --export-only --resume checkpoints/best_model.pth --export-path exports/
-
-# Legacy: ResNet-50 (for comparison only)
-python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_2cls.yaml
 ```
 
 ### Key Files
@@ -116,21 +113,20 @@ python trainer/train_resnet50.py --config fer_finetune/specs/resnet50_emotion_2c
 ```
 trainer/
 ├── train_efficientnet.py       # Main training script (EfficientNet-B0)
-├── train_resnet50.py           # Legacy ResNet-50 script
 ├── fer_finetune/
 │   ├── config.py               # Training configuration
 │   ├── model_efficientnet.py   # EfficientNet-B0 model (HSEmotion)
-│   ├── model.py                # ResNet-50 model (legacy)
 │   ├── train_efficientnet.py   # EfficientNet training loop
-│   ├── train.py                # ResNet-50 training loop
 │   ├── dataset.py              # Data loading
 │   ├── evaluate.py             # Metrics computation
 │   ├── export.py               # ONNX export
 │   └── specs/
-│       ├── efficientnet_b0_emotion_2cls.yaml  # 2-class config (RECOMMENDED)
-│       ├── efficientnet_b0_emotion_8cls.yaml  # 8-class config
-│       ├── resnet50_emotion_2cls.yaml         # Legacy 2-class
-│       └── resnet50_emotion_8cls.yaml         # Legacy 8-class
+│       ├── efficientnet_b0_emotion_2cls.yaml  # 2-class config (START HERE)
+│       └── efficientnet_b0_emotion_8cls.yaml  # 8-class config
+├── tao/                        # NVIDIA TAO Toolkit (see Guide 11)
+│   ├── specs/emotionnet_2cls.yaml
+│   ├── docker-compose-tao.yml
+│   └── setup_tao_env.sh
 ```
 
 ### Gate A Requirements

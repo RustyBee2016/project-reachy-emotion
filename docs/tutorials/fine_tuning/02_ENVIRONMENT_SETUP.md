@@ -138,9 +138,14 @@ pip install -r requirements-phase2.txt
 
 ```bash
 # Deep learning utilities
-pip install timm              # Pre-trained models
+pip install timm              # Pre-trained model backbones (fallback weight source)
 pip install albumentations    # Image augmentation
 pip install opencv-python     # Image processing
+
+# HSEmotion / EmotiEffLib — primary weight source for EfficientNet-B0
+# See requirements.md §6.7 for model selection rationale
+pip install hsemotion          # HSEmotion library (enet_b0_8_best_vgaf weights)
+pip install emotiefflib        # Video-optimized EfficientNet emotion weights
 
 # Experiment tracking
 pip install mlflow            # Experiment tracking
@@ -164,7 +169,17 @@ import albumentations
 import cv2
 import mlflow
 import sklearn
-print('All imports successful!')
+try:
+    import hsemotion
+    print('hsemotion: installed')
+except ImportError:
+    print('hsemotion: NOT installed (timm fallback will be used)')
+try:
+    import emotiefflib
+    print('emotiefflib: installed')
+except ImportError:
+    print('emotiefflib: NOT installed (hsemotion or timm fallback will be used)')
+print('All core imports successful!')
 "
 ```
 
@@ -236,7 +251,64 @@ print('HSEmotion weights downloaded successfully')
 "
 ```
 
-### Step 6.3: Verify Weights
+### Step 6.3: Weight Source Fallback Chain
+
+The project uses a **three-tier fallback** for pre-trained weights (per requirements §6.7):
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                  WEIGHT SOURCE PRIORITY                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Priority 1: HSEmotion / EmotiEffLib (PREFERRED)                        │
+│  ──────────────────────────────────────────────                         │
+│  pip install emotiefflib   # or: pip install hsemotion                  │
+│  Weights: enet_b0_8_best_vgaf (VGGFace2 + AffectNet)                   │
+│  → Best accuracy, specifically trained for facial emotion recognition   │
+│                                                                          │
+│  Priority 2: timm (FALLBACK)                                            │
+│  ─────────────────────────────                                          │
+│  pip install timm                                                        │
+│  Weights: EfficientNet-B0 ImageNet                                      │
+│  → Good general features, but NOT emotion-specific                      │
+│  → Training will take longer to converge                                 │
+│  → Used automatically if HSEmotion weights are unavailable               │
+│                                                                          │
+│  Priority 3: Random initialization (LAST RESORT)                        │
+│  ─────────────────────────────────────────────────                      │
+│  No pre-trained weights at all                                           │
+│  → Requires much more training data and time                             │
+│  → NOT recommended for this project                                      │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**If HSEmotion weight download fails** (firewall, air-gapped environment):
+
+```bash
+# Check what's available
+python -c "
+from pathlib import Path
+
+# Check HSEmotion cache
+hs_cache = Path.home() / '.cache' / 'hsemotion' / 'enet_b0_8_best_vgaf.pt'
+print(f'HSEmotion weights: {\"FOUND\" if hs_cache.exists() else \"NOT FOUND\"}')
+
+# Check timm availability
+try:
+    import timm
+    model = timm.create_model('efficientnet_b0', pretrained=False)
+    print('timm fallback: AVAILABLE (will use ImageNet weights)')
+except ImportError:
+    print('timm fallback: NOT AVAILABLE')
+"
+
+# If behind a firewall, download weights on a machine with access
+# then copy the file manually:
+# scp enet_b0_8_best_vgaf.pt user@training-server:~/.cache/hsemotion/
+```
+
+### Step 6.4: Verify Weights
 
 ```bash
 python -c "
@@ -253,6 +325,7 @@ if weights_file.exists():
     print(f'Model type: EfficientNet-B0 (8-class emotion)')
 else:
     print('Weights not yet downloaded - will download on first training run')
+    print('If download fails, see Step 6.3 for fallback options')
 "
 ```
 

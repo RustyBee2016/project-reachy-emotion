@@ -540,4 +540,56 @@ In the next guide, we'll learn about monitoring and debugging:
 
 ---
 
+## Appendix: Multi-Task Training (Phase 2 Preview)
+
+You may have noticed `use_multi_task: false` in the training config. This section explains what multi-task training is and when it will be enabled.
+
+### What is Multi-Task Training?
+
+In Phase 1, the model has a **single output head**: classify an image as `happy` or `sad`.
+
+In Phase 2, the model will have **multiple output heads** (per requirements v0.09.0):
+
+```
+                    EfficientNet-B0 Backbone
+                            │
+                ┌───────────┼───────────┐
+                ▼           ▼           ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────────┐
+        │Categorical│ │  Degree  │ │   Gesture    │
+        │   Head    │ │   Head   │ │  Alignment   │
+        │(happy/sad)│ │  (0–1)   │ │   Summary    │
+        └──────────┘ └──────────┘ └──────────────┘
+              │           │              │
+              ▼           ▼              ▼
+         Emotion      Confidence     Gesture cue
+         class        score          for Reachy
+```
+
+| Head | Output | Purpose |
+|------|--------|---------|
+| **Categorical** | Class label (happy, sad, etc.) | Same as Phase 1 |
+| **Degree** | Scalar 0–1 | How intensely the emotion is expressed |
+| **Gesture Alignment** | Summary vector | Drives Reachy's gesture planning |
+
+### When to Enable Multi-Task
+
+Multi-task training is enabled by changing the config:
+
+```yaml
+model:
+  use_multi_task: true       # Enable multi-task heads
+  degree_weight: 0.3         # Loss weight for degree head
+  gesture_weight: 0.1        # Loss weight for gesture head
+```
+
+**Do NOT enable multi-task yet** — it requires:
+1. Degree labels in the dataset (from web UI slider annotations)
+2. Gesture alignment targets (from Phase 2 cue planner)
+3. Updated Gate A thresholds for multi-task evaluation
+
+Multi-task training will be covered in a dedicated Phase 2 tutorial when the infrastructure is ready.
+
+---
+
 *Next: [Guide 05: Monitoring & Debugging](05_MONITORING_DEBUGGING.md)*

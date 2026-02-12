@@ -339,7 +339,7 @@ import torch
 import numpy as np
 import onnxruntime as ort
 
-from trainer.fer_finetune.model import load_pretrained_model
+from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 
 def compare_pytorch_onnx(checkpoint_path, onnx_path, num_classes=2):
     """Compare outputs from PyTorch and ONNX models."""
@@ -455,6 +455,25 @@ After deployment to Jetson, the model must pass **Gate B**:
 | Latency p95 | ≤ 250 ms | Jetson |
 | GPU Memory | ≤ 2.5 GB | Jetson |
 | Macro F1 | ≥ 0.80 | Jetson (may be slightly lower than Gate A) |
+
+### Why 3× Headroom Matters
+
+EfficientNet-B0 runs at **~40 ms p50** on Jetson Xavier NX — well under the 120 ms limit. This isn't over-engineering; the extra budget is **shared with other workloads** on the same GPU:
+
+```
+Jetson Xavier NX — Shared GPU Budget (120 ms total)
+────────────────────────────────────────────────────────────
+Emotion inference (EfficientNet-B0):   ~40 ms  ██████████░░░░░░░░░░░░░░░░░░░░
+Gesture planner (cue computation):     ~25 ms  ██████░░░░░░░░░░░░░░░░░░░░░░░░
+Future multimodal features:            ~15 ms  ████░░░░░░░░░░░░░░░░░░░░░░░░░░
+Thermal/overhead margin:               ~40 ms  ██████████░░░░░░░░░░░░░░░░░░░░
+────────────────────────────────────────────────────────────
+Total:                                 120 ms  ██████████████████████████████
+```
+
+Per requirements §7.1: *"Make sure this margin remains ≥2× after TensorRT optimization before clearing Gate B."*
+
+If you switch to a larger model (e.g., EfficientNet-B2), the gesture planner and future features lose their budget. This is why B2 requires a full benchmark/validation cycle before approval (see §6.7).
 
 Gate B validation is covered in the Phase 2 tutorials.
 
