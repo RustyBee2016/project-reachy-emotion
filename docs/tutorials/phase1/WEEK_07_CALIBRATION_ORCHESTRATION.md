@@ -723,14 +723,14 @@ logger.log_full_analysis(report, run_name=f"analysis_{model_name}")
 
 ```bash
 # 1. Generate/prepare prediction data
-python trainer/train_resnet50.py --evaluate --save-predictions
+python trainer/train_efficientnet.py --evaluate --save-predictions
 
 # 2. Run full analysis with MLflow logging
 python stats/scripts/run_full_analysis.py \
     --predictions outputs/predictions.npz \
     --paired outputs/paired_predictions.npz \
     --folds outputs/fold_metrics.json \
-    --model-name resnet50_v1 \
+    --model-name efficientnet_b0_v1 \
     --log-mlflow
 
 # 3. View results

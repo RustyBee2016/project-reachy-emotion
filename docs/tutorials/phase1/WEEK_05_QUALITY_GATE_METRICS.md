@@ -70,6 +70,10 @@ Where:
 
 **Macro F1** = Average of F1 scores for all classes:
 ```
+# For Phase 1 (3-class: happy, sad, neutral):
+Macro F1 = (F1_happy + F1_sad + F1_neutral) / 3
+
+# For full 8-class expansion:
 Macro F1 = (F1_happy + F1_sad + F1_angry + ... + F1_surprise) / 8
 ```
 
@@ -78,6 +82,10 @@ Macro F1 = (F1_happy + F1_sad + F1_angry + ... + F1_surprise) / 8
 ```
 Balanced Accuracy = Average of per-class recall
 
+# For Phase 1 (3-class):
+= (Recall_happy + Recall_sad + Recall_neutral) / 3
+
+# For full 8-class:
 = (Recall_happy + Recall_sad + ... + Recall_surprise) / 8
 ```
 

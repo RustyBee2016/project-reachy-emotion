@@ -92,9 +92,9 @@ Each module follows this pattern:
 
 | Module | Title | Workflow | Duration | Status |
 |--------|-------|----------|----------|--------|
-| **06** | [Training Orchestrator](MODULE_06_TRAINING_ORCHESTRATOR.md) | `05_training_orchestrator_resnet50.json` | 5 hours | ✅ Complete |
-| **07** | [Evaluation Agent](MODULE_07_EVALUATION_AGENT.md) | `06_evaluation_agent_resnet50.json` | 3 hours | ✅ Complete |
-| **08** | [Deployment Agent](MODULE_08_DEPLOYMENT_AGENT.md) | `07_deployment_agent_resnet50.json` | 4 hours | ✅ Complete |
+| **06** | [Training Orchestrator](MODULE_06_TRAINING_ORCHESTRATOR.md) | `05_training_orchestrator_efficientnet.json` | 5 hours | ✅ Complete |
+| **07** | [Evaluation Agent](MODULE_07_EVALUATION_AGENT.md) | `06_evaluation_agent_efficientnet.json` | 3 hours | ✅ Complete |
+| **08** | [Deployment Agent](MODULE_08_DEPLOYMENT_AGENT.md) | `07_deployment_agent_efficientnet.json` | 4 hours | ✅ Complete |
 
 **Topics**: Long-running processes, MLflow integration, quality gates, SSH/SCP, rollback patterns
 
@@ -276,9 +276,9 @@ Track your proficiency with each node type:
 | `02_labeling_agent.json` | 02 | Labeling Agent |
 | `03_promotion_agent.json` | 03 | Promotion Agent |
 | `04_reconciler_agent.json` | 04 | Reconciler Agent |
-| `05_training_orchestrator_resnet50.json` | 06 | Training Orchestrator |
-| `06_evaluation_agent_resnet50.json` | 07 | Evaluation Agent |
-| `07_deployment_agent_resnet50.json` | 08 | Deployment Agent |
+| `05_training_orchestrator_efficientnet.json` | 06 | Training Orchestrator |
+| `06_evaluation_agent_efficientnet.json` | 07 | Evaluation Agent |
+| `07_deployment_agent_efficientnet.json` | 08 | Deployment Agent |
 | `08_privacy_agent.json` | 05 | Privacy Agent |
 | `09_observability_agent.json` | 09 | Observability Agent |
 | `10_ml_pipeline_orchestrator.json` | 10 | ML Pipeline Orchestrator |

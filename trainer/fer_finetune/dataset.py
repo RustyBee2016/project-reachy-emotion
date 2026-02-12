@@ -39,8 +39,8 @@ class EmotionDataset(Dataset):
     - Class-organized directory structure: data_dir/{class_name}/*.mp4
     """
     
-    # Default class mapping for binary classification
-    DEFAULT_CLASSES = {"happy": 0, "sad": 1}
+    # Default class mapping for 3-class classification
+    DEFAULT_CLASSES = {"happy": 0, "sad": 1, "neutral": 2}
     
     # Full 8-class mapping (AffectNet compatible)
     FULL_CLASSES = {
@@ -84,7 +84,7 @@ class EmotionDataset(Dataset):
         
         # Set up class mapping
         if class_names is None:
-            class_names = ["happy", "sad"]
+            class_names = ["happy", "sad", "neutral"]
         self.class_names = class_names
         self.class_to_idx = {name: idx for idx, name in enumerate(class_names)}
         self.idx_to_class = {idx: name for name, idx in self.class_to_idx.items()}
@@ -384,7 +384,7 @@ def validate_dataset(
         Validation results dictionary
     """
     if class_names is None:
-        class_names = ["happy", "sad"]
+        class_names = ["happy", "sad", "neutral"]
     
     dataset = EmotionDataset(
         data_dir=data_dir,

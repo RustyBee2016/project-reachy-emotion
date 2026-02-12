@@ -164,7 +164,7 @@ def _fetch_training_runs() -> List[Dict[str, Any]]:
                     "brier": 0.12,
                     "loss": 0.234,
                 },
-                "model_path": "/models/emotion_resnet50_v1.pt",
+                "model_path": "/models/emotion_efficientnet_b0_v1.pt",
                 "gate_a_passed": True,
             },
             {
@@ -182,7 +182,7 @@ def _fetch_training_runs() -> List[Dict[str, Any]]:
                     "brier": 0.19,
                     "loss": 0.312,
                 },
-                "model_path": "/models/emotion_resnet50_v0.pt",
+                "model_path": "/models/emotion_efficientnet_b0_v0.pt",
                 "gate_a_passed": False,
             },
         ]

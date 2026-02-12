@@ -1,11 +1,11 @@
 {
-  "name": "Agent 7 — Deployment Agent ResNet-50 (Reachy 08.4.2)",
-  "description": "Deploys validated ResNet-50 emotion classifier to Jetson Xavier NX. Handles ONNX→TensorRT conversion and DeepStream integration.",
+  "name": "Agent 7 — Deployment Agent EfficientNet-B0 (Reachy 08.4.2)",
+  "description": "Deploys validated EfficientNet-B0 emotion classifier to Jetson Xavier NX. Handles ONNX→TensorRT conversion and DeepStream integration.",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "agent/deployment/resnet50/start",
+        "path": "agent/deployment/efficientnet/start",
         "responseMode": "onReceived",
         "options": {"responseCode": 202}
       },
@@ -14,7 +14,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 3,
       "position": [-600, 300],
-      "webhookId": "resnet50-deploy-start"
+      "webhookId": "efficientnet-deploy-start"
     },
     {
       "parameters": {
@@ -33,7 +33,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Prepare deployment paths\nconst runId = $json.run_id;\nconst onnxPath = $json.onnx_path || `/workspace/exports/${runId}/emotion_classifier_${runId}.onnx`;\nconst enginePath = `/opt/reachy/models/emotion_resnet50.engine`;\nconst backupPath = `/opt/reachy/models/backup/emotion_resnet50_${Date.now()}.engine`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    onnx_path: onnxPath,\n    engine_path: enginePath,\n    backup_path: backupPath,\n    model_placeholder: 'resnet50-affectnet-raf-db',\n    deployment_stage: 'shadow'\n  }\n}];"
+        "jsCode": "// Prepare deployment paths\nconst runId = $json.run_id;\nconst onnxPath = $json.onnx_path || `/workspace/exports/${runId}/emotion_classifier_${runId}.onnx`;\nconst enginePath = `/opt/reachy/models/emotion_resnet50.engine`;\nconst backupPath = `/opt/reachy/models/backup/emotion_resnet50_${Date.now()}.engine`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    onnx_path: onnxPath,\n    engine_path: enginePath,\n    backup_path: backupPath,\n    model_placeholder: 'efficientnet-b0-hsemotion',\n    deployment_stage: 'shadow'\n  }\n}];"
       },
       "id": "prepare_deploy",
       "name": "Code: prepare.deployment",
@@ -130,7 +130,7 @@
           "parameters": [
             {"name": "event_type", "value": "=deployment.completed"},
             {"name": "run_id", "value": "={{$json.run_id}}"},
-            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
             {"name": "engine_path", "value": "={{$json.engine_path}}"},
             {"name": "fps", "value": "={{$json.metrics.fps}}"},
             {"name": "latency_p50_ms", "value": "={{$json.metrics.latency_p50_ms}}"},
@@ -195,7 +195,7 @@
     "ssh_rollback": {"main": [[{"node": "emit_rollback", "type": "main", "index": 0}]]}
   },
   "settings": {"executionOrder": "v1", "saveManualExecutions": true},
-  "tags": [{"name": "agent"}, {"name": "deployment"}, {"name": "resnet50"}, {"name": "ml-v1"}],
+  "tags": [{"name": "agent"}, {"name": "deployment"}, {"name": "efficientnet"}, {"name": "ml-v1"}],
   "updatedAt": "2025-11-29T00:00:00.000Z",
   "versionId": "1"
 }

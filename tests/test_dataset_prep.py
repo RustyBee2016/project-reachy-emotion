@@ -22,8 +22,8 @@ def temp_dataset_dir():
     dataset_all = base_path / 'dataset_all'
     dataset_all.mkdir()
     
-    # Create emotion directories with sample files
-    for emotion in ['happy', 'sad']:
+    # Create emotion directories with sample files (3-class: happy, sad, neutral)
+    for emotion in ['happy', 'sad', 'neutral']:
         emotion_dir = dataset_all / emotion
         emotion_dir.mkdir()
         
@@ -68,9 +68,9 @@ class TestDatasetPreparer:
         assert 'seed' in result
         assert 'dataset_hash' in result
         
-        # Check counts (20 total videos, 70/30 split)
-        assert result['train_count'] == 14
-        assert result['test_count'] == 6
+        # Check counts (30 total videos, 70/30 split)
+        assert result['train_count'] == 21
+        assert result['test_count'] == 9
         assert result['seed'] == 42
     
     def test_train_test_split_ratio(self, temp_dataset_dir):
@@ -166,7 +166,7 @@ class TestDatasetPreparer:
         with open(train_manifest) as f:
             train_lines = f.readlines()
         
-        assert len(train_lines) == 14  # 70% of 20
+        assert len(train_lines) == 21  # 70% of 30
         
         # Check each line is valid JSON
         for line in train_lines:
@@ -174,7 +174,7 @@ class TestDatasetPreparer:
             assert 'video_id' in entry
             assert 'path' in entry
             assert 'label' in entry
-            assert entry['label'] in ['happy', 'sad']
+            assert entry['label'] in ['happy', 'sad', 'neutral']
     
     def test_dataset_hash_calculation(self, temp_dataset_dir):
         """Test dataset hash is calculated correctly."""

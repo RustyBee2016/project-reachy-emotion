@@ -55,11 +55,12 @@ By the end of this module, you will:
 ```sql
 SELECT 
   COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test,
-  COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test
+  COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test,
+  COUNT(*) FILTER (WHERE label='neutral' AND split='test') AS neutral_test
 FROM video;
 ```
 
-**Requirement**: Both counts ≥ 20 for evaluation.
+**Requirement**: All counts ≥ 20 for evaluation.
 
 **Status**: ⬜ → [ ] Complete
 
@@ -136,7 +137,7 @@ emit.completed   emit.gate_failed
 
 ### Step 1: Create the Workflow
 
-1. Create: `Agent 6 — Evaluation Agent ResNet-50 (Reachy 08.4.2)`
+1. Create: `Agent 6 — Evaluation Agent EfficientNet-B0 (Reachy 08.4.2)`
 2. Settings: Execution Order = `v1`
 
 ---
@@ -148,13 +149,13 @@ emit.completed   emit.gate_failed
 | Parameter | Value |
 |-----------|-------|
 | HTTP Method | `POST` |
-| Path | `agent/evaluation/resnet50/start` |
+| Path | `agent/evaluation/efficientnet/start` |
 | Response Mode | `When Last Node Finishes` |
 
 **Expected Input**:
 ```json
 {
-  "run_id": "resnet50_emotion_xxx",
+  "run_id": "efficientnet_b0_emotion_xxx",
   "checkpoint_path": "/path/to/best_model.pth",
   "correlation_id": "string",
   "mlflow_run_id": "string"
@@ -183,7 +184,7 @@ FROM video;
 
 | Parameter | Value |
 |-----------|-------|
-| Value 1 | `={{Math.min($json.happy_test, $json.sad_test)}}` |
+| Value 1 | `={{Math.min($json.happy_test, $json.sad_test, $json.neutral_test)}}` |
 | Operation | `Larger or Equal` |
 | Value 2 | `20` |
 
@@ -204,7 +205,7 @@ return [{
     ...$('Webhook: evaluation.start').item.json,
     run_id: runId,
     checkpoint_path: checkpointPath,
-    model_placeholder: 'resnet50-affectnet-raf-db',
+    model_placeholder: 'efficientnet-b0-hsemotion',
     test_data_path: '/media/project_data/reachy_emotion/videos/test',
     output_dir: `/home/rusty_admin/projects/reachy_08.4.2/experiments/${runId}`
   }
@@ -227,13 +228,13 @@ cd /home/rusty_admin/projects/reachy_08.4.2 && \
 source venv/bin/activate && \
 python -c "
 import json
-from trainer.fer_finetune.model import load_pretrained_model
+from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 from trainer.fer_finetune.dataset import create_dataloaders
 from trainer.fer_finetune.evaluate import evaluate_model
 
-model = load_pretrained_model('{{$json.checkpoint_path}}', num_classes=2)
+model = load_pretrained_model('{{$json.checkpoint_path}}', num_classes=3)
 _, test_loader = create_dataloaders('{{$json.test_data_path}}', batch_size=32)
-results = evaluate_model(model, test_loader, class_names=['happy', 'sad'])
+results = evaluate_model(model, test_loader, class_names=['happy', 'sad', 'neutral'])
 print(json.dumps(results))
 "
 ```
@@ -347,7 +348,7 @@ return [{
 {
   "event_type": "evaluation.completed",
   "run_id": "={{$json.run_id}}",
-  "model": "resnet50-affectnet-raf-db",
+  "model": "efficientnet-b0-hsemotion",
   "gate_a_passed": "={{$json.gate_a.passed}}",
   "f1_macro": "={{$json.metrics.f1_macro}}",
   "ece": "={{$json.metrics.ece}}",
@@ -361,7 +362,7 @@ return [{
 {
   "event_type": "evaluation.gate_failed",
   "run_id": "={{$json.run_id}}",
-  "model": "resnet50-affectnet-raf-db",
+  "model": "efficientnet-b0-hsemotion",
   "gate_a_details": "={{JSON.stringify($json.gate_a)}}",
   "metrics": "={{JSON.stringify($json.metrics)}}"
 }

@@ -11,7 +11,7 @@
 This week focuses on integrating statistical analysis with the training pipeline, validating pre-trained weights, and ensuring Gate A checks are automated.
 
 ### Weekly Goals
-- [ ] Download/verify pre-trained ResNet-50 weights (AffectNet + RAF-DB)
+- [ ] Download/verify pre-trained EfficientNet-B0 weights (AffectNet + RAF-DB)
 - [ ] End-to-end test training pipeline with synthetic data
 - [ ] Validate Gate A checks in training orchestrator
 - [ ] Wire stats scripts to post-training evaluation
@@ -22,7 +22,7 @@ This week focuses on integrating statistical analysis with the training pipeline
 
 ### Step 1.1: Understand the Model Architecture
 
-The project uses ResNet-50 pre-trained on AffectNet + RAF-DB datasets for facial emotion recognition.
+The project uses EfficientNet-B0 pre-trained on AffectNet + RAF-DB datasets for facial emotion recognition.
 
 **Key files:**
 - `trainer/fer_finetune/model.py` — Model architecture
@@ -36,7 +36,7 @@ Create `trainer/download_pretrained_weights.py`:
 ```python
 #!/usr/bin/env python3
 """
-Download and verify pre-trained ResNet-50 weights for emotion recognition.
+Download and verify pre-trained EfficientNet-B0 weights for emotion recognition.
 
 Supports:
 - HSEmotion weights (AffectNet + RAF-DB)
@@ -60,12 +60,12 @@ WEIGHT_SOURCES = {
     "hsemotion_affectnet": {
         "url": "https://github.com/HSE-asavchenko/face-emotion-recognition/releases/download/v1.0/affectnet_emotions.pt",
         "sha256": None,  # Will be computed on first download
-        "description": "HSEmotion ResNet-50 trained on AffectNet",
+        "description": "HSEmotion EfficientNet-B0 trained on AffectNet",
     },
     "hsemotion_rafdb": {
         "url": "https://github.com/HSE-asavchenko/face-emotion-recognition/releases/download/v1.0/rafdb_emotions.pt",
         "sha256": None,
-        "description": "HSEmotion ResNet-50 trained on RAF-DB",
+        "description": "HSEmotion EfficientNet-B0 trained on RAF-DB",
     },
     "imagenet": {
         "url": "torchvision",  # Use torchvision built-in
@@ -493,7 +493,7 @@ output:
 python trainer/create_synthetic_dataset.py --n-train 50 --n-val 10 --n-test 10
 
 # Run training
-python trainer/train_resnet50.py --config fer_finetune/specs/test_synthetic.yaml --run-id test_e2e
+python trainer/train_efficientnet.py --config fer_finetune/specs/test_synthetic.yaml --run-id test_e2e
 
 # Verify outputs
 ls outputs/test_run/
@@ -840,7 +840,7 @@ def run_gate_a_validation(self, test_loader) -> bool:
 
 ```bash
 # Run training with Gate A validation
-python trainer/train_resnet50.py \
+python trainer/train_efficientnet.py \
     --config fer_finetune/specs/test_synthetic.yaml \
     --run-id test_gate_a
 
@@ -1051,7 +1051,7 @@ python trainer/create_synthetic_dataset.py
 python trainer/download_pretrained_weights.py --source imagenet
 
 # 3. Run training
-python trainer/train_resnet50.py \
+python trainer/train_efficientnet.py \
     --config fer_finetune/specs/test_synthetic.yaml \
     --run-id week2_final_test
 

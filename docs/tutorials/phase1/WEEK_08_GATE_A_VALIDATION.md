@@ -390,7 +390,7 @@ if __name__ == "__main__":
    python trainer/gate_a_validator.py \
        --checkpoint outputs/best_model.pt \
        --test-dir data/test \
-       --model-name resnet50_v1
+       --model-name efficientnet_b0_v1
    ```
 
 2. **Interpret results**:
@@ -585,7 +585,7 @@ if __name__ == "__main__":
    python trainer/post_training_analysis.py \
        --checkpoint outputs/best_model.pt \
        --test-dir data/test \
-       --model-name resnet50_final
+       --model-name efficientnet_b0_final
    ```
 
 2. **Check MLflow for logged results**:

@@ -332,7 +332,7 @@ set -e
 JETSON_HOST="${JETSON_HOST:-10.0.4.150}"
 JETSON_USER="${JETSON_USER:-reachy}"
 ONNX_FILE="$1"
-ENGINE_NAME="${2:-emotion_resnet50.engine}"
+ENGINE_NAME="${2:-emotion_efficientnet.engine}"
 
 if [ -z "$ONNX_FILE" ]; then
     echo "Usage: $0 <onnx_file> [engine_name]"
@@ -368,7 +368,7 @@ echo "Engine build complete!"
 ```bash
 # On Jetson, test with a sample ONNX
 python3 build_engine.py \
-    --onnx /opt/reachy/models/onnx/emotion_resnet50.onnx \
+    --onnx /opt/reachy/models/onnx/emotion_efficientnet.onnx \
     --precision fp16 \
     --benchmark
 ```
@@ -765,7 +765,7 @@ if __name__ == "__main__":
 ```bash
 # On Jetson
 python3 gate_b_validator.py \
-    --engine /opt/reachy/models/engines/emotion_resnet50.engine \
+    --engine /opt/reachy/models/engines/emotion_efficientnet.engine \
     --duration 30 \
     --output /tmp/gate_b_results.json
 ```
@@ -782,7 +782,7 @@ python3 gate_b_validator.py \
 
 ### Step 3.1: Import Deployment Agent Workflow
 
-1. Import `n8n/workflows/ml-agentic-ai_v.2/07_deployment_agent_resnet50.json`
+1. Import `n8n/workflows/ml-agentic-ai_v.2/07_deployment_agent_efficientnet.json`
 2. Review workflow nodes
 
 ### Step 3.2: Understand Deployment Agent Flow
@@ -869,7 +869,7 @@ import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DEFAULT_ENGINE_PATH = Path("/opt/reachy/models/engines/emotion_resnet50.engine")
+DEFAULT_ENGINE_PATH = Path("/opt/reachy/models/engines/emotion_efficientnet.engine")
 DEFAULT_BACKUP_DIR = Path("/opt/reachy/models/backup")
 DEEPSTREAM_SERVICE = "reachy-emotion"
 

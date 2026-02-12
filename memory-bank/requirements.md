@@ -349,7 +349,7 @@ The project is organized into three sequential phases, each building on the prev
   "meta": { "model_version": "emotionnet-0.8.4-trt", "temp": 68.2 }
 }
 ```
-Validation: `emotion ∈ {happy, sad}`, `0 ≤ confidence ≤ 1`.
+Validation: `emotion ∈ {happy, sad, neutral}`, `0 ≤ confidence ≤ 1`.
 
 ### 13.2 Ubuntu 2 → Ubuntu 1: LLM Chat (LM Studio)
 Endpoint: `POST http://10.0.4.140:1234/v1/chat/completions` (messages array with system+user prompts).

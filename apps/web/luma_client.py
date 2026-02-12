@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Luma AI Video Generation Client
 Handles video generation using Luma Dream Machine API (Ray 2 model)

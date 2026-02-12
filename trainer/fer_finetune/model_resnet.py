@@ -28,8 +28,8 @@ class EmotionClassifier(nn.Module):
     ResNet-50 based emotion classifier with AffectNet+RAF-DB pretraining.
     
     Supports:
-    - Binary classification (happy/sad)
-    - Multi-class classification (8 emotions)
+    - 3-class classification (happy/sad/neutral) for Phase 1
+    - Multi-class classification (8 emotions) for Phase 2+
     - Optional multi-task learning (emotions + valence/arousal)
     
     Transfer learning strategy:
@@ -40,7 +40,7 @@ class EmotionClassifier(nn.Module):
     def __init__(
         self,
         backbone: str = "resnet50",
-        num_classes: int = 2,
+        num_classes: int = 3,
         dropout_rate: float = 0.3,
         pretrained_weights: str = MODEL_PLACEHOLDER,
         use_multi_task: bool = False,
@@ -50,7 +50,7 @@ class EmotionClassifier(nn.Module):
         
         Args:
             backbone: Backbone architecture ("resnet50", "resnet18", "efficientnet_b0")
-            num_classes: Number of emotion classes (2 for binary, 8 for full)
+            num_classes: Number of emotion classes (3 for Phase 1, 8 for full)
             dropout_rate: Dropout probability before classification head
             pretrained_weights: Weight source - MODEL_PLACEHOLDER or path to .pth
             use_multi_task: Enable multi-task head (emotions + VA regression)
@@ -332,7 +332,7 @@ class EmotionClassifier(nn.Module):
 
 def load_pretrained_model(
     checkpoint_path: str,
-    num_classes: int = 2,
+    num_classes: int = 3,
     device: str = "cuda",
 ) -> EmotionClassifier:
     """
@@ -383,7 +383,7 @@ class StudentEmotionClassifier(EmotionClassifier):
     def __init__(
         self,
         backbone: str = "resnet18",
-        num_classes: int = 2,
+        num_classes: int = 3,
         dropout_rate: float = 0.2,
         pretrained_weights: str = "imagenet",
     ):

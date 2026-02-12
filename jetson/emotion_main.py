@@ -106,7 +106,7 @@ class EmotionDetectionService:
                 import random
                 from datetime import datetime
                 
-                emotion = random.choice(['happy', 'sad'])
+                emotion = random.choice(['happy', 'sad', 'neutral'])
                 confidence = 0.80 + random.random() * 0.15
                 inference_ms = 40.0 + random.random() * 20.0
                 

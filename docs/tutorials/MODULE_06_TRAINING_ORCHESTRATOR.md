@@ -60,7 +60,8 @@ By the end of this module, you will:
 ```sql
 SELECT 
   COUNT(*) FILTER (WHERE label='happy' AND split='train') AS happy_train,
-  COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train
+  COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train,
+  COUNT(*) FILTER (WHERE label='neutral' AND split='train') AS neutral_train
 FROM video;
 ```
 
@@ -85,7 +86,7 @@ curl http://10.0.4.130:5000/api/2.0/mlflow/experiments/list
 #### Test 3: Training Script Exists
 
 ```bash
-ls -la /home/rusty_admin/projects/reachy_08.4.2/trainer/train_resnet50.py
+ls -la /home/rusty_admin/projects/reachy_08.4.2/trainer/train_efficientnet.py
 ```
 
 **Status**: ⬜ → [ ] Complete
@@ -156,7 +157,7 @@ ML training is fundamentally different from typical API calls:
 
 ### Step 1: Create the Workflow
 
-1. Create: `Agent 5 — Training Orchestrator ResNet-50 (Reachy 08.4.2)`
+1. Create: `Agent 5 — Training Orchestrator EfficientNet-B0 (Reachy 08.4.2)`
 2. Settings: Execution Order = `v1`
 
 ---
@@ -168,7 +169,7 @@ ML training is fundamentally different from typical API calls:
 | Parameter | Value |
 |-----------|-------|
 | HTTP Method | `POST` |
-| Path | `agent/training/resnet50/start` |
+| Path | `agent/training/efficientnet/start` |
 | Response Mode | `When Last Node Finishes` |
 | Response Code | `202` |
 
@@ -202,7 +203,7 @@ FROM video;
 | Parameter | Value |
 |-----------|-------|
 | Condition | Number |
-| Value 1 | `={{Math.min($json.happy_train, $json.sad_train)}}` |
+| Value 1 | `={{Math.min($json.happy_train, $json.sad_train, $json.neutral_train)}}` |
 | Operation | `Larger or Equal` |
 | Value 2 | `50` |
 
@@ -226,7 +227,7 @@ FROM video;
 {
   "experiment_id": "={{$env.MLFLOW_EXPERIMENT_ID}}",
   "tags": [
-    {"key": "model", "value": "resnet50-affectnet-raf-db"},
+    {"key": "model", "value": "efficientnet-b0-hsemotion"},
     {"key": "trigger", "value": "n8n"}
   ]
 }
@@ -245,15 +246,15 @@ FROM video;
 const timestamp = new Date().toISOString()
   .replace(/[-:T]/g, '')
   .slice(0, 14);
-const runId = `resnet50_emotion_${timestamp}`;
+const runId = `efficientnet_b0_emotion_${timestamp}`;
 
 return [{
   json: {
     ...items[0].json,
     run_id: runId,
-    config_path: '/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml',
-    model_placeholder: 'resnet50-affectnet-raf-db',
-    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50',
+    config_path: '/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml',
+    model_placeholder: 'efficientnet-b0-hsemotion',
+    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet_b0',
     experiments_dir: '/home/rusty_admin/projects/reachy_08.4.2/experiments'
   }
 }];
@@ -274,7 +275,7 @@ return [{
 cd /home/rusty_admin/projects/reachy_08.4.2 && \
 source venv/bin/activate && \
 mkdir -p {{$json.experiments_dir}}/{{$json.run_id}} && \
-nohup python trainer/train_resnet50.py \
+nohup python trainer/train_efficientnet.py \
   --config {{$json.config_path}} \
   --run-id {{$json.run_id}} \
   > {{$json.experiments_dir}}/{{$json.run_id}}/train.log 2>&1 &
@@ -418,7 +419,7 @@ return [{
 {
   "event_type": "training.completed",
   "run_id": "={{$json.run_id}}",
-  "model": "resnet50-affectnet-raf-db",
+  "model": "efficientnet-b0-hsemotion",
   "gate_a_passed": true,
   "f1_macro": "={{$json.gate_results.f1_macro}}",
   "onnx_path": "={{$json.export?.onnx || ''}}"
@@ -432,7 +433,7 @@ return [{
 {
   "event_type": "training.gate_failed",
   "run_id": "={{$json.run_id}}",
-  "model": "resnet50-affectnet-raf-db",
+  "model": "efficientnet-b0-hsemotion",
   "gate_a_passed": false,
   "message": "Gate A requirements not met"
 }
@@ -512,7 +513,7 @@ emit_completed
 First, ensure you have < 50 samples per class:
 
 ```bash
-curl -X POST http://10.0.4.130:5678/webhook-test/agent/training/resnet50/start \
+curl -X POST http://10.0.4.130:5678/webhook-test/agent/training/efficientnet/start \
   -H "Content-Type: application/json" \
   -d '{}'
 ```

@@ -36,7 +36,7 @@ Update `README.md` with current project status:
 ## Overview
 
 Reachy Emotion Recognition is a privacy-preserving emotion classification system
-for the Reachy Mini companion robot. It uses ResNet-50 fine-tuned on AffectNet
+for the Reachy Mini companion robot. It uses EfficientNet-B0 fine-tuned on AffectNet
 and RAF-DB datasets to classify emotions from video in real-time.
 
 ## Features
@@ -443,7 +443,7 @@ ORDER BY split, label;
 
 1. Export ONNX from training:
    ```bash
-   python trainer/train_resnet50.py --export-only --checkpoint best_model.pt
+   python trainer/train_efficientnet.py --export-only --checkpoint best_model.pt
    ```
 
 2. Transfer to Jetson:
@@ -458,7 +458,7 @@ ORDER BY split, label;
 
 4. Validate Gate B:
    ```bash
-   ssh reachy@10.0.4.150 "python3 /opt/reachy/gate_b_validator.py --engine /opt/reachy/models/engines/emotion_resnet50.engine"
+   ssh reachy@10.0.4.150 "python3 /opt/reachy/gate_b_validator.py --engine /opt/reachy/models/engines/emotion_efficientnet.engine"
    ```
 
 5. Restart DeepStream:
@@ -1331,7 +1331,7 @@ All notable changes to this project will be documented in this file.
   - Security headers
 
 ### Changed
-- Updated ResNet-50 model architecture for 2-class (happy/sad) classification
+- Updated EfficientNet-B0 model architecture for 2-class (happy/sad) classification
 - Improved error handling with consistent error format
 - Enhanced documentation with tutorials and runbooks
 

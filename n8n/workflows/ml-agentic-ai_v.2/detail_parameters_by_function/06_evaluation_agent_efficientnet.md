@@ -1,14 +1,14 @@
-# Agent 6 — Evaluation Agent ResNet-50 (Reachy 08.4.2)
+# Agent 6 — Evaluation Agent EfficientNet-B0 (Reachy 08.4.2)
 
-> **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/06_evaluation_agent_resnet50.json`  
+> **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/06_evaluation_agent_efficientnet.json`  
 > **Version:** 08.4.2  
 > **Last Updated:** 2025-11-29
 
 ## Overview
 
-The Evaluation Agent runs validation jobs on trained ResNet-50 models. It checks for a balanced test set (≥20 samples per class), executes evaluation via SSH, computes comprehensive metrics including calibration (ECE, Brier), validates Gate A requirements, logs metrics to MLflow, and emits completion events.
+The Evaluation Agent runs validation jobs on trained EfficientNet-B0 models. It checks for a balanced test set (≥20 samples per class), executes evaluation via SSH, computes comprehensive metrics including calibration (ECE, Brier), validates Gate A requirements, logs metrics to MLflow, and emits completion events.
 
-**Model:** `resnet50-affectnet-raf-db`
+**Model:** `efficientnet-b0-hsemotion`
 
 ## Node Inventory (Alphabetical)
 
@@ -72,16 +72,16 @@ IF: test_set.balanced? (min 20/class)
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
 | `httpMethod` | `POST` | Accept POST requests |
-| `path` | `agent/evaluation/resnet50/start` | URL path |
+| `path` | `agent/evaluation/efficientnet/start` | URL path |
 | `responseMode` | `onReceived` | Respond immediately |
-| `webhookId` | `resnet50-eval-start` | Unique identifier |
+| `webhookId` | `efficientnet-eval-start` | Unique identifier |
 
 #### Expected Input
 
 ```json
 {
-  "run_id": "resnet50_emotion_xxx",
-  "checkpoint_path": "/workspace/checkpoints/resnet50_emotion/best_model.pth",
+  "run_id": "efficientnet_b0_emotion_xxx",
+  "checkpoint_path": "/workspace/checkpoints/efficientnet_b0_emotion/best_model.pth",
   "correlation_id": "string",
   "mlflow_run_id": "string"
 }
@@ -146,14 +146,14 @@ FROM video;
 // Prepare evaluation command
 const runId = $json.run_id || 'latest';
 const checkpointPath = $json.checkpoint_path || 
-  `/workspace/checkpoints/resnet50_emotion/best_model.pth`;
+  `/workspace/checkpoints/efficientnet_b0_emotion/best_model.pth`;
 
 return [{
   json: {
     ...items[0].json,
     run_id: runId,
     checkpoint_path: checkpointPath,
-    model_placeholder: 'resnet50-affectnet-raf-db'
+    model_placeholder: 'efficientnet-b0-hsemotion'
   }
 }];
 ```
@@ -351,7 +351,7 @@ return [{
 |-----------|-------|---------|
 | `event_type` | `evaluation.completed` | Event type |
 | `run_id` | `={{$json.run_id}}` | Run ID |
-| `model` | `resnet50-affectnet-raf-db` | Model |
+| `model` | `efficientnet-b0-hsemotion` | Model |
 | `gate_a_passed` | `={{$json.gate_a.passed}}` | Gate result |
 | `f1_macro` | `={{$json.metrics.f1_macro}}` | F1 score |
 | `ece` | `={{$json.metrics.ece}}` | ECE |
@@ -373,7 +373,7 @@ return [{
 |-----------|-------|---------|
 | `event_type` | `evaluation.gate_failed` | Event type |
 | `run_id` | `={{$json.run_id}}` | Run ID |
-| `model` | `resnet50-affectnet-raf-db` | Model |
+| `model` | `efficientnet-b0-hsemotion` | Model |
 | `gate_a_details` | `={{JSON.stringify($json.gate_a)}}` | Gate details |
 | `metrics` | `={{JSON.stringify($json.metrics)}}` | All metrics |
 
@@ -403,7 +403,7 @@ return [{
 
 - `agent`
 - `evaluation`
-- `resnet50`
+- `efficientnet`
 - `ml-v1`
 
 ---

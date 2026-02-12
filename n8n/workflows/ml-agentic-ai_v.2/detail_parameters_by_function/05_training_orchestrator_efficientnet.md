@@ -1,15 +1,15 @@
-# Agent 5 — Training Orchestrator ResNet-50 (Reachy 08.4.2)
+# Agent 5 — Training Orchestrator EfficientNet-B0 (Reachy 08.4.2)
 
-> **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/05_training_orchestrator_resnet50.json`  
+> **Workflow File:** `n8n/workflows/ml-agentic-ai_v.2/05_training_orchestrator_efficientnet.json`  
 > **Version:** 08.4.2  
 > **Last Updated:** 2025-11-29
 
 ## Overview
 
-The Training Orchestrator triggers ResNet-50 emotion classifier fine-tuning using AffectNet+RAF-DB pretrained weights. It checks for sufficient training data (≥50 samples per class), creates MLflow runs for experiment tracking, executes training via SSH, polls for completion, validates Gate A requirements, and emits completion events.
+The Training Orchestrator triggers EfficientNet-B0 emotion classifier fine-tuning using AffectNet+RAF-DB pretrained weights. It checks for sufficient training data (≥50 samples per class), creates MLflow runs for experiment tracking, executes training via SSH, polls for completion, validates Gate A requirements, and emits completion events.
 
-**Model:** `resnet50-affectnet-raf-db`  
-**Storage Path:** `/media/rusty_admin/project_data/ml_models/resnet50`
+**Model:** `efficientnet-b0-hsemotion`  
+**Storage Path:** `/media/rusty_admin/project_data/ml_models/efficientnet`
 
 ## Node Inventory (Alphabetical)
 
@@ -92,10 +92,10 @@ IF: sufficient_data? (min 50/class)
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
 | `httpMethod` | `POST` | Accept POST requests |
-| `path` | `agent/training/resnet50/start` | URL path |
+| `path` | `agent/training/efficientnet/start` | URL path |
 | `responseMode` | `onReceived` | Respond immediately |
 | `options.responseCode` | `202` | HTTP 202 Accepted |
-| `webhookId` | `resnet50-training-start` | Unique identifier |
+| `webhookId` | `efficientnet-training-start` | Unique identifier |
 
 #### Test Status: ✅ OPERATIONAL
 
@@ -191,15 +191,15 @@ FROM video;
 ```javascript
 // Generate run ID and prepare training command
 const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-const runId = `resnet50_emotion_${timestamp}`;
+const runId = `efficientnet_b0_emotion_${timestamp}`;
 
 return [{
   json: {
     ...items[0].json,
     run_id: runId,
-    config_path: '/workspace/trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml',
-    model_placeholder: 'resnet50-affectnet-raf-db',
-    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50'
+    config_path: '/workspace/trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml',
+    model_placeholder: 'efficientnet-b0-hsemotion',
+    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet'
   }
 }];
 ```
@@ -208,22 +208,22 @@ return [{
 
 ```json
 {
-  "run_id": "resnet50_emotion_20251129143000",
-  "config_path": "/workspace/trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml",
-  "model_placeholder": "resnet50-affectnet-raf-db",
-  "model_storage_path": "/media/rusty_admin/project_data/ml_models/resnet50"
+  "run_id": "efficientnet_b0_emotion_20251129143000",
+  "config_path": "/workspace/trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
+  "model_placeholder": "efficientnet-b0-hsemotion",
+  "model_storage_path": "/media/rusty_admin/project_data/ml_models/efficientnet"
 }
 ```
 
 #### Related Code
 
-**File:** `trainer/train_resnet50.py`
+**File:** `trainer/train_efficientnet.py`
 
 | Function | Lines | Purpose |
 |----------|-------|---------|
 | `main()` | 1-204 | Training entry point |
 
-**File:** `trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml`
+**File:** `trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml`
 
 | Purpose |
 |---------|
@@ -243,7 +243,7 @@ return [{
 
 ```bash
 cd /workspace && source venv/bin/activate && \
-python trainer/train_resnet50.py \
+python trainer/train_efficientnet.py \
   --config {{$json.config_path}} \
   --run-id {{$json.run_id}} \
   > /workspace/experiments/{{$json.run_id}}/train.log 2>&1
@@ -257,7 +257,7 @@ python trainer/train_resnet50.py \
 
 #### Related Code
 
-**File:** `trainer/train_resnet50.py`
+**File:** `trainer/train_efficientnet.py`
 
 | Function | Lines | Purpose |
 |----------|-------|---------|
@@ -355,7 +355,7 @@ return [{
     "ece": 0.06
   },
   "export": {
-    "onnx": "/workspace/exports/resnet50_emotion_xxx/model.onnx"
+    "onnx": "/workspace/exports/efficientnet_b0_emotion_xxx/model.onnx"
   }
 }
 ```
@@ -458,7 +458,7 @@ return [{
 |-----------|-------|---------|
 | `event_type` | `training.completed` | Event type |
 | `run_id` | `={{$json.run_id}}` | Training run ID |
-| `model` | `resnet50-affectnet-raf-db` | Model identifier |
+| `model` | `efficientnet-b0-hsemotion` | Model identifier |
 | `gate_a_passed` | `={{$json.gate_results.gate_a}}` | Gate result |
 | `onnx_path` | `={{$json.export?.onnx \|\| ''}}` | Export path |
 | `best_f1` | `={{$json.best_metric}}` | Best F1 score |
@@ -479,7 +479,7 @@ return [{
 |-----------|-------|---------|
 | `event_type` | `training.gate_failed` | Event type |
 | `run_id` | `={{$json.run_id}}` | Training run ID |
-| `model` | `resnet50-affectnet-raf-db` | Model identifier |
+| `model` | `efficientnet-b0-hsemotion` | Model identifier |
 | `best_f1` | `={{$json.best_metric}}` | Best F1 achieved |
 | `message` | Gate A requirements not met | Error message |
 
@@ -529,7 +529,7 @@ return [{
 
 - `agent`
 - `training`
-- `resnet50`
+- `efficientnet`
 - `ml-v1`
 
 ---
@@ -538,13 +538,13 @@ return [{
 
 | File | Purpose |
 |------|---------|
-| `trainer/train_resnet50.py` | Main training script |
+| `trainer/train_efficientnet.py` | Main training script |
 | `trainer/fer_finetune/train.py` | Trainer class |
 | `trainer/fer_finetune/model.py` | Model architecture |
 | `trainer/fer_finetune/dataset.py` | Data loading |
 | `trainer/fer_finetune/evaluate.py` | Evaluation metrics |
 | `trainer/fer_finetune/export.py` | ONNX export |
-| `trainer/fer_finetune/specs/resnet50_emotion_2cls.yaml` | Config |
+| `trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml` | Config |
 
 ---
 

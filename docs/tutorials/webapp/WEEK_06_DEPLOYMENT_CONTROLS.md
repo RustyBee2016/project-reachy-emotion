@@ -149,7 +149,7 @@ def _fetch_engine_status() -> Dict[str, Any]:
         # This would call deployment API
         # Mock data for development
         return {
-            "current_engine": "emotion_resnet50_v1.engine",
+            "current_engine": "emotion_efficientnet_b0_v1.engine",
             "engine_version": "0.08.4.3",
             "deployment_stage": "rollout",
             "deployed_at": "2026-01-25T14:30:00Z",
@@ -183,7 +183,7 @@ def _fetch_available_engines() -> List[Dict[str, Any]]:
     """Fetch list of available engines for deployment."""
     return [
         {
-            "name": "emotion_resnet50_v1.engine",
+            "name": "emotion_efficientnet_b0_v1.engine",
             "version": "0.08.4.3",
             "created_at": "2026-01-28T12:00:00Z",
             "size_mb": 45.2,
@@ -191,7 +191,7 @@ def _fetch_available_engines() -> List[Dict[str, Any]]:
             "source_run": "run-20260128-001",
         },
         {
-            "name": "emotion_resnet50_v0.engine",
+            "name": "emotion_efficientnet_b0_v0.engine",
             "version": "0.08.4.2",
             "created_at": "2026-01-20T10:00:00Z",
             "size_mb": 44.8,
