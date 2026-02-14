@@ -1,0 +1,387 @@
+{
+  "name": "Agent 2 — Labeling Agent (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "label",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook_label",
+      "name": "Webhook: label.submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-600, 300],
+      "webhookId": "label-submitted"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Validate and normalize label submission\nconst body = $json.body ?? $json;\nconst allowedLabels = new Set(['happy', 'sad', 'angry', 'neutral', 'surprise', 'fearful']);\nconst allowedActions = new Set(['label_only', 'promote_train', 'promote_test', 'discard']);\n\nfunction uuidv4() {\n  return crypto.randomUUID ? crypto.randomUUID() : \n    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n      const r = (Math.random() * 16) | 0;\n      const v = c === 'x' ? r : (r & 0x3 | 0x8);\n      return v.toString(16);\n    });\n}\n\nconst video_id = body.video_id;\nconst label = (body.label || '').toLowerCase();\nconst action = body.action || 'label_only';\nconst rater_id = body.rater_id || 'anonymous';\nconst notes = body.notes || '';\nconst idempotency_key = body.idempotency_key || uuidv4();\n\nif (!video_id) throw new Error('video_id required');\nif (!allowedLabels.has(label)) throw new Error(`Invalid label: ${label}`);\nif (!allowedActions.has(action)) throw new Error(`Invalid action: ${action}`);\n\nreturn [{\n  json: {\n    video_id,\n    label,\n    action,\n    rater_id,\n    notes,\n    idempotency_key,\n    correlation_id: body.correlation_id || `label-${Date.now()}`\n  }\n}];"
+      },
+      "id": "validate_payload",
+      "name": "Code: validate.payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT v.video_id, v.split, v.label AS current_label, v.file_path\nFROM video v\nWHERE v.video_id = '{{$json.video_id}}'::uuid;",
+        "options": {}
+      },
+      "id": "db_fetch_video",
+      "name": "Postgres: fetch.video",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-200, 300],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO label_event (video_id, label, action, rater_id, notes, idempotency_key)\n  VALUES (\n    '{{$json.video_id}}'::uuid,\n    '{{$json.label}}',\n    '{{$json.action}}',\n    '{{$json.rater_id}}',\n    '{{$json.notes}}',\n    '{{$json.idempotency_key}}'\n  )\n  ON CONFLICT (video_id, idempotency_key) DO NOTHING\n  RETURNING event_id\n)\nUPDATE video\nSET label = '{{$json.label}}',\n    updated_at = NOW()\nWHERE video_id = '{{$json.video_id}}'::uuid\nRETURNING \n  video_id, \n  label, \n  split,\n  (SELECT event_id FROM ins) AS event_id;",
+        "options": {}
+      },
+      "id": "db_apply_label",
+      "name": "Postgres: apply.label",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [0, 300],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.action}}",
+                    "value2": "label_only"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "label_only"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.action}}",
+                    "value2": "promote_train"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "promote_train"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.action}}",
+                    "value2": "promote_test"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "promote_test"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{$json.action}}",
+                    "value2": "discard"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "discard"
+            }
+          ]
+        }
+      },
+      "id": "branch_action",
+      "name": "Switch: branch.action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/relabel",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotency_key}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "label",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        }
+      },
+      "id": "mm_relabel",
+      "name": "HTTP: mm.relabel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/promote",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotency_key}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "dest_split",
+              "value": "={{$json.action === 'promote_train' ? 'train' : 'test'}}"
+            },
+            {
+              "name": "label",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "dry_run",
+              "value": "=false"
+            }
+          ]
+        }
+      },
+      "id": "mm_promote",
+      "name": "HTTP: mm.promote",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(CASE WHEN label = 'happy' AND split = 'train' THEN 1 END) AS happy_count,\n  COUNT(CASE WHEN label = 'sad' AND split = 'train' THEN 1 END) AS sad_count,\n  COUNT(*) FILTER (WHERE split = 'train') AS total_train\nFROM video;",
+        "options": {}
+      },
+      "id": "db_class_balance",
+      "name": "Postgres: class.balance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [600, 300],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"video_id\": $json.video_id,\n  \"label\": $json.label,\n  \"action\": $json.action,\n  \"class_balance\": {\n    \"happy\": $json.happy_count,\n    \"sad\": $json.sad_count,\n    \"total_train\": $json.total_train,\n    \"balanced\": Math.abs($json.happy_count - $json.sad_count) <= 5\n  },\n  \"correlation_id\": $json.correlation_id\n} }}"
+      },
+      "id": "respond_success",
+      "name": "Respond: success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "webhook_label": {
+      "main": [
+        [
+          {
+            "node": "validate_payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_payload": {
+      "main": [
+        [
+          {
+            "node": "db_fetch_video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_fetch_video": {
+      "main": [
+        [
+          {
+            "node": "db_apply_label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_apply_label": {
+      "main": [
+        [
+          {
+            "node": "branch_action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "branch_action": {
+      "main": [
+        [
+          {
+            "node": "mm_relabel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "mm_promote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "mm_promote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "db_class_balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "mm_relabel": {
+      "main": [
+        [
+          {
+            "node": "db_class_balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "mm_promote": {
+      "main": [
+        [
+          {
+            "node": "db_class_balance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_class_balance": {
+      "main": [
+        [
+          {
+            "node": "respond_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "agent",
+      "id": "1"
+    },
+    {
+      "name": "labeling",
+      "id": "2"
+    },
+    {
+      "name": "phase4",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}

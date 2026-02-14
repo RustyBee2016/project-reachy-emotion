@@ -38,7 +38,7 @@ class PromotionConflictError(PromotionError):
     """Raised when the requested operation violates current state."""
 
 
-@dataclass(slots=True)
+@dataclass
 class StageResult:
     """Outcome summary when staging clips into dataset_all."""
 
@@ -48,7 +48,7 @@ class StageResult:
     dry_run: bool = False
 
 
-@dataclass(slots=True)
+@dataclass
 class SampleResult:
     """Outcome summary when sampling clips into train/test splits."""
 
@@ -402,13 +402,13 @@ class PromoteService:
                 dry_run=dry_run,
             )
 
-    def _parse_video_ids(self, video_ids: Iterable[str]) -> list[uuid.UUID]:
+    def _parse_video_ids(self, video_ids: Iterable[str]) -> list[str]:
         ids = [self._parse_uuid(raw_id, "video_id") for raw_id in video_ids]
         if not ids:
             raise PromotionValidationError("At least one video_id must be provided.")
         # Preserve original order while deduplicating
-        seen: set[uuid.UUID] = set()
-        unique_ids: list[uuid.UUID] = []
+        seen: set[str] = set()
+        unique_ids: list[str] = []
         for item in ids:
             if item not in seen:
                 seen.add(item)
@@ -416,9 +416,12 @@ class PromoteService:
         return unique_ids
 
     @staticmethod
-    def _parse_uuid(value: str, field: str) -> uuid.UUID:
+    def _parse_uuid(value: str, field: str) -> str:
+        """Parse and validate UUID string, returning normalized string format."""
         try:
-            return uuid.UUID(str(value))
+            # Validate it's a proper UUID, but return as string
+            parsed = uuid.UUID(str(value))
+            return str(parsed)
         except ValueError as exc:
             raise PromotionValidationError(f"Invalid {field}: {value}") from exc
 

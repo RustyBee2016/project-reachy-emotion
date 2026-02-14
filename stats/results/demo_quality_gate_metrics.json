@@ -1,0 +1,152 @@
+{
+  "model_name": "demo_model",
+  "quality_gates": {
+    "thresholds": {
+      "macro_f1": 0.84,
+      "balanced_accuracy": 0.82,
+      "f1_neutral": 0.8
+    },
+    "results": {
+      "macro_f1": false,
+      "balanced_accuracy": false,
+      "f1_neutral": true
+    },
+    "overall_pass": false
+  },
+  "metrics": {
+    "macro_f1": 0.8120021628820477,
+    "balanced_accuracy": 0.8098258425046865,
+    "f1_neutral": 0.8913857677902621,
+    "accuracy": 0.839,
+    "macro_precision": 0.8178235982971597,
+    "macro_recall": 0.8098258425046865,
+    "per_class_f1": {
+      "anger": 0.7695652173913043,
+      "contempt": 0.74,
+      "disgust": 0.7296416938110749,
+      "fear": 0.743142144638404,
+      "happiness": 0.9067599067599068,
+      "neutral": 0.8913857677902621,
+      "sadness": 0.8843537414965986,
+      "surprise": 0.8311688311688312
+    },
+    "per_class_precision": {
+      "anger": 0.7254098360655737,
+      "contempt": 0.7956989247311828,
+      "disgust": 0.7619047619047619,
+      "fear": 0.6898148148148148,
+      "happiness": 0.8901601830663616,
+      "neutral": 0.9130434782608695,
+      "sadness": 0.9154929577464789,
+      "surprise": 0.851063829787234
+    },
+    "per_class_recall": {
+      "anger": 0.8194444444444444,
+      "contempt": 0.6915887850467289,
+      "disgust": 0.7,
+      "fear": 0.8054054054054054,
+      "happiness": 0.9239904988123515,
+      "neutral": 0.8707317073170732,
+      "sadness": 0.8552631578947368,
+      "surprise": 0.8121827411167513
+    },
+    "gates_passed": {
+      "macro_f1": false,
+      "balanced_accuracy": false,
+      "f1_neutral": true
+    },
+    "overall_pass": false,
+    "confusion_matrix": [
+      [
+        177,
+        0,
+        17,
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        15,
+        74,
+        18,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        29,
+        19,
+        112,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        23,
+        0,
+        0,
+        149,
+        0,
+        0,
+        0,
+        13
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        389,
+        17,
+        0,
+        15
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        29,
+        357,
+        24,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        27,
+        0,
+        17,
+        260,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        18,
+        19,
+        0,
+        0,
+        160
+      ]
+    ]
+  },
+  "emotion_classes": [
+    "anger",
+    "contempt",
+    "disgust",
+    "fear",
+    "happiness",
+    "neutral",
+    "sadness",
+    "surprise"
+  ]
+}

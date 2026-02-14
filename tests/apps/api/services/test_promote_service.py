@@ -418,8 +418,8 @@ async def test_sample_into_test_clears_labels(tmp_path: Path) -> None:
         selection = await session.get(
             models.TrainingSelection,
             {
-                "run_id": run_id,
-                "video_id": video.video_id,
+                "run_id": str(run_id),
+                "video_id": str(video.video_id),
                 "target_split": "test",
             },
         )
@@ -528,7 +528,7 @@ async def test_sample_split_creates_training_selection(tmp_path: Path) -> None:
         ).scalars().all()
         assert selections
         assert all(selection.target_split == "train" for selection in selections)
-        assert all(selection.run_id == run_id for selection in selections)
+        assert all(selection.run_id == str(run_id) for selection in selections)
 
         promoted_videos = (
             await session.execute(

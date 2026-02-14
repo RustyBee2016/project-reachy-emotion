@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2025-10-17
+**Last Updated**: 2026-02-10
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -14,22 +14,35 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## Key Design Decisions
-- **[Decision: EmotionNet TAO Toolchain](./decisions/004-emotionnet-tao-toolchain.md)** — Train with TAO 4.x; export with TAO 5.3.
-*(Add links to decision records as they are created)*
-
-- **[Decision: Hybrid Storage Architecture](./decisions/)** *(pending)* — Why we chose local filesystem + PostgreSQL metadata over object storage.
-- **[Decision: DeepStream-Only Runtime](./decisions/)** *(pending)* — Rationale for skipping Triton on Jetson in v0.8.3.
-- **[Decision: Privacy-First Architecture](./decisions/)** *(pending)* — Local-only video processing, no raw video egress by default.
+- **[Decision: Reachy Gesture & LLM Integration](./decisions/007-reachy-gesture-llm-integration.md)** — GPT-5.2 empathetic responses with gesture keyword system for Reachy Mini (2026-01-11).
+- **[Decision: ResNet-50 AffectNet+RAF-DB Model](./decisions/006-resnet50-affectnet-rafdb.md)** — Replaced EmotionNet with ResNet-50 pretrained on FER datasets (2025-11-29).
+- **[Decision: Endpoint System v1 Rewrite](./decisions/005-endpoint-system-v1.md)** — Centralized config, versioned API, standardized responses, retry logic (2025-11-14).
+- **[Decision: EmotionNet TAO Toolchain](./decisions/004-emotionnet-tao-toolchain.md)** — Train with TAO 4.x; export with TAO 5.3. *(Superseded by 006)*
+- **[Decision: Hybrid Storage Architecture](./decisions/001-hybrid-storage-architecture.md)** — Local filesystem + PostgreSQL metadata over object storage.
+- **[Decision: DeepStream-Only Runtime](./decisions/002-deepstream-only-runtime.md)** — Rationale for skipping Triton on Jetson in v0.8.3.
+- **[Decision: Privacy-First Architecture](./decisions/003-privacy-first-architecture.md)** — Local-only video processing, no raw video egress by default.
 
 ---
 
 ## Runbooks & Operations
-*(Add links to operational playbooks as they are created)*
+- **[Runbook: Promote Video Flow](./runbooks/promote-video-flow.md)** — Step-by-step guide for promoting videos from `temp/` to `train/test/`.
+- **[Runbook: Rollback Procedure](./runbooks/rollback-procedure.md)** — ZFS snapshot rollback and manifest rebuild.
+- **[Runbook: NAS Backup & Restore](./runbooks/nas-backup-restore.md)** — Nightly rsync, quarterly restore test, hash verification.
+- **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, engine export, DeepStream config update.
 
-- **[Runbook: Promote Video Flow](./runbooks/)** *(pending)* — Step-by-step guide for promoting videos from `temp/` to `train/test/`.
-- **[Runbook: Rollback Procedure](./runbooks/)** *(pending)* — ZFS snapshot rollback and manifest rebuild.
-- **[Runbook: NAS Backup & Restore](./runbooks/)** *(pending)* — Nightly rsync, quarterly restore test, hash verification.
-- **[Runbook: Model Deployment](./runbooks/)** *(pending)* — Gate A/B/C validation, engine export, DeepStream config update.
+---
+
+## ML Training Pipeline (v08.4.2)
+- **Model**: EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion `enet_b0_8_best_vgaf`)
+- **Classes**: `happy`, `sad`, `neutral` (3-class)
+- **Storage**: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
+- **Training Code**: `trainer/fer_finetune/` module, `trainer/train_efficientnet.py`
+- **Config**: `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`
+- **n8n Workflows**: `n8n/workflows/ml-agentic-ai_v.2/`
+  - `05_training_orchestrator_efficientnet.json`
+  - `06_evaluation_agent_efficientnet.json`
+  - `07_deployment_agent_efficientnet.json`
+  - `10_ml_pipeline_orchestrator.json`
 
 ---
 
@@ -70,6 +83,16 @@ This index provides curated entry points to project context, decisions, and refe
 ## Testing & CI
 - **[Testing Strategy](./requirements.md#testing--ci-expectations)** — ruff, pyright, pytest, spec parser, benchmark recording.
 - **[Acceptance Criteria](./requirements.md#24-acceptance-criteria)** — Media-mover endpoints, MLflow lineage, NAS sync, performance targets.
+
+---
+
+## Database Tutorial Curriculum
+- **Location**: `docs/database/curriculum/` (9 modules, ~30 hours)
+- **Setup Guide**: `docs/database/08-SETUP-GUIDE.md` — Alembic-based setup (legacy SQL deprecated)
+- **Known Issues**: `docs/database/07-KNOWN-ISSUES.md` — 12 of 13 issues resolved; 1 legacy-only open
+- **Schema Source of Truth**: `apps/api/app/db/models.py` + `enums.py` + Alembic migration `202510280000_initial_schema.py`
+- **Tables**: 9 Alembic-managed (4 in initial migration, 5 pending migration) + 3 legacy-only
+- **Last Updated**: 2026-02-10 — All modules updated to reflect SQLAlchemy/Alembic as single authoritative path; all Known Issue warnings replaced with resolved notes.
 
 ---
 

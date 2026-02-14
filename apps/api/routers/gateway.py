@@ -4,6 +4,7 @@ import logging
 <<<<<<< Updated upstream
 from typing import Any, Dict, List
 
+import httpx
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Request, Response
 =======
 import os
@@ -20,6 +21,12 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from apps.api.app.metrics_registry import get_registry
 from jsonschema import Draft202012Validator
 from pythonjsonlogger.json import JsonFormatter
+
+# Ubuntu 1 Media Mover base URL
+MEDIA_MOVER_URL = os.getenv("GATEWAY_MEDIA_MOVER_URL", "http://10.0.4.130:8083")
+
+# Proxy client (reuse for efficiency)
+client = httpx.AsyncClient()
 
 # Embedded JSON Schemas (v1)
 EMOTION_EVENT_SCHEMA: Dict[str, Any] = {
@@ -92,8 +99,8 @@ logger.addHandler(_handler)
 def error_payload(
     error: str,
     message: str,
-    correlation_id: str | None = None,
-    fields: List[str] | None = None,
+    correlation_id: Optional[str] = None,
+    fields: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "schema_version": "v1",
@@ -106,7 +113,7 @@ def error_payload(
     return payload
 
 
-def ensure_api_version(x_api_version: str | None):
+def ensure_api_version(x_api_version: Optional[str]):
     if x_api_version != "v1":
         raise HTTPException(
             status_code=400,
@@ -114,14 +121,34 @@ def ensure_api_version(x_api_version: str | None):
         )
 
 
+def _health_response() -> str:
+    """Shared health response for legacy and /api variants."""
+    return "ok"
+
+
+def _ready_response() -> str:
+    """Shared ready response for legacy and /api variants."""
+    return "ready"
+
+
 @router.get("/health", response_class=PlainTextResponse)
 async def health() -> str:
-    return "ok"
+    return _health_response()
+
+
+@router.get("/api/health", response_class=PlainTextResponse)
+async def api_health() -> str:
+    return _health_response()
 
 
 @router.get("/ready", response_class=PlainTextResponse)
 async def ready() -> str:
-    return "ready"
+    return _ready_response()
+
+
+@router.get("/api/ready", response_class=PlainTextResponse)
+async def api_ready() -> str:
+    return _ready_response()
 
 
 @router.get("/metrics")
@@ -133,8 +160,8 @@ async def metrics() -> Response:
 @router.post("/api/events/emotion")
 async def post_emotion_event(
     request: Request,
-    x_api_version: str | None = Header(default=None, alias="X-API-Version"),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_api_version: Optional[str] = Header(default=None, alias="X-API-Version"),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     try:
         ensure_api_version(x_api_version)
@@ -175,8 +202,8 @@ async def post_emotion_event(
 @router.post("/api/promote")
 async def post_promotion(
     request: Request,
-    x_api_version: str | None = Header(default=None, alias="X-API-Version"),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_api_version: Optional[str] = Header(default=None, alias="X-API-Version"),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     """Proxy promotion requests to Ubuntu 1 Media Mover."""
     try:
@@ -186,11 +213,17 @@ async def post_promotion(
                 status_code=400,
                 content=error_payload("validation_error", "Idempotency-Key header is required"),
             )
+        
+        # Use app.state for config and HTTP client if available
+        http_client = getattr(request.app.state, "http_client", client)
+        media_mover_url = getattr(request.app.state, "config", None)
+        base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
+        
         body = await request.json()
         # Optionally validate payload locally; forward regardless to let upstream enforce contract
         # (keeps behavior consistent with other proxy endpoints)
-        url = f"{MEDIA_MOVER_URL}/api/media/promote"
-        upstream = await client.post(
+        url = f"{base_url}/api/media/promote"
+        upstream = await http_client.post(
             url,
             json=body,
             headers={"Idempotency-Key": idempotency_key},
@@ -216,43 +249,22 @@ async def post_promotion(
             status_code=500,
             content=error_payload("internal_error", "Unexpected error while proxying promotion request"),
         )
-import httpx
-from fastapi import Depends
 
-# Ubuntu 1 Media Mover base URL
-MEDIA_MOVER_URL = "http://10.0.4.130:8081"
 
-# Proxy client (reuse for efficiency)
-client = httpx.AsyncClient()
-
-# GET /api/videos/{video_id} - Proxy to Media Mover
-@router.get("/api/videos/{video_id}")
-async def get_video(video_id: str):
-    url = f"{MEDIA_MOVER_URL}/api/videos/{video_id}"
-    response = await client.get(url)
-    return JSONResponse(content=response.json(), status_code=response.status_code)
-
-# GET /api/videos/{video_id}/thumb - Proxy to Media Mover
-@router.get("/api/videos/{video_id}/thumb")
-async def get_thumbnail(video_id: str):
-    url = f"{MEDIA_MOVER_URL}/api/videos/{video_id}/thumb"
-    response = await client.get(url)
-    # Return as-is (may be redirect or image)
-    return Response(content=response.content, status_code=response.status_code, media_type=response.headers.get("content-type"))
-
-# POST /api/relabel - Proxy to Media Mover (requires auth)
+# POST /api/relabel - Proxy to Media Mover
 @router.post("/api/relabel")
 async def relabel_video(
     request: Request,
-    x_api_version: str | None = Header(default=None, alias="X-API-Version"),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_api_version: Optional[str] = Header(default=None, alias="X-API-Version"),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     ensure_api_version(x_api_version)
     if not idempotency_key:
         raise HTTPException(status_code=400, detail=error_payload("validation_error", "Idempotency-Key required"))
+    http_client = getattr(request.app.state, "http_client", client)
     body = await request.json()
     url = f"{MEDIA_MOVER_URL}/api/relabel"
-    response = await client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
+    response = await http_client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
     return JSONResponse(content=response.json(), status_code=response.status_code)
 
 <<<<<<< Updated upstream
@@ -260,15 +272,32 @@ async def relabel_video(
 @router.post("/api/manifest/rebuild")
 async def rebuild_manifest(
     request: Request,
-    x_api_version: str | None = Header(default=None, alias="X-API-Version"),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_api_version: Optional[str] = Header(default=None, alias="X-API-Version"),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
     ensure_api_version(x_api_version)
     if not idempotency_key:
         raise HTTPException(status_code=400, detail=error_payload("validation_error", "Idempotency-Key required"))
+    http_client = getattr(request.app.state, "http_client", client)
     body = await request.json()
     url = f"{MEDIA_MOVER_URL}/api/manifest/rebuild"
-    response = await client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
+    response = await http_client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
+    return JSONResponse(content=response.json(), status_code=response.status_code)
+
+
+# GET /api/videos/{video_id} - Proxy to Media Mover
+@router.get("/api/videos/{video_id}")
+async def get_video(video_id: str, request: Request):
+    # Use app.state.http_client if available (gateway app), otherwise use module-level client
+    http_client = getattr(request.app.state, "http_client", client)
+    media_mover_url = getattr(request.app.state, "config", None)
+    if media_mover_url and hasattr(media_mover_url, "media_mover_url"):
+        base_url = media_mover_url.media_mover_url
+    else:
+        base_url = MEDIA_MOVER_URL
+    
+    url = f"{base_url}/api/videos/{video_id}"
+    response = await http_client.get(url)
     return JSONResponse(content=response.json(), status_code=response.status_code)
 =======
 # ============================================================================

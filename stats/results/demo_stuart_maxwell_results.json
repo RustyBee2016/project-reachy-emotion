@@ -1,0 +1,121 @@
+{
+  "test_name": "Stuart-Maxwell Test",
+  "description": "Test for marginal homogeneity in paired categorical data",
+  "hypothesis": {
+    "null": "Models have the same marginal prediction distributions",
+    "alternative": "Models have different marginal prediction distributions"
+  },
+  "results": {
+    "chi_squared": 10.791669751099061,
+    "degrees_of_freedom": 7,
+    "p_value": 0.14796797193403888,
+    "significant": false,
+    "alpha": 0.05,
+    "marginal_differences": {
+      "anger": 16.0,
+      "contempt": -8.0,
+      "disgust": -6.0,
+      "fear": -9.0,
+      "happiness": 29.0,
+      "neutral": -29.0,
+      "sadness": 18.0,
+      "surprise": -11.0
+    },
+    "contingency_table": [
+      [
+        156,
+        18,
+        37,
+        25,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        9,
+        51,
+        28,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        30,
+        27,
+        98,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        25,
+        0,
+        0,
+        130,
+        2,
+        4,
+        18,
+        30
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        349,
+        49,
+        2,
+        37
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        29,
+        329,
+        36,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        30,
+        2,
+        42,
+        209,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        29,
+        27,
+        1,
+        0,
+        134
+      ]
+    ],
+    "n_samples": 2000,
+    "n_agreements": 1456,
+    "n_disagreements": 544,
+    "agreement_rate": 0.728
+  },
+  "emotion_classes": [
+    "anger",
+    "contempt",
+    "disgust",
+    "fear",
+    "happiness",
+    "neutral",
+    "sadness",
+    "surprise"
+  ]
+}

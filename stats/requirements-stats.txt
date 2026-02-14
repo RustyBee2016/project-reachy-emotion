@@ -1,0 +1,22 @@
+# Phase 1 Statistical Analysis Dependencies
+# Reachy Emotion Recognition Project
+
+# Core numerical computing
+numpy>=1.24.0
+
+# Statistical computing
+scipy>=1.11.0
+statsmodels>=0.14.0
+
+# Data manipulation
+pandas>=2.0.0
+
+# Machine learning metrics
+scikit-learn>=1.3.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: Progress bars for long computations
+tqdm>=4.65.0

@@ -22,7 +22,7 @@ from ..services import (
     PromotionValidationError,
 )
 
-router = APIRouter(prefix="/promote", tags=["promote"])
+router = APIRouter(prefix="/api/v1/promote", tags=["promote"])
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
 
@@ -66,7 +66,7 @@ async def stage_videos(  # noqa: D401
     except PromotionValidationError as exc:
         await service.rollback()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_error_detail(str(exc), correlation_id),
             headers={CORRELATION_ID_HEADER: correlation_id},
         ) from exc
@@ -139,7 +139,7 @@ async def sample_split(  # noqa: D401
     except PromotionValidationError as exc:
         await service.rollback()
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_error_detail(str(exc), correlation_id),
             headers={CORRELATION_ID_HEADER: correlation_id},
         ) from exc

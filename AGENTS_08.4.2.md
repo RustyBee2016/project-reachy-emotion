@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Project:** Reachy_Local_08.4.2  
-- **Primary Objective:** Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using the EmotionNet model.  
+- **Primary Objective:** Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using ResNet-50 pre-trained on AffectNet + RAF-DB datasets.  
 - **Secondary Objectives:** Local-first privacy, reproducible fine-tuning, human-in-the-loop labeling and dataset curation, low operational overhead.  
 - **Non-goals:** Audio emotion recognition, cloud dependencies, linguistic or conversational emotion synthesis.  
 - **Stakeholders:** Robot end-users, Reachy R&D team, and project maintainers.  
@@ -23,6 +23,10 @@ Conflicts between automation and policy defer to the human project owner (Russ).
 - **Training Node (Ubuntu 1):**  
   NVIDIA GPU workstation running TAO Toolkit 4.x for EmotionNet fine-tuning.  
   Handles FastAPI-based Media Mover service (base: `https://10.0.4.130/api/media`) and Postgres database.
+- **Model:**  
+  ResNet-50 pre-trained on AffectNet + RAF-DB, fine-tuned for binary (`happy` vs `sad`) classification.  
+  Model placeholder: `resnet50-affectnet-raf-db`  
+  Storage path: `/media/rusty_admin/project_data/ml_models/resnet50`
 - **Web/UI Node (Ubuntu 2):**  
   Streamlit frontend behind Nginx, interacts with FastAPI and Postgres.  
 - **Robot Node (Jetson Xavier NX):**  
@@ -34,8 +38,6 @@ Conflicts between automation and policy defer to the human project owner (Russ).
   `temp/`, `train/`, and `test/`.  
 - **Networking:**  
   Static LAN IPs — Ubuntu 1 (10.0.4.130), Ubuntu 2 (10.0.4.140), Jetson (10.0.4.150).  
-- **Model:**  
-  NVIDIA TAO EmotionNet, fine-tuned for binary (`happy` vs `sad`) classification.
 
 ---
 
@@ -98,13 +100,19 @@ Ensure filesystem and database consistency.
 
 ### Agent 5 — Training Orchestrator
 **Purpose:**  
-Trigger EmotionNet fine-tuning once dataset balance and size thresholds are met.
+Trigger ResNet-50 emotion classifier fine-tuning once dataset balance and size thresholds are met.
 
-**Responsibilities:**  
-- Launch TAO training using the pinned `emotion_train_2cls.yaml` spec.  
-- Mount dataset paths from `/media/.../videos/train/` and generate checkpoints.  
-- Record dataset hash, TAO container version, and metrics to MLflow.  
-- Publish `training.completed` with links to artifacts and validation metrics.  
+**Updated Responsibilities (v08.4.2 ML):**
+- Launch PyTorch training using `trainer/train_resnet50.py` with config `fer_finetune/specs/resnet50_emotion_2cls.yaml`.  
+- Implement two-phase training: frozen backbone (epochs 1-5) → selective unfreezing (layer4 + fc).  
+- Apply AffectNet + RAF-DB pre-trained weights (`resnet50-affectnet-raf-db` placeholder).  
+- Use mixed precision (FP16), mixup augmentation, and cosine LR schedule with warmup.  
+- Mount dataset paths from `/media/project_data/reachy_emotion/videos/train/` and generate checkpoints.  
+- Record dataset hash, model version, and metrics (F1, ECE, Brier) to MLflow.  
+- Validate Gate A requirements before export: F1 ≥ 0.84, balanced accuracy ≥ 0.85, ECE ≤ 0.08.  
+- Export to ONNX on success; publish `training.completed` with artifacts and metrics.
+
+**n8n Workflow:** `ml-agentic-ai_v.1/05_training_orchestrator_resnet50.json`  
 
 ---
 
@@ -112,10 +120,16 @@ Trigger EmotionNet fine-tuning once dataset balance and size thresholds are met.
 **Purpose:**  
 Run validation jobs once the test set is balanced.
 
-**Updated Responsibilities:**  
-- Confirm `min(happy_count, sad_count) ≥ TEST_MIN_PER_CLASS` before triggering TAO/DeepStream validation.  
-- Reference test videos by file path only; never attach or infer labels internally.  
-- Produce final confusion matrix and accuracy metrics using the *labeled validation split*, keeping `videos/test/` untouched for the final report.  
+**Updated Responsibilities (v08.4.2 ML):**  
+- Confirm `min(happy_count, sad_count) ≥ TEST_MIN_PER_CLASS` (default: 20) before triggering evaluation.  
+- Load trained ResNet-50 checkpoint and run inference on test set.  
+- Compute comprehensive metrics: accuracy, F1 (macro + per-class), balanced accuracy.  
+- Compute calibration metrics: ECE (Expected Calibration Error), Brier score.  
+- Validate Gate A requirements and emit pass/fail status.  
+- Generate evaluation report with confusion matrix.  
+- Reference test videos by file path only; never attach or infer labels internally.
+
+**n8n Workflow:** `ml-agentic-ai_v.1/06_evaluation_agent_resnet50.json`  
 
 ---
 
@@ -123,12 +137,17 @@ Run validation jobs once the test set is balanced.
 **Purpose:**  
 Promote validated engines from `shadow → canary → rollout` with explicit approval gates.
 
-**Responsibilities:**  
-- Copy exported `.engine` to the Jetson NX at `/opt/reachy/models/emotion.engine`.  
-- Update DeepStream pipeline configuration and restart service.  
-- Verify live metrics: FPS ≥ 25, latency ≤ 100 ms.  
-- Support rollback to prior engine on regression.  
-- Record deployment metadata (`engine_version`, `fps`, `accuracy`, `timestamp`).  
+**Updated Responsibilities (v08.4.2 ML):**  
+- Transfer ONNX model to Jetson via SCP.  
+- Convert ONNX → TensorRT engine on Jetson using `trtexec` with FP16 precision.  
+- Backup existing engine before deployment.  
+- Copy exported `.engine` to the Jetson NX at `/opt/reachy/models/emotion_resnet50.engine`.  
+- Update DeepStream pipeline configuration (`emotion_inference.txt`) and restart service.  
+- Verify Gate B requirements: FPS ≥ 25, latency p50 ≤ 120 ms, GPU memory ≤ 2.5 GB.  
+- Support automatic rollback to prior engine on Gate B failure.  
+- Record deployment metadata (`engine_version`, `model`, `fps`, `latency`, `timestamp`).
+
+**n8n Workflow:** `ml-agentic-ai_v.1/07_deployment_agent_resnet50.json`  
 
 ---
 

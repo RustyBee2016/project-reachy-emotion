@@ -1,0 +1,7 @@
+Collecting asyncpg
+  Downloading asyncpg-0.30.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.0 kB)
+Requirement already satisfied: async-timeout>=4.0.3 in ./venv/lib/python3.8/site-packages (from asyncpg) (5.0.1)
+Downloading asyncpg-0.30.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 36.2 MB/s eta 0:00:00
+Installing collected packages: asyncpg
+Successfully installed asyncpg-0.30.0

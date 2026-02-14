@@ -1,0 +1,125 @@
+**2025-11-01-Promotion System_Summary of steps 1-3**
+
+Summary of steps 1-3 completed building the promotion system. Includes a
+list of next steps.
+
+\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-- -
+
+\[MEMORY BANK: ACTIVE\] **Promotion system progress recap**
+
+**Step 1 -- Persistence model alignment**
+
+• Extended Postgres schema & SQLAlchemy models to support full promotion
+
+lifecycle (Video, PromotionLog, TrainingRun, TrainingSelection) with
+split/label
+
+constraints and indices. \@apps/api/app/db/models.py#30-135
+
+• Added async migration and round‑trip tests for Video/TrainingSelection
+to
+
+guarantee DB compatibility.
+
+\@tests/apps/api/db/test_models_async_roundtrip.py#1-58
+
+**Step 2 -- Repository + service scaffolding**
+
+• Introduced VideoRepository to encapsulate async queries,
+stage/sampling
+
+mutations, and promotion logging.
+
+\@apps/api/app/repositories/video_repository.py#1-203
+
+• Completed PromoteService validation, error taxonomy, balanced sampling
+logic,
+
+and structured logging, returning StageResult/SampleResult.
+
+\@apps/api/app/services/promote_service.py#1-284 (pre-Step 3 extensions)
+
+• Built async unit/integration tests to cover validation, duplicates,
+sampling
+
+strategies, and DB side effects.
+
+\@tests/apps/api/services/test_promote_service.py#1-442
+
+**Step 3 -- Filesystem wiring**
+
+• Implemented FileMover for atomic moves/copies with rollback and fsync
+
+guarantees. \@apps/api/app/fs/media_mover.py#1-169
+
+• Wired PromoteService to use FileMover, track failed_ids, and
+coordinate rollback
+
+on IO errors. \@apps/api/app/services/promote_service.py#60-279
+
+• Updated repository mutations to persist new file_path locations after
+filesystem
+
+transitions. \@apps/api/app/repositories/video_repository.py#96-175
+
+• Expanded service tests to create temp media files, asserting on-disk
+state as well
+
+as DB/log outcomes.
+\@tests/apps/api/services/test_promote_service.py#17-438
+
+• Verified via pytest:
+
+o /home/rusty_admin/venvs/tao/bin/python -m pytest
+
+tests/apps/api/services/test_promote_service.py -k stage -q
+
+o /home/rusty_admin/venvs/tao/bin/python -m pytest
+
+tests/apps/api/services/test_promote_service.py -q
+
+**Recommended next steps**
+
+**1. Step 4 -- API layer & schemas**
+
+a\. Define Pydantic request/response models for staging/sampling
+endpoints.
+
+b\. Map router payloads to service calls, returning structured results
+(including
+
+failed_ids).
+
+c\. Extend FastAPI validation tests and contract docs.
+
+**2. Step 5 -- Observability & metrics**
+
+a\. Register promotion counters/histograms (success, skip, failure) and
+expose
+
+via /metrics.
+
+b\. Add structured logging hooks for filesystem transitions with
+correlation IDs.
+
+**3. Step 6 -- End-to-end integration**
+
+a\. Implement dry-run flag handling.
+
+b\. Add end-to-end tests hitting FastAPI routes (httpx) to ensure DB +
+FS + JSON
+
+contract alignment.
+
+c\. Prepare manifest rebuild hooks and run reset operations.
+
+**4. Operational polish**
+
+a\. Document filesystem layout, permissions, and rollback procedures in
+
+memory-bank runbooks.
+
+b\. Consider background cleanup for per-run copies under train/ & test/.
+
+Let me know which step you'd like to tackle next, and I'll lay out the
+detailed plan plus test strategy before coding.

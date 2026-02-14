@@ -1,0 +1,71 @@
+{
+  "name": "Agent 9 — Observability/Telemetry Agent (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {"rule": {"interval": [{"triggerAtSecond": 30}]}},
+      "id": "cron_metrics",
+      "name": "Cron: every 30s",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 2,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {"url": "http://n8n:5678/metrics", "responseFormat": "string"},
+      "id": "fetch_n8n_metrics",
+      "name": "HTTP: n8n.metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-200, 200]
+    },
+    {
+      "parameters": {"url": "http://10.0.4.130:9101/metrics", "responseFormat": "string"},
+      "id": "fetch_mm_metrics",
+      "name": "HTTP: mediamover.metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {"url": "http://10.0.4.140:9100/metrics", "responseFormat": "string"},
+      "id": "fetch_gw_metrics",
+      "name": "HTTP: gateway.metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-200, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const parseMetric = (text, name) => {const m = text.match(new RegExp(`${name}\\\\s+(\\\\d+\\\\.?\\\\d*)`)); return m ? parseFloat(m[1]) : null;}; const ts = new Date().toISOString(); const items = []; const n8n = $('fetch_n8n_metrics').first().json.data; const mm = $('fetch_mm_metrics').first().json.data; const gw = $('fetch_gw_metrics').first().json.data; items.push({json: {ts, src: 'n8n', metric: 'active_executions', value: parseMetric(n8n, 'n8n_active_executions')}}); items.push({json: {ts, src: 'media_mover', metric: 'promote_total', value: parseMetric(mm, 'media_mover_promote_total')}}); items.push({json: {ts, src: 'gateway', metric: 'queue_depth', value: parseMetric(gw, 'gateway_queue_depth')}}); return items.filter(i => i.json.value !== null);"
+      },
+      "id": "parse_metrics",
+      "name": "Code: parse.metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "obs_samples",
+        "columns": "ts, src, metric, value"
+      },
+      "id": "db_store_metrics",
+      "name": "Postgres: store.metrics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [200, 300],
+      "credentials": {"postgres": {"id": "2", "name": "PostgreSQL - reachy_local"}}
+    }
+  ],
+  "connections": {
+    "cron_metrics": {"main": [[{"node": "fetch_n8n_metrics"}, {"node": "fetch_mm_metrics"}, {"node": "fetch_gw_metrics"}]]},
+    "fetch_n8n_metrics": {"main": [[{"node": "parse_metrics"}]]},
+    "fetch_mm_metrics": {"main": [[{"node": "parse_metrics"}]]},
+    "fetch_gw_metrics": {"main": [[{"node": "parse_metrics"}]]},
+    "parse_metrics": {"main": [[{"node": "db_store_metrics"}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "agent"}, {"name": "observability"}],
+  "updatedAt": "2025-11-07T19:30:00.000Z"
+}

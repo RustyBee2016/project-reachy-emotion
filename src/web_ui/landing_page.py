@@ -1,25 +1,206 @@
-"""
-Reachy Emotion Recognition - Landing Page (Streamlit)
+"""Reachy Emotion Recognition - Landing Page (Streamlit)
+
 Ubuntu 2 - Web UI for video generation, upload, and emotion labeling
+Version: 0.09.1
+Updated: 2026-01-31
 """
 
 import streamlit as st
 import requests
 import uuid
+import os
 from pathlib import Path
 from datetime import datetime
 import json
+from typing import Optional, Dict, Any, Tuple
 
-# Configuration
-UBUNTU1_HOST = "10.0.4.140"
-UBUNTU2_HOST = "10.0.4.130"
-GATEWAY_URL = f"http://{UBUNTU2_HOST}:8000"
-# Canonical Media Mover reverse-proxied base per requirements: https://10.0.4.140/api/media
-# Use direct base until reverse proxy is configured.
-MEDIA_BASE = f"http://{UBUNTU1_HOST}:8081/api"
-MEDIA_BASE_PROXY = f"https://{UBUNTU2_HOST}/api/media"  # future use
-THUMBS_BASE = f"http://{UBUNTU1_HOST}/thumbs"  # no split in path, '/thumbs/{stem}.jpg'
+# =============================================================================
+# Configuration (environment variables with sensible defaults)
+# =============================================================================
+# Per requirements.md: Ubuntu 1 = 10.0.4.130 (storage/ML), Ubuntu 2 = 10.0.4.140 (gateway/UI)
+UBUNTU1_HOST = os.getenv("UBUNTU1_HOST", "10.0.4.130")
+UBUNTU2_HOST = os.getenv("UBUNTU2_HOST", "10.0.4.140")
+
+# Gateway API on Ubuntu 2 (this machine)
+GATEWAY_URL = os.getenv("GATEWAY_URL", f"http://{UBUNTU2_HOST}:8000")
+
+# Media Mover API on Ubuntu 1 (direct access, port 8083 per requirements)
+MEDIA_MOVER_URL = os.getenv("MEDIA_MOVER_URL", f"http://{UBUNTU1_HOST}:8083")
+MEDIA_BASE = f"{MEDIA_MOVER_URL}/api"
+
+# Nginx-served static content on Ubuntu 1
+THUMBS_BASE = f"http://{UBUNTU1_HOST}/thumbs"
 VIDEO_DATA_DIR = f"http://{UBUNTU1_HOST}/videos/data_all"
+
+# API timeouts (seconds)
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))
+UPLOAD_TIMEOUT = int(os.getenv("UPLOAD_TIMEOUT", "30"))
+
+# =============================================================================
+# API Helper Functions
+# =============================================================================
+
+def get_api_headers(correlation_id: str, idempotency_key: Optional[str] = None) -> Dict[str, str]:
+    """Build standard API headers with version and correlation tracking."""
+    headers = {
+        "X-API-Version": "v1",
+        "Content-Type": "application/json",
+        "X-Correlation-ID": correlation_id,
+    }
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+    return headers
+
+
+def upload_video_to_server(file_bytes: bytes, filename: str, correlation_id: str) -> Tuple[bool, str, Optional[Dict]]:
+    """Upload video file to Media Mover ingest endpoint.
+    
+    Returns:
+        Tuple of (success, message, response_data)
+    """
+    try:
+        # Use multipart form upload to Media Mover
+        files = {
+            "file": (filename, file_bytes, "video/mp4")
+        }
+        data = {
+            "correlation_id": correlation_id,
+        }
+        
+        response = requests.post(
+            f"{MEDIA_BASE}/ingest",
+            files=files,
+            data=data,
+            headers={"X-API-Version": "v1", "X-Correlation-ID": correlation_id},
+            timeout=UPLOAD_TIMEOUT,
+        )
+        
+        if response.status_code in (200, 201, 202):
+            return True, "Upload successful", response.json()
+        else:
+            error_msg = response.json().get("message", response.text) if response.text else f"HTTP {response.status_code}"
+            return False, f"Upload failed: {error_msg}", None
+            
+    except requests.exceptions.Timeout:
+        return False, "Upload timed out - file may be too large", None
+    except requests.exceptions.ConnectionError:
+        return False, f"Cannot connect to Media Mover at {MEDIA_MOVER_URL}", None
+    except Exception as e:
+        return False, f"Upload error: {str(e)}", None
+
+
+def promote_video(
+    clip_name: str,
+    target: str,
+    label: Optional[str],
+    correlation_id: str,
+) -> Tuple[bool, str, Optional[Dict]]:
+    """Promote video from temp to train/test split via Gateway API.
+    
+    Per AGENTS.md: test split must have label=NULL.
+    
+    Returns:
+        Tuple of (success, message, response_data)
+    """
+    # Enforce label policy: test split must have no label
+    if target == "test":
+        label = None
+    
+    idempotency_key = str(uuid.uuid4())
+    
+    payload = {
+        "schema_version": "v1",
+        "clip": clip_name,
+        "target": target,
+        "label": label,
+        "correlation_id": correlation_id,
+    }
+    
+    try:
+        response = requests.post(
+            f"{GATEWAY_URL}/api/promote",
+            json=payload,
+            headers=get_api_headers(correlation_id, idempotency_key),
+            timeout=API_TIMEOUT,
+        )
+        
+        if response.status_code in (200, 202):
+            return True, "Video promoted successfully", response.json()
+        else:
+            try:
+                error_data = response.json()
+                error_msg = error_data.get("message", str(error_data))
+            except:
+                error_msg = response.text or f"HTTP {response.status_code}"
+            return False, f"Promotion failed: {error_msg}", None
+            
+    except requests.exceptions.Timeout:
+        return False, "Gateway request timed out", None
+    except requests.exceptions.ConnectionError:
+        return False, f"Cannot connect to Gateway at {GATEWAY_URL}", None
+    except Exception as e:
+        return False, f"Promotion error: {str(e)}", None
+
+
+def delete_video(clip_name: str, correlation_id: str) -> Tuple[bool, str]:
+    """Mark video as rejected/delete from temp split.
+    
+    Returns:
+        Tuple of (success, message)
+    """
+    idempotency_key = str(uuid.uuid4())
+    
+    payload = {
+        "schema_version": "v1",
+        "clip": clip_name,
+        "action": "reject",
+        "correlation_id": correlation_id,
+    }
+    
+    try:
+        response = requests.post(
+            f"{GATEWAY_URL}/api/videos/reject",
+            json=payload,
+            headers=get_api_headers(correlation_id, idempotency_key),
+            timeout=API_TIMEOUT,
+        )
+        
+        if response.status_code in (200, 202, 204):
+            return True, "Video rejected successfully"
+        elif response.status_code == 404:
+            # Endpoint may not exist yet - fall back to just clearing local state
+            return True, "Video removed from queue (API endpoint pending)"
+        else:
+            try:
+                error_msg = response.json().get("message", response.text)
+            except:
+                error_msg = f"HTTP {response.status_code}"
+            return False, f"Delete failed: {error_msg}"
+            
+    except requests.exceptions.ConnectionError:
+        # Gateway offline - still allow local state clearing
+        return True, "Video removed locally (Gateway offline)"
+    except Exception as e:
+        return False, f"Delete error: {str(e)}"
+
+
+def check_service_health() -> Dict[str, bool]:
+    """Check health of backend services."""
+    status = {"gateway": False, "media_mover": False}
+    
+    try:
+        r = requests.get(f"{GATEWAY_URL}/health", timeout=2)
+        status["gateway"] = r.status_code == 200
+    except:
+        pass
+    
+    try:
+        r = requests.get(f"{MEDIA_MOVER_URL}/health", timeout=2)
+        status["media_mover"] = r.status_code == 200
+    except:
+        pass
+    
+    return status
 
 
 def thumb_url_from_path(file_path: str) -> str:
@@ -125,26 +306,30 @@ with col3:
     # Element 3: Upload Video button
     if st.button("Upload Video", type="primary", disabled=uploaded_file is None):
         if uploaded_file:
-            try:
-                # Generate correlation ID
-                correlation_id = str(uuid.uuid4())
-                
-                # Save uploaded file temporarily
-                temp_path = Path(f"/tmp/{uploaded_file.name}")
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                # TODO: Send to media mover API
+            correlation_id = str(uuid.uuid4())
+            
+            with st.spinner("Uploading video to server..."):
+                # Upload to Media Mover API
+                success, message, response_data = upload_video_to_server(
+                    file_bytes=uploaded_file.getbuffer(),
+                    filename=uploaded_file.name,
+                    correlation_id=correlation_id,
+                )
+            
+            if success:
+                # Store video info in session state
                 st.session_state.current_video = {
-                    'path': str(temp_path),
+                    'path': response_data.get('path', f"videos/temp/{uploaded_file.name}") if response_data else f"videos/temp/{uploaded_file.name}",
                     'name': uploaded_file.name,
                     'for_training': upload_for_training,
-                    'correlation_id': correlation_id
+                    'correlation_id': correlation_id,
+                    'video_id': response_data.get('video_id') if response_data else None,
                 }
                 st.success(f"✅ Video uploaded: {uploaded_file.name}")
-                
-            except Exception as e:
-                st.error(f"❌ Upload failed: {str(e)}")
+                if response_data:
+                    st.caption(f"Video ID: {response_data.get('video_id', 'N/A')}")
+            else:
+                st.error(f"❌ {message}")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -243,40 +428,53 @@ with col9:
     # Element 10: Incorrect/Delete button
     if st.button("❌ Incorrect", key="delete_video", use_container_width=True):
         if st.session_state.current_video:
-            try:
-                correlation_id = str(uuid.uuid4())
-                
-                # TODO: Call API to delete/reject video
-                st.warning(f"Video marked as incorrect and will be deleted")
+            correlation_id = str(uuid.uuid4())
+            clip_name = st.session_state.current_video.get('name', '')
+            
+            with st.spinner("Rejecting video..."):
+                success, message = delete_video(clip_name, correlation_id)
+            
+            if success:
+                st.warning(f"Video marked as incorrect: {message}")
                 st.session_state.current_video = None
                 st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Delete failed: {str(e)}")
+            else:
+                st.error(f"❌ {message}")
+        else:
+            st.warning("No video selected to reject")
     
     # Submit emotion classification
     if st.button("✅ Submit Classification", type="primary", use_container_width=True):
         if st.session_state.current_video and selected_emotion:
-            try:
-                correlation_id = str(uuid.uuid4())
-                
-                # Prepare promotion request
-                promotion_payload = {
-                    "schema_version": "v1",
-                    "clip": st.session_state.current_video['name'],
-                    "target": "train" if st.session_state.current_video['for_training'] else "test",
-                    "label": selected_emotion,
-                    "correlation_id": correlation_id
-                }
-                
-                # TODO: Send to gateway API
+            correlation_id = str(uuid.uuid4())
+            clip_name = st.session_state.current_video.get('name', '')
+            target = "train" if st.session_state.current_video.get('for_training', False) else "test"
+            
+            # Per AGENTS.md: test split must have label=NULL
+            # The promote_video function enforces this, but show user the policy
+            if target == "test":
+                st.info("ℹ️ Test split: label will not be stored (per data policy)")
+            
+            with st.spinner(f"Promoting video to {target} split..."):
+                success, message, response_data = promote_video(
+                    clip_name=clip_name,
+                    target=target,
+                    label=selected_emotion,
+                    correlation_id=correlation_id,
+                )
+            
+            if success:
                 st.success(f"✅ Classified as: **{selected_emotion}**")
-                
-                # Log the classification
-                st.info(f"Video promoted to {'training' if st.session_state.current_video['for_training'] else 'test'} set")
-                
-            except Exception as e:
-                st.error(f"❌ Classification failed: {str(e)}")
+                st.info(f"Video promoted to {target} set")
+                # Clear current video to allow next classification
+                st.session_state.current_video = None
+                st.rerun()
+            else:
+                st.error(f"❌ {message}")
+        elif not st.session_state.current_video:
+            st.warning("No video loaded - upload or select a video first")
+        else:
+            st.warning("Please select an emotion before submitting")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -307,7 +505,7 @@ def render_split(tab, split: str):
                 fp = item.get('path') or item.get('file_path') or ''
                 stem = Path(fp).stem if fp else 'unknown'
                 turl = f"{THUMBS_BASE}/{stem}.jpg"
-                st.image(turl, caption=stem, use_column_width=True)
+                st.image(turl, caption=stem, use_container_width=True)
                 st.caption(f"split={split}")
 
 render_split(tab_temp, 'temp')

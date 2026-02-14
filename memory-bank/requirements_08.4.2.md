@@ -162,10 +162,25 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - Training I/O sustains NVMe read throughput (**≥ 1 GB/s** sequential where feasible)
 
 ### 6.4 Reliability & Security
-- ZFS checksums when using ZFS; snapshot before each fine‑tune
+- ZFS checksums when using ZFS; snapshot before each fine-tune
 - Mutate endpoints require Bearer/JWT; strict `video_id` validation; forbid arbitrary paths
-- Optional ZFS native encryption or LUKS on ext4 for at‑rest protection
+- Optional ZFS native encryption or LUKS on ext4 for at-rest protection
 - rsync exit codes monitored; SMART monitoring on NAS
+
+### 6.5 n8n Orchestration Environment
+- **Container orchestration**: n8n runs via Docker Compose alongside PostgreSQL. Expose ports `5678/tcp` (n8n UI/API), `5432/tcp` (Postgres), and ensure Media Mover (`8081/tcp`), FastAPI gateway (`8000/tcp`), MLflow (`5000/tcp`), and SSH (`22/tcp`) are reachable from the n8n container network.
+- **Environment variables**: Maintain the following keys in the n8n `.env` file (secrets stored outside source control). These power workflow authentication, host discovery, and feature toggles:
+  - n8n core: `N8N_BASIC_AUTH_ACTIVE`, `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `N8N_METRICS`, `GENERIC_TIMEZONE`, `N8N_API_URL`, `N8N_API_KEY`, `N8N_HOST`, `WEBHOOK_URL`, `N8N_USER`, `N8N_PASSWORD`.
+  - Media Mover & ingest: `MEDIA_MOVER_BASE_URL`, `MEDIA_MOVER_TOKEN`, `INGEST_TOKEN`, `MEDIA_MOVER_ENABLED`.
+  - Gateway & UI: `GATEWAY_BASE_URL`, `GATEWAY_ADMIN_TOKEN`, `GATEWAY_WS_TOKEN`.
+  - Databases: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`.
+  - MLflow: `MLFLOW_URL`, `MLFLOW_EXPERIMENT_ID`, `MLFLOW_API_TOKEN`.
+  - SSH access: Ubuntu host (`SSH_UBUNTU1_HOST`, `SSH_UBUNTU1_PORT`, `SSH_UBUNTU1_USER`, `SSH_UBUNTU1_PASS`, `SSH_UBUNTU1_KEY_PATH`, `SSH_UBUNTU1_KEY_PASSPHRASE`); Jetson host (`SSH_JETSON_HOST`, `SSH_JETSON_PORT`, `SSH_JETSON_USER`, `SSH_JETSON_PASS`, `SSH_JETSON_KEY_PATH`, `SSH_JETSON_KEY_PASSPHRASE`).
+  - Observability & alerts: `PROMETHEUS_N8N_URL`, `PROMETHEUS_MEDIA_MOVER_URL`, `PROMETHEUS_GATEWAY_URL`, `SLACK_WEBHOOK_URL`, `ALERT_EMAIL_SMTP_HOST`, `ALERT_EMAIL_SMTP_PORT`, `ALERT_EMAIL_SMTP_USER`, `ALERT_EMAIL_SMTP_PASS`, `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO`.
+  - Privacy & lifecycle: `TTL_DAYS_TEMP`, `GDPR_MANUAL_APPROVER_EMAIL`, `PURGE_DRY_RUN`.
+  - Feature toggles: `SSH_ACTIONS_ENABLED`, `TRAINING_ENABLED`, `EVALUATION_ENABLED`, `DEPLOYMENT_ENABLED`.
+  - LLM integrations: `CLAUDE_API_KEY`, `LLM_STUDIO_BASE_URL`, `LLM_STUDIO_API_KEY`.
+- **Compose alignment**: Docker Compose expects the `.env` to define `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `N8N_USER`, `N8N_PASSWORD`, `N8N_HOST`, and `WEBHOOK_URL` so that container environment interpolation resolves correctly.
 
 ---
 

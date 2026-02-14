@@ -1,0 +1,47 @@
+[Unit]
+Description=Reachy Local 08.4.2 - Media Mover API (FastAPI)
+Documentation=https://github.com/RustyBee2016/project-reachy-emotion
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=rusty_admin
+Group=rusty_admin
+WorkingDirectory=/home/rusty_admin/projects/reachy_08.4.2
+
+# Load environment variables from .env file
+EnvironmentFile=-/home/rusty_admin/projects/reachy_08.4.2/apps/api/.env
+
+# Start command
+ExecStart=/media/rusty_admin/project_data/reachy_emotion/apps/api/.venv/bin/python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8083
+
+# Health check after startup (wait 3 seconds then check)
+ExecStartPost=/bin/sleep 3
+ExecStartPost=/usr/bin/curl -f http://localhost:8083/api/v1/health || echo "Warning: Health check failed"
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Timeout settings
+TimeoutStartSec=30s
+TimeoutStopSec=10s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fastapi-media
+
+# Security hardening (optional)
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits (optional)
+# LimitNOFILE=65536
+# MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

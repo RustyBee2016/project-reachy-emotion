@@ -1,0 +1,136 @@
+{
+  "name": "Agent 7 — Deployment Agent (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/deployment/promote",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook_deploy",
+      "name": "Webhook: deployment.promote",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-600, 300],
+      "webhookId": "deployment-promote"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {"conditions": {"string": [{"value1": "={{$json.target_stage}}", "value2": "shadow"}]}, "renameOutput": true, "outputKey": "shadow"},
+            {"conditions": {"string": [{"value1": "={{$json.target_stage}}", "value2": "canary"}]}, "renameOutput": true, "outputKey": "canary"},
+            {"conditions": {"string": [{"value1": "={{$json.target_stage}}", "value2": "rollout"}]}, "renameOutput": true, "outputKey": "rollout"}
+          ]
+        }
+      },
+      "id": "switch_stage",
+      "name": "Switch: deployment.stage",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {
+        "command": "scp {{$json.engine_path}} jetson@10.0.4.150:/opt/reachy/models/emotion_shadow.engine",
+        "authentication": "password"
+      },
+      "id": "deploy_shadow",
+      "name": "SSH: deploy.shadow",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-200, 100],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "command": "scp {{$json.engine_path}} jetson@10.0.4.150:/opt/reachy/models/emotion_canary.engine && ssh jetson@10.0.4.150 'sudo systemctl restart reachy-emotion-canary'",
+        "authentication": "password"
+      },
+      "id": "deploy_canary",
+      "name": "SSH: deploy.canary",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-200, 300],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "minutes"
+      },
+      "id": "wait_canary",
+      "name": "Wait: 30min canary",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "webhookId": "deployment-canary-wait"
+    },
+    {
+      "parameters": {
+        "url": "http://10.0.4.150/healthz"
+      },
+      "id": "check_health",
+      "name": "HTTP: check.jetson_health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "command": "cp /opt/reachy/models/emotion_canary.engine /opt/reachy/models/emotion.engine && sudo systemctl restart reachy-emotion",
+        "authentication": "password"
+      },
+      "id": "deploy_rollout",
+      "name": "SSH: deploy.rollout",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [400, 300],
+      "credentials": {"sshPassword": {"id": "4", "name": "SSH Jetson"}}
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "deployment_log",
+        "columns": "engine_path, target_stage, deployed_at, status"
+      },
+      "id": "db_log",
+      "name": "Postgres: log.deployment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [600, 300],
+      "credentials": {"postgres": {"id": "2", "name": "PostgreSQL - reachy_local"}}
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{  {\"status\": \"success\", \"stage\": $json.target_stage, \"engine\": $json.engine_path} }}"
+      },
+      "id": "respond_success",
+      "name": "Respond: success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "webhook_deploy": {"main": [[{"node": "switch_stage", "type": "main", "index": 0}]]},
+    "switch_stage": {
+      "main": [
+        [{"node": "deploy_shadow", "type": "main", "index": 0}],
+        [{"node": "deploy_canary", "type": "main", "index": 0}],
+        [{"node": "deploy_rollout", "type": "main", "index": 0}]
+      ]
+    },
+    "deploy_shadow": {"main": [[{"node": "db_log", "type": "main", "index": 0}]]},
+    "deploy_canary": {"main": [[{"node": "wait_canary", "type": "main", "index": 0}]]},
+    "wait_canary": {"main": [[{"node": "check_health", "type": "main", "index": 0}]]},
+    "check_health": {"main": [[{"node": "db_log", "type": "main", "index": 0}]]},
+    "deploy_rollout": {"main": [[{"node": "db_log", "type": "main", "index": 0}]]},
+    "db_log": {"main": [[{"node": "respond_success", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "agent"}, {"name": "deployment"}],
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}
