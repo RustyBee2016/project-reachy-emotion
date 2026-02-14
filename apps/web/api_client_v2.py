@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Enhanced API client with exponential backoff retry logic and idempotency.
 """
@@ -15,9 +17,15 @@ from enum import Enum
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError, HTTPError
 from urllib.parse import urljoin
-import aiohttp
 import asyncio
 import uuid
+
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional runtime dependency
+    aiohttp = None  # type: ignore[assignment]
+    AIOHTTP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +147,7 @@ class ReachyAPIClient:
         
         url = urljoin(self.config.base_url, endpoint)
         last_error = None
+        previous_delay = 0.0
         
         for attempt in range(max_retries):
             self.request_count += 1
@@ -211,8 +220,12 @@ class ReachyAPIClient:
                 delay = base_delay * (2 ** attempt)
                 # Add jitter
                 delay *= random.uniform(0.5, 1.5)
+                # Keep retries strictly increasing for predictable behavior/tests
+                if delay <= previous_delay:
+                    delay = previous_delay + 0.1
                 # Cap at max delay
                 delay = min(delay, 10.0)
+                previous_delay = delay
                 
                 logger.warning(f"Attempt {attempt + 1} failed: {last_error}. Retrying in {delay:.2f}s...")
                 time.sleep(delay)
@@ -339,6 +352,26 @@ class ReachyAPIClient:
         Returns:
             List of promotion results
         """
+        if not AIOHTTP_AVAILABLE:
+            # Fallback path for environments without aiohttp.
+            async def _sync_promote(video_id: str, dest_split: str, label: str) -> Dict[str, Any]:
+                return await asyncio.to_thread(
+                    self.promote_video,
+                    video_id,
+                    dest_split,
+                    label,
+                )
+
+            tasks = [_sync_promote(video_id, dest_split, label) for video_id, dest_split, label in promotions]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            successful = []
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Batch promotion failure for {promotions[i][0]}: {result}")
+                else:
+                    successful.append(result)
+            return successful
+
         tasks = []
         async with aiohttp.ClientSession() as session:
             for video_id, dest_split, label in promotions:
@@ -359,7 +392,7 @@ class ReachyAPIClient:
     
     async def _promote_async(
         self,
-        session: aiohttp.ClientSession,
+        session: Any,
         video_id: str,
         dest_split: str,
         label: str

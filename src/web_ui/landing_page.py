@@ -229,7 +229,7 @@ with col8:
 with col9:
     # Element 8: Emotion type input
     st.markdown("**Enter the emotion type:**")
-    emotion_options = ["neutral", "happy", "sad", "angry", "surprise", "fearful"]
+    emotion_options = ["neutral", "happy", "sad"]
     
     selected_emotion = st.selectbox(
         "Emotion",
@@ -238,7 +238,7 @@ with col9:
         key="emotion_select"
     )
     
-    st.caption("(happy, sad, angry, surprised, neutral)")
+    st.caption("(happy, sad, neutral)")
     
     # Element 10: Incorrect/Delete button
     if st.button("❌ Incorrect", key="delete_video", use_container_width=True):

@@ -1,5 +1,12 @@
 import os
+<<<<<<< Updated upstream
 from typing import Any, Dict, Optional
+=======
+import time
+import uuid
+from functools import wraps
+from typing import Any, Callable, Dict, Optional, TypeVar
+>>>>>>> Stashed changes
 
 import requests
 
@@ -86,7 +93,10 @@ def promote(
 
 def rebuild_manifest() -> Dict[str, Any]:
     url = f"{_base_url()}/manifest/rebuild"
-    resp = requests.post(url, headers=_headers(), timeout=30)
+    payload = {"splits": ["train", "test"], "correlation_id": str(uuid.uuid4())}
+    headers = _headers()
+    headers["Idempotency-Key"] = payload["correlation_id"]
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -118,14 +128,15 @@ def upload_video(
 ) -> Dict[str, Any]:
     url = f"{_gateway_base()}/api/media/ingest"
     headers = _headers()
+    headers["Idempotency-Key"] = correlation_id or str(uuid.uuid4())
     files = {"file": (file_name, file_bytes)}
     data: Dict[str, Any] = {
         "for_training": str(bool(upload_for_training)).lower(),
         "correlation_id": correlation_id,
     }
     if metadata:
-        for key, value in metadata.items():
-            data[f"meta[{key}]"] = value
+        import json
+        data["metadata_json"] = json.dumps(metadata)
     resp = requests.post(url, headers=headers, files=files, data=data, timeout=60)
     resp.raise_for_status()
     return resp.json()
@@ -153,3 +164,105 @@ def reject_video(video_id: str, correlation_id: str, reason: Optional[str] = Non
     resp = requests.post(url, headers=_headers(), json=payload, timeout=15)
     resp.raise_for_status()
     return resp.json()
+<<<<<<< Updated upstream
+=======
+
+
+def stage_videos(video_ids: list[str], label: str, dry_run: bool = True) -> Dict[str, Any]:
+    url = f"{_base_url()}/api/v1/promote/stage"
+    headers = _headers()
+    headers["X-Correlation-ID"] = str(uuid.uuid4())
+    payload = {"video_ids": video_ids, "label": label, "dry_run": dry_run}
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def sample_split(
+    run_id: str,
+    target_split: str,
+    sample_fraction: float,
+    strategy: str = "balanced_random",
+    seed: Optional[int] = None,
+    dry_run: bool = True,
+) -> Dict[str, Any]:
+    url = f"{_base_url()}/api/v1/promote/sample"
+    headers = _headers()
+    headers["X-Correlation-ID"] = str(uuid.uuid4())
+    payload: Dict[str, Any] = {
+        "run_id": run_id,
+        "target_split": target_split,
+        "sample_fraction": sample_fraction,
+        "strategy": strategy,
+        "dry_run": dry_run,
+    }
+    if seed is not None:
+        payload["seed"] = seed
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_training_status(pipeline_id: str) -> Dict[str, Any]:
+    url = f"{_gateway_base()}/api/training/status/{pipeline_id}"
+    resp = requests.get(url, headers=_headers(), timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def update_training_status(pipeline_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    url = f"{_gateway_base()}/api/training/status/{pipeline_id}"
+    resp = requests.post(url, headers=_headers(), json=payload, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_deployment_status(pipeline_id: str) -> Dict[str, Any]:
+    url = f"{_gateway_base()}/api/deployment/status/{pipeline_id}"
+    resp = requests.get(url, headers=_headers(), timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def update_deployment_status(pipeline_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    url = f"{_gateway_base()}/api/deployment/status/{pipeline_id}"
+    resp = requests.post(url, headers=_headers(), json=payload, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def stage_to_dataset_all(
+    video_ids: list[str],
+    label: str,
+    dry_run: bool = False,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Stage videos from temp to dataset_all with emotion label metadata.
+    
+    This uses the database-backed promotion service that persists metadata
+    to PostgreSQL and performs atomic filesystem operations.
+    
+    Args:
+        video_ids: List of video IDs to stage
+        label: Emotion label (happy, sad, neutral)
+        dry_run: If True, validate without executing
+        correlation_id: Optional correlation ID for tracking
+        
+    Returns:
+        Response with promoted_ids, skipped_ids, failed_ids
+    """
+    url = f"{_base_url()}/api/v1/promote/stage"
+    payload: Dict[str, Any] = {
+        "video_ids": video_ids,
+        "label": label,
+        "dry_run": dry_run,
+    }
+    headers = _headers()
+    if correlation_id:
+        headers["X-Correlation-ID"] = correlation_id
+    
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+>>>>>>> Stashed changes

@@ -12,7 +12,7 @@ from ..db.enums import EmotionEnum, SelectionTargetEnum
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from ..services.promote_service import SampleResult, StageResult
 
-_ALLOWED_LABELS = frozenset(str(label) for label in EmotionEnum.enums)
+_ALLOWED_LABELS = frozenset({"happy", "sad", "neutral"})
 _ALLOWED_TARGET_SPLITS = frozenset(str(split) for split in SelectionTargetEnum.enums)
 
 

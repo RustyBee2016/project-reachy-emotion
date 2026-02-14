@@ -2,7 +2,34 @@
 Session state management for Streamlit application.
 Handles WebSocket connections, API client initialization, and shared state.
 """
-import streamlit as st
+import sys
+import types
+
+try:
+    import streamlit as st
+except ImportError:  # pragma: no cover - test/runtime fallback
+    streamlit_stub = types.ModuleType("streamlit")
+    streamlit_stub.session_state = {}
+
+    def _noop(*args, **kwargs):
+        return None
+
+    class _Ctx:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
+    streamlit_stub.columns = lambda n: [_Ctx() for _ in range(n)]
+    streamlit_stub.success = _noop
+    streamlit_stub.error = _noop
+    streamlit_stub.warning = _noop
+    streamlit_stub.info = _noop
+    streamlit_stub.metric = _noop
+    streamlit_stub.expander = lambda *args, **kwargs: _Ctx()
+    sys.modules["streamlit"] = streamlit_stub
+    st = streamlit_stub
 import asyncio
 import logging
 from typing import Optional, Dict, Any
@@ -22,6 +49,25 @@ class SessionManager:
     def _get_session():
         """Get session state (allows mocking in tests)."""
         return st.session_state
+
+    @staticmethod
+    def _has(session, key: str) -> bool:
+        if isinstance(session, dict):
+            return key in session
+        return hasattr(session, key)
+
+    @staticmethod
+    def _get(session, key: str, default=None):
+        if isinstance(session, dict):
+            return session.get(key, default)
+        return getattr(session, key, default)
+
+    @staticmethod
+    def _set(session, key: str, value):
+        if isinstance(session, dict):
+            session[key] = value
+        else:
+            setattr(session, key, value)
     
     @staticmethod
     def initialize():
@@ -29,7 +75,7 @@ class SessionManager:
         session = SessionManager._get_session()
         
         # API Client
-        if not hasattr(session, 'api_client'):
+        if not SessionManager._has(session, 'api_client'):
             config = APIConfig(
                 base_url=os.getenv('REACHY_API_BASE', 'http://10.0.4.130/api/media'),
                 gateway_url=os.getenv('REACHY_GATEWAY_BASE', 'http://10.0.4.140:8000'),
@@ -37,95 +83,96 @@ class SessionManager:
                 timeout=30,
                 max_retries=3
             )
-            session.api_client = ReachyAPIClient(config)
+            SessionManager._set(session, 'api_client', ReachyAPIClient(config))
             logger.info("API client initialized")
         
         # WebSocket Client (lazy initialization)
-        if not hasattr(session, 'ws_client'):
-            session.ws_client = None
-            session.ws_connected = False
+        if not SessionManager._has(session, 'ws_client'):
+            SessionManager._set(session, 'ws_client', None)
+            SessionManager._set(session, 'ws_connected', False)
         
         # UI State
-        if not hasattr(session, 'current_page'):
-            session.current_page = 'home'
+        if not SessionManager._has(session, 'current_page'):
+            SessionManager._set(session, 'current_page', 'home')
         
-        if not hasattr(session, 'selected_videos'):
-            session.selected_videos = []
+        if not SessionManager._has(session, 'selected_videos'):
+            SessionManager._set(session, 'selected_videos', [])
         
-        if not hasattr(session, 'filter_split'):
-            session.filter_split = 'temp'
+        if not SessionManager._has(session, 'filter_split'):
+            SessionManager._set(session, 'filter_split', 'temp')
         
-        if not hasattr(session, 'filter_label'):
-            session.filter_label = None
+        if not SessionManager._has(session, 'filter_label'):
+            SessionManager._set(session, 'filter_label', None)
         
         # Real-time Events
-        if not hasattr(session, 'latest_emotion'):
-            session.latest_emotion = None
+        if not SessionManager._has(session, 'latest_emotion'):
+            SessionManager._set(session, 'latest_emotion', None)
         
-        if not hasattr(session, 'recent_promotions'):
-            session.recent_promotions = []
+        if not SessionManager._has(session, 'recent_promotions'):
+            SessionManager._set(session, 'recent_promotions', [])
         
-        if not hasattr(session, 'training_status'):
-            session.training_status = None
+        if not SessionManager._has(session, 'training_status'):
+            SessionManager._set(session, 'training_status', None)
         
         # Notifications
-        if not hasattr(session, 'notifications'):
-            session.notifications = []
+        if not SessionManager._has(session, 'notifications'):
+            SessionManager._set(session, 'notifications', [])
         
         # Stats
-        if not hasattr(session, 'last_refresh'):
-            session.last_refresh = None
+        if not SessionManager._has(session, 'last_refresh'):
+            SessionManager._set(session, 'last_refresh', None)
     
     @staticmethod
     def get_api_client() -> ReachyAPIClient:
         """Get API client from session state."""
         SessionManager.initialize()
-        return st.session_state.api_client
+        return SessionManager._get(st.session_state, 'api_client')
     
     @staticmethod
     def get_ws_client() -> Optional[WebSocketClient]:
         """Get WebSocket client from session state."""
         SessionManager.initialize()
-        return st.session_state.ws_client
+        return SessionManager._get(st.session_state, 'ws_client')
     
     @staticmethod
     def connect_websocket():
         """Initialize and connect WebSocket client."""
-        if st.session_state.ws_client is None:
+        if SessionManager._get(st.session_state, 'ws_client') is None:
             gateway_url = os.getenv('REACHY_GATEWAY_BASE', 'http://10.0.4.140:8000')
-            st.session_state.ws_client = WebSocketClient(
+            ws_client = WebSocketClient(
                 server_url=gateway_url,
                 device_id='web-ui',
                 heartbeat_interval=30
             )
+            SessionManager._set(st.session_state, 'ws_client', ws_client)
             
             # Subscribe to events
-            st.session_state.ws_client.subscribe(
+            ws_client.subscribe(
                 EventType.EMOTION,
                 SessionManager._on_emotion_event
             )
-            st.session_state.ws_client.subscribe(
+            ws_client.subscribe(
                 EventType.PROMOTION,
                 SessionManager._on_promotion_event
             )
-            st.session_state.ws_client.subscribe(
+            ws_client.subscribe(
                 EventType.TRAINING,
                 SessionManager._on_training_event
             )
             
             # Connect (async)
             try:
-                asyncio.run(st.session_state.ws_client.connect())
-                st.session_state.ws_connected = True
+                asyncio.run(ws_client.connect())
+                SessionManager._set(st.session_state, 'ws_connected', True)
                 logger.info("WebSocket connected")
             except Exception as e:
                 logger.error(f"WebSocket connection failed: {e}")
-                st.session_state.ws_connected = False
+                SessionManager._set(st.session_state, 'ws_connected', False)
     
     @staticmethod
     async def _on_emotion_event(event):
         """Handle emotion detection event."""
-        st.session_state.latest_emotion = event
+        SessionManager._set(st.session_state, 'latest_emotion', event)
         SessionManager.add_notification(
             f"Emotion detected: {event.emotion} ({event.confidence:.2%})",
             "info"
@@ -134,9 +181,9 @@ class SessionManager:
     @staticmethod
     async def _on_promotion_event(event):
         """Handle promotion completion event."""
-        st.session_state.recent_promotions.insert(0, event)
-        # Keep only last 10
-        st.session_state.recent_promotions = st.session_state.recent_promotions[:10]
+        recent = SessionManager._get(st.session_state, 'recent_promotions', [])
+        recent.insert(0, event)
+        SessionManager._set(st.session_state, 'recent_promotions', recent[:10])
         
         if event.success:
             SessionManager.add_notification(
@@ -152,7 +199,7 @@ class SessionManager:
     @staticmethod
     async def _on_training_event(event):
         """Handle training status event."""
-        st.session_state.training_status = event
+        SessionManager._set(st.session_state, 'training_status', event)
         SessionManager.add_notification(
             f"Training {event.run_id[:8]}...: {event.status}",
             "info"
@@ -162,17 +209,18 @@ class SessionManager:
     def poll_websocket_messages():
         """Poll WebSocket for new messages and update session state."""
         ws_client = SessionManager.get_ws_client()
-        if ws_client and st.session_state.ws_connected:
+        if ws_client and SessionManager._get(st.session_state, 'ws_connected', False):
             messages = ws_client.get_messages(max_count=50)
             
             for msg_type, data in messages:
                 if msg_type == 'emotion':
-                    st.session_state.latest_emotion = data
+                    SessionManager._set(st.session_state, 'latest_emotion', data)
                 elif msg_type == 'promotion':
-                    st.session_state.recent_promotions.insert(0, data)
-                    st.session_state.recent_promotions = st.session_state.recent_promotions[:10]
+                    recent = SessionManager._get(st.session_state, 'recent_promotions', [])
+                    recent.insert(0, data)
+                    SessionManager._set(st.session_state, 'recent_promotions', recent[:10])
                 elif msg_type == 'training':
-                    st.session_state.training_status = data
+                    SessionManager._set(st.session_state, 'training_status', data)
     
     @staticmethod
     def add_notification(message: str, level: str = "info"):
@@ -182,14 +230,14 @@ class SessionManager:
             'level': level,
             'timestamp': datetime.now()
         }
-        st.session_state.notifications.append(notification)
-        # Keep only last 20
-        st.session_state.notifications = st.session_state.notifications[-20:]
+        notifications = SessionManager._get(st.session_state, 'notifications', [])
+        notifications.append(notification)
+        SessionManager._set(st.session_state, 'notifications', notifications[-20:])
     
     @staticmethod
     def clear_notifications():
         """Clear all notifications."""
-        st.session_state.notifications = []
+        SessionManager._set(st.session_state, 'notifications', [])
     
     @staticmethod
     def get_stats() -> Dict[str, Any]:
@@ -201,10 +249,10 @@ class SessionManager:
             'api_requests': api_client.request_count,
             'api_errors': api_client.error_count,
             'api_retries': api_client.retry_count,
-            'ws_connected': st.session_state.ws_connected,
+            'ws_connected': SessionManager._get(st.session_state, 'ws_connected', False),
             'ws_events': 0,
-            'notifications': len(st.session_state.notifications),
-            'selected_videos': len(st.session_state.selected_videos)
+            'notifications': len(SessionManager._get(st.session_state, 'notifications', [])),
+            'selected_videos': len(SessionManager._get(st.session_state, 'selected_videos', []))
         }
         
         if ws_client:

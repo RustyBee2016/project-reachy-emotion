@@ -1,0 +1,256 @@
+{
+  "name": "Agent 5 — Training Orchestrator EfficientNet-B0 (Reachy 08.4.2)",
+  "description": "Orchestrates EfficientNet-B0 emotion classifier fine-tuning using AffectNet+RAF-DB pretrained weights. Model placeholder: efficientnet-b0-hsemotion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/training/efficientnet/start",
+        "responseMode": "onReceived",
+        "options": {"responseCode": 202}
+      },
+      "id": "webhook_training",
+      "name": "Webhook: training.start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-800, 300],
+      "webhookId": "efficientnet-training-start"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) FILTER (WHERE label='happy' AND split='train') AS happy_train, COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train, COUNT(*) FILTER (WHERE label='neutral' AND split='train') AS neutral_train FROM video;"
+      },
+      "id": "db_check_balance",
+      "name": "Postgres: check.train_balance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-600, 300],
+      "credentials": {"postgres": {"id": "2", "name": "PostgreSQL - reachy_local"}}
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {"value1": "={{Math.min($json.happy_train, $json.sad_train, $json.neutral_train)}}", "operation": "largerEqual", "value2": 50}
+          ]
+        }
+      },
+      "id": "if_sufficient_data",
+      "name": "IF: sufficient_data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MLFLOW_URL}}/api/2.0/mlflow/runs/create",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "experiment_id", "value": "={{$env.MLFLOW_EXPERIMENT_ID}}"},
+            {"name": "tags", "value": "={{[{key: 'model', value: 'efficientnet-b0-hsemotion'}, {key: 'dataset_hash', value: $json.dataset_hash}, {key: 'correlation_id', value: $json.correlation_id}]}}"}
+          ]
+        }
+      },
+      "id": "mlflow_create_run",
+      "name": "HTTP: mlflow.create_run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-200, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Generate run ID and prepare 3-class EfficientNet pipeline command\nconst timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst runId = `efficientnet_b0_emotion_${timestamp}`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    run_id: runId,\n    config_path: '/workspace/trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml',\n    output_dir: `/workspace/experiments/${runId}`,\n    model_placeholder: 'efficientnet-b0-hsemotion',\n    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet_b0',\n    gateway_base: $env.GATEWAY_BASE_URL || 'http://10.0.4.140:8000'\n  }\n}];"
+      },
+      "id": "prepare_training",
+      "name": "Code: prepare.training",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "command": "cd /workspace && mkdir -p {{$json.output_dir}} && source venv/bin/activate && python trainer/run_efficientnet_pipeline.py --config {{$json.config_path}} --run-id {{$json.run_id}} --output-dir {{$json.output_dir}} --gateway-base {{$json.gateway_base}} --strict-contract-updates > {{$json.output_dir}}/pipeline.log 2>&1",
+        "authentication": "password"
+      },
+      "id": "ssh_start_training",
+      "name": "SSH: start.training",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {"amount": 5, "unit": "minutes"},
+      "id": "wait_poll",
+      "name": "Wait: 5min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [400, 200],
+      "webhookId": "efficientnet-training-wait"
+    },
+    {
+      "parameters": {
+        "command": "RUN_STATUS=$(curl -s {{$json.gateway_base}}/api/training/status/{{$json.run_id}}); LATEST_STATUS=$(curl -s {{$json.gateway_base}}/api/training/status/latest); echo \"{\\\"run_status\\\":$RUN_STATUS,\\\"latest_status\\\":$LATEST_STATUS}\"",
+        "authentication": "password"
+      },
+      "id": "check_status",
+      "name": "SSH: check.status",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [600, 200],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const payload = JSON.parse($json.stdout || '{}');\nconst runStatus = payload.run_status || {};\nconst latestStatus = payload.latest_status || {};\nconst metrics = runStatus.metrics || {};\nconst gateResults = metrics.gate_a_gates || {};\n\nif (runStatus.status === 'training' || runStatus.status === 'evaluating' || runStatus.status === 'pending' || runStatus.status === 'sampling') {\n  return [{json: {...items[0].json, status: 'running', run_status: runStatus, latest_status: latestStatus}}];\n}\n\nreturn [{\n  json: {\n    ...items[0].json,\n    status: runStatus.status || 'unknown',\n    best_metric: metrics.best_metric ?? metrics.f1_macro ?? null,\n    epochs_completed: metrics.epochs_completed ?? null,\n    gate_results: {\n      ...gateResults,\n      gate_a: metrics.gate_a_passed ?? false\n    },\n    run_status: runStatus,\n    latest_status: latestStatus\n  }\n}];"
+      },
+      "id": "parse_results",
+      "name": "Code: parse.results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{"value1": "={{$json.status}}", "operation": "contains", "value2": "completed"}]
+        }
+      },
+      "id": "if_done",
+      "name": "IF: training.done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.gate_results.gate_a}}", "value2": true}
+          ]
+        }
+      },
+      "id": "gate_a_check",
+      "name": "IF: Gate_A.pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 100]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MLFLOW_URL}}/api/2.0/mlflow/runs/log-metric",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "run_id", "value": "={{$json.mlflow_run_id}}"},
+            {"name": "key", "value": "=gate_a_passed"},
+            {"name": "value", "value": "={{$json.gate_results.gate_a ? 1 : 0}}"}
+          ]
+        }
+      },
+      "id": "mlflow_log_gate",
+      "name": "HTTP: mlflow.log_gate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/training",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=training.completed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
+            {"name": "gate_a_passed", "value": "={{$json.gate_results.gate_a}}"},
+            {"name": "onnx_path", "value": "={{$json.export?.onnx || ''}}"},
+            {"name": "best_f1", "value": "={{$json.best_metric}}"}
+          ]
+        }
+      },
+      "id": "emit_completed",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1600, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/training",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=training.gate_failed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
+            {"name": "best_f1", "value": "={{$json.best_metric}}"},
+            {"name": "message", "value": "=Gate A requirements not met. Need more training data or hyperparameter tuning."}
+          ]
+        }
+      },
+      "id": "emit_gate_failed",
+      "name": "HTTP: emit.gate_failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1400, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/training",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=training.insufficient_data"},
+            {"name": "happy_count", "value": "={{$json.happy_train}}"},
+            {"name": "sad_count", "value": "={{$json.sad_train}}"},
+            {"name": "neutral_count", "value": "={{$json.neutral_train}}"},
+            {"name": "message", "value": "=Insufficient training data. Need at least 50 samples per class (happy/sad/neutral)."}
+          ]
+        }
+      },
+      "id": "emit_insufficient",
+      "name": "HTTP: emit.insufficient_data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-200, 400]
+    }
+  ],
+  "connections": {
+    "webhook_training": {"main": [[{"node": "db_check_balance", "type": "main", "index": 0}]]},
+    "db_check_balance": {"main": [[{"node": "if_sufficient_data", "type": "main", "index": 0}]]},
+    "if_sufficient_data": {
+      "main": [
+        [{"node": "mlflow_create_run", "type": "main", "index": 0}],
+        [{"node": "emit_insufficient", "type": "main", "index": 0}]
+      ]
+    },
+    "mlflow_create_run": {"main": [[{"node": "prepare_training", "type": "main", "index": 0}]]},
+    "prepare_training": {"main": [[{"node": "ssh_start_training", "type": "main", "index": 0}]]},
+    "ssh_start_training": {"main": [[{"node": "wait_poll", "type": "main", "index": 0}]]},
+    "wait_poll": {"main": [[{"node": "check_status", "type": "main", "index": 0}]]},
+    "check_status": {"main": [[{"node": "parse_results", "type": "main", "index": 0}]]},
+    "parse_results": {"main": [[{"node": "if_done", "type": "main", "index": 0}]]},
+    "if_done": {
+      "main": [
+        [{"node": "gate_a_check", "type": "main", "index": 0}],
+        [{"node": "wait_poll", "type": "main", "index": 0}]
+      ]
+    },
+    "gate_a_check": {
+      "main": [
+        [{"node": "mlflow_log_gate", "type": "main", "index": 0}],
+        [{"node": "emit_gate_failed", "type": "main", "index": 0}]
+      ]
+    },
+    "mlflow_log_gate": {"main": [[{"node": "emit_completed", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [{"name": "agent"}, {"name": "training"}, {"name": "efficientnet"}, {"name": "ml-v1"}],
+  "updatedAt": "2025-11-29T00:00:00.000Z",
+  "versionId": "1"
+}

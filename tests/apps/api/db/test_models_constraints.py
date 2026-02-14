@@ -4,9 +4,10 @@ import uuid
 from pathlib import Path
 
 import pytest
+pytest.importorskip("alembic.command")
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -104,7 +105,5 @@ def test_training_selection_cascade(engine) -> None:
         session.delete(run)
         session.commit()
 
-        remaining = session.execute(
-            models.select(models.TrainingSelection)  # type: ignore[attr-defined]
-        ).scalars().all()
+        remaining = session.execute(select(models.TrainingSelection)).scalars().all()
         assert not remaining

@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 import logging
+<<<<<<< Updated upstream
 import os
+=======
+import shutil
+import subprocess
+import uuid
+>>>>>>> Stashed changes
 from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
+<<<<<<< Updated upstream
 from pythonjsonlogger.json import JsonFormatter
+=======
+from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
+
+from ..app.config import AppConfig, get_config
+from ..app.db.models import PromotionLog, Video
+from ..app.deps import get_db
+from ..app.routers import health as health_router
+from sqlalchemy.ext.asyncio import AsyncSession
+>>>>>>> Stashed changes
 
 router = APIRouter()
 
@@ -22,7 +38,15 @@ VIDEOS_ROOT = Path(os.getenv("MEDIA_VIDEOS_ROOT", "/media/project_data/reachy_em
 
 
 @router.post("/api/media/promote")
+<<<<<<< Updated upstream
 async def promote(request: Request) -> JSONResponse:
+=======
+async def promote(
+    request: Request,
+    config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+>>>>>>> Stashed changes
     body: Dict[str, Any] = await request.json()
 
     payload = body
@@ -88,8 +112,39 @@ async def promote(request: Request) -> JSONResponse:
         )
 
     clip = payload["clip"]
+<<<<<<< Updated upstream
     src = VIDEOS_ROOT / "temp" / clip
     dst = VIDEOS_ROOT / payload["target"] / clip
+=======
+    video_id = str(body.get("video_id") or Path(str(clip)).stem)
+    target_split = payload["target"]
+    train_label = body.get("label") or payload.get("label")
+    train_label = str(train_label).strip().lower() if train_label is not None else None
+    if target_split == "train" and train_label not in {"happy", "sad", "neutral"}:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_error",
+                "message": "Train promotion requires label in {happy, sad, neutral}",
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        )
+
+    video = await db.get(Video, video_id)
+    if video is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "not_found",
+                "message": f"Video not found: {video_id}",
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        )
+
+    src = config.videos_root / str(video.file_path)
+    dst_name = Path(str(video.file_path)).name
+    dst = config.videos_root / target_split / dst_name
+>>>>>>> Stashed changes
     dry_run = bool(payload.get("dry_run", body.get("dry_run", False)))
 
     logger.info(
@@ -105,13 +160,60 @@ async def promote(request: Request) -> JSONResponse:
             "adapter_mode": adapter_mode,
         },
     )
+    if dry_run:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "ok",
+                "video_id": video_id,
+                "src": str(src),
+                "dst": str(dst),
+                "dry_run": True,
+                "adapter_mode": adapter_mode,
+            },
+        )
+
+    if not src.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "file_not_found",
+                "message": f"Source file missing: {src}",
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        )
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+
+    from_split = video.split.value if hasattr(video.split, "value") else str(video.split)
+    video.split = target_split
+    video.label = train_label if target_split == "train" else None
+    video.file_path = str(dst.relative_to(config.videos_root))
+
+    db.add(
+        PromotionLog(
+            video_id=video.video_id,
+            from_split=from_split,
+            to_split=target_split,
+            intended_label=train_label if target_split == "train" else None,
+            actor="gateway_legacy_promote",
+            dry_run=False,
+            success=True,
+            correlation_id=payload.get("correlation_id"),
+            extra_data={"adapter_mode": adapter_mode},
+        )
+    )
+    await db.commit()
+
     return JSONResponse(
         status_code=200,
         content={
             "status": "ok",
+            "video_id": video_id,
             "src": str(src),
             "dst": str(dst),
-            "dry_run": dry_run,
+            "dry_run": False,
             "adapter_mode": adapter_mode,
         },
     )

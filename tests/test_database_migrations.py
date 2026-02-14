@@ -12,6 +12,13 @@ from decimal import Decimal
 import uuid
 
 
+def _connect_or_skip(**kwargs):
+    try:
+        return psycopg2.connect(**kwargs)
+    except psycopg2.OperationalError:
+        pytest.skip("PostgreSQL test database unavailable; skipping DB integration migration tests")
+
+
 class TestDatabaseSchema:
     """Test database schema creation."""
     
@@ -19,7 +26,7 @@ class TestDatabaseSchema:
     def db_connection(self):
         """Create test database connection."""
         # Use test database
-        conn = psycopg2.connect(
+        conn = _connect_or_skip(
             host=os.getenv('DB_HOST', 'localhost'),
             port=os.getenv('DB_PORT', '5432'),
             database=os.getenv('TEST_DB_NAME', 'reachy_test'),
@@ -114,7 +121,7 @@ class TestStoredProcedures:
     @pytest.fixture
     def db_connection(self):
         """Create test database connection with sample data."""
-        conn = psycopg2.connect(
+        conn = _connect_or_skip(
             host=os.getenv('DB_HOST', 'localhost'),
             database=os.getenv('TEST_DB_NAME', 'reachy_test'),
             user=os.getenv('DB_USER', 'reachy'),
@@ -279,7 +286,7 @@ class TestTriggers:
     
     @pytest.fixture
     def db_connection(self):
-        conn = psycopg2.connect(
+        conn = _connect_or_skip(
             host=os.getenv('DB_HOST', 'localhost'),
             database=os.getenv('TEST_DB_NAME', 'reachy_test'),
             user=os.getenv('DB_USER', 'reachy'),

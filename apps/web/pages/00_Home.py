@@ -251,14 +251,14 @@ def _classification_section() -> None:
         current = st.session_state.current_video
         dest_label = "training" if current and current.get("for_training") else "test"
         st.markdown("**Enter the emotion type:**")
-        emotions = ["neutral", "happy", "sad", "angry", "surprise", "fearful"]
+        emotions = ["neutral", "happy", "sad"]
         selected_emotion = st.selectbox(
             "Emotion",
             options=emotions,
             label_visibility="collapsed",
             key="home_emotion_select",
         )
-        st.caption("(happy, sad, angry, surprised, neutral, fearful)")
+        st.caption("(happy, sad, neutral)")
 
         if st.button("❌ Incorrect", key="home_delete_video", use_container_width=True):
             if current:

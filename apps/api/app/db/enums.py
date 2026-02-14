@@ -21,8 +21,11 @@ EmotionEnum = Enum(
     "neutral",
     "happy",
     "sad",
+<<<<<<< Updated upstream
     "angry",
     "surprise",
+=======
+>>>>>>> Stashed changes
     name=EMOTION_ENUM_NAME,
     create_constraint=True,
     native_enum=False,
