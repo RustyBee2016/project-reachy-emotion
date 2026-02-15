@@ -1,6 +1,7 @@
 """Tests for API client retry logic and v1 endpoint usage."""
 
 import pytest
+import os
 from unittest.mock import Mock, patch
 from requests.exceptions import ConnectionError, HTTPError, Timeout
 
@@ -236,6 +237,27 @@ class TestResponseParsing:
         assert result["items"] == []
         assert result["total"] == 0
         assert result["has_more"] is False
+
+
+class TestSSLVerification:
+    """Test SSL verification behavior for private gateway/media hosts."""
+
+    def test_private_https_defaults_to_verify(self):
+        with patch.dict(os.environ, {}, clear=True):
+            verify = api_client._request_verify("https://10.0.4.140", "GATEWAY")
+            assert verify is True
+
+    def test_explicit_verify_flag_overrides_default(self):
+        with patch.dict(os.environ, {"REACHY_GATEWAY_CA_BUNDLE": "/tmp/ca.pem"}, clear=True):
+            verify = api_client._request_verify("https://10.0.4.140", "GATEWAY")
+            assert verify == "/tmp/ca.pem"
+
+    @patch("requests.post")
+    def test_reject_video_passes_verify_argument(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok"})
+        with patch.dict(os.environ, {"REACHY_GATEWAY_BASE": "https://10.0.4.140"}, clear=True):
+            api_client.reject_video("luma_123", "corr-1", reason="incorrect")
+        assert mock_post.call_args.kwargs["verify"] is True
 
 
 if __name__ == "__main__":

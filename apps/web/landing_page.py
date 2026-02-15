@@ -33,6 +33,7 @@ from api_client import (
     upload_video as ingest_video,
     list_videos as list_videos_api,
     stage_to_dataset_all,
+    register_local_video,
 )
 
 
@@ -96,6 +97,35 @@ def _ensure_video_id(current: dict) -> Optional[str]:
     if isinstance(video_id, str) and video_id:
         return video_id
     return _refresh_video_metadata(current)
+
+
+def _is_uuid_identifier(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _legacy_clip_identifier(current: dict, video_id: Optional[str]) -> Optional[str]:
+    backend_path = current.get("backend_path")
+    if isinstance(backend_path, str) and backend_path:
+        return Path(backend_path).name
+
+    name = current.get("name")
+    if isinstance(name, str) and name:
+        return Path(name).name
+
+    if isinstance(video_id, str) and video_id:
+        return video_id
+
+    path = current.get("path")
+    if isinstance(path, str) and path:
+        return Path(path).name
+
+    return None
 
 # Load environment variables from the Streamlit app directory before access
 WEB_ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -322,6 +352,23 @@ with col5:
                     }
 
                     if not video_id:
+                        rel_path = f"temp/{video_path.name}"
+                        try:
+                            register_response = register_local_video(
+                                file_path=rel_path,
+                                correlation_id=correlation_id,
+                                metadata={"generator": "luma", "prompt": video_prompt},
+                                file_name=video_path.name,
+                                idempotency_key=correlation_id,
+                            )
+                            video_id = _extract_video_id(register_response)
+                            backend_path = _extract_file_path(register_response) or rel_path
+                            st.session_state.current_video["video_id"] = video_id
+                            st.session_state.current_video["backend_path"] = backend_path
+                        except Exception as e:  # noqa: BLE001
+                            st.warning(f"Unable to register local video: {e}")
+
+                    if not video_id:
                         _refresh_video_metadata(st.session_state.current_video)  # best-effort lookup
                     
                     # Update queue status
@@ -420,29 +467,52 @@ with col9:
                     )
                 else:
                     correlation_id = str(uuid.uuid4())
-                    # Use database-backed promotion service to persist metadata
-                    response = stage_to_dataset_all(
-                        video_ids=[video_id],
-                        label=selected_emotion,
-                        dry_run=False,
-                        correlation_id=correlation_id,
-                    )
+                    stage_succeeded = False
 
-                    st.success(f"✅ Classified as: **{selected_emotion}**")
-                    st.info("Video staged to dataset_all with metadata saved to database")
+                    if _is_uuid_identifier(video_id):
+                        try:
+                            response = stage_to_dataset_all(
+                                video_ids=[video_id],
+                                label=selected_emotion,
+                                dry_run=False,
+                                correlation_id=correlation_id,
+                            )
+                            stage_succeeded = True
+                            st.success(f"✅ Classified as: **{selected_emotion}**")
+                            st.info("Video staged to dataset_all with metadata saved to database")
+
+                            promoted = response.get("promoted_ids", [])
+                            skipped = response.get("skipped_ids", [])
+                            failed = response.get("failed_ids", [])
+                            if promoted:
+                                st.caption(f"✅ Promoted: {len(promoted)} video(s)")
+                            if skipped:
+                                st.caption(f"⏭️ Skipped: {len(skipped)} video(s)")
+                            if failed:
+                                st.warning(f"⚠️ Failed: {len(failed)} video(s)")
+                        except Exception as stage_exc:  # noqa: BLE001
+                            st.warning(
+                                f"Stage endpoint failed ({stage_exc}); falling back to legacy promote flow."
+                            )
+
+                    if not stage_succeeded:
+                        clip_id = _legacy_clip_identifier(current, video_id)
+                        if not clip_id:
+                            st.error("Unable to resolve a clip identifier for legacy promotion.")
+                        else:
+                            promote_via_gateway(
+                                video_id=clip_id,
+                                dest_split="train",
+                                label=selected_emotion,
+                                dry_run=False,
+                                correlation_id=correlation_id,
+                                use_gateway=True,
+                                idempotency_key=correlation_id,
+                            )
+                            st.success(f"✅ Classified as: **{selected_emotion}**")
+                            st.info("Video promoted to train split via gateway compatibility path")
+
                     st.session_state.current_video = None
-
-                    # Display promotion results
-                    promoted = response.get("promoted_ids", [])
-                    skipped = response.get("skipped_ids", [])
-                    failed = response.get("failed_ids", [])
-                    
-                    if promoted:
-                        st.caption(f"✅ Promoted: {len(promoted)} video(s)")
-                    if skipped:
-                        st.caption(f"⏭️ Skipped: {len(skipped)} video(s)")
-                    if failed:
-                        st.warning(f"⚠️ Failed: {len(failed)} video(s)")
             except Exception as e:  # noqa: BLE001
                 st.error(f"❌ Classification failed: {str(e)}")
 

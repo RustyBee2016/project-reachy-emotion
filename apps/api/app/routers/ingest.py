@@ -66,6 +66,19 @@ class UploadVideoResponse(PullVideoResponse):
     file_name: Optional[str] = None
 
 
+class RegisterLocalVideoRequest(BaseModel):
+    """Register a locally available video (already on disk)."""
+    file_path: str = Field(..., description="Path relative to videos root, e.g., temp/luma_123.mp4")
+    correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Optional metadata for storage")
+    file_name: Optional[str] = Field(None, description="Original file name for reference")
+
+
+class RegisterLocalVideoResponse(PullVideoResponse):
+    """Response from local registration operation."""
+    file_name: Optional[str] = None
+
+
 class RebuildManifestRequest(BaseModel):
     """Request to rebuild dataset manifests."""
     splits: List[str] = Field(default=["train", "test"], description="Splits to rebuild")
@@ -530,6 +543,131 @@ async def upload_video(
             detail={
                 "error": "internal_error",
                 "message": f"Upload failed: {exc}",
+                "correlation_id": corr_id,
+            },
+        ) from exc
+
+
+@router.post("/register-local", response_model=RegisterLocalVideoResponse)
+async def register_local_video(
+    request: RegisterLocalVideoRequest,
+    config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+) -> RegisterLocalVideoResponse:
+    """Register an existing local file under temp/ into the DB.
+
+    This does not move or copy the file; it only records metadata and generates a thumbnail.
+    """
+    corr_id = request.correlation_id or str(uuid.uuid4())
+    raw_path = request.file_path.strip()
+    try:
+        rel_path = Path(raw_path)
+        if rel_path.is_absolute():
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "validation_error",
+                    "message": "file_path must be relative (e.g., temp/luma_123.mp4)",
+                    "correlation_id": corr_id,
+                },
+            )
+        if not rel_path.parts or rel_path.parts[0] != "temp":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "validation_error",
+                    "message": "file_path must start with temp/",
+                    "correlation_id": corr_id,
+                },
+            )
+
+        file_path = config.videos_root / rel_path
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"File not found: {file_path}",
+                    "correlation_id": corr_id,
+                },
+            )
+
+        video_bytes = file_path.read_bytes()
+        sha256 = compute_sha256(video_bytes)
+        size_bytes = len(video_bytes)
+
+        existing = await db.execute(
+            select(Video).where(Video.sha256 == sha256, Video.size_bytes == size_bytes)
+        )
+        existing_video = existing.scalar_one_or_none()
+        if existing_video:
+            return RegisterLocalVideoResponse(
+                status="duplicate",
+                video_id=existing_video.video_id,
+                sha256=sha256,
+                file_path=existing_video.file_path,
+                size_bytes=existing_video.size_bytes,
+                duration_sec=existing_video.duration_sec,
+                fps=existing_video.fps,
+                width=existing_video.width,
+                height=existing_video.height,
+                correlation_id=corr_id,
+                duplicate=True,
+                file_name=request.file_name,
+            )
+
+        parsed_meta = request.metadata or {}
+        parsed_meta["for_training"] = False
+        if request.file_name:
+            parsed_meta["source_file_name"] = request.file_name
+        if idempotency_key:
+            parsed_meta["idempotency_key"] = idempotency_key
+
+        metadata = await ffprobe_metadata(file_path)
+        video_id = str(uuid.uuid4())
+        thumb_path = config.thumbs_path / f"{video_id}.jpg"
+        await generate_thumbnail(file_path, thumb_path)
+
+        video = Video(
+            video_id=video_id,
+            file_path=str(rel_path),
+            split="temp",
+            label=None,
+            sha256=sha256,
+            size_bytes=size_bytes,
+            duration_sec=metadata.duration_sec,
+            fps=metadata.fps,
+            width=metadata.width,
+            height=metadata.height,
+            extra_data=parsed_meta,
+        )
+        db.add(video)
+        await db.commit()
+
+        return RegisterLocalVideoResponse(
+            status="done",
+            video_id=video_id,
+            sha256=sha256,
+            file_path=str(rel_path),
+            size_bytes=size_bytes,
+            duration_sec=metadata.duration_sec,
+            fps=metadata.fps,
+            width=metadata.width,
+            height=metadata.height,
+            correlation_id=corr_id,
+            duplicate=False,
+            file_name=request.file_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("register_local_video_failed", extra={"correlation_id": corr_id})
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Register local failed: {exc}",
                 "correlation_id": corr_id,
             },
         ) from exc

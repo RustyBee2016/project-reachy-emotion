@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 import logging
-<<<<<<< Updated upstream
-import os
-=======
 import shutil
 import subprocess
 import uuid
->>>>>>> Stashed changes
 from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
-<<<<<<< Updated upstream
-from pythonjsonlogger.json import JsonFormatter
-=======
 from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
 
 from ..app.config import AppConfig, get_config
@@ -23,7 +16,6 @@ from ..app.db.models import PromotionLog, Video
 from ..app.deps import get_db
 from ..app.routers import health as health_router
 from sqlalchemy.ext.asyncio import AsyncSession
->>>>>>> Stashed changes
 
 router = APIRouter()
 
@@ -38,15 +30,11 @@ VIDEOS_ROOT = Path(os.getenv("MEDIA_VIDEOS_ROOT", "/media/project_data/reachy_em
 
 
 @router.post("/api/media/promote")
-<<<<<<< Updated upstream
-async def promote(request: Request) -> JSONResponse:
-=======
 async def promote(
     request: Request,
     config: AppConfig = Depends(get_config),
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
->>>>>>> Stashed changes
     body: Dict[str, Any] = await request.json()
 
     payload = body
@@ -112,10 +100,6 @@ async def promote(
         )
 
     clip = payload["clip"]
-<<<<<<< Updated upstream
-    src = VIDEOS_ROOT / "temp" / clip
-    dst = VIDEOS_ROOT / payload["target"] / clip
-=======
     video_id = str(body.get("video_id") or Path(str(clip)).stem)
     target_split = payload["target"]
     train_label = body.get("label") or payload.get("label")
@@ -143,8 +127,10 @@ async def promote(
 
     src = config.videos_root / str(video.file_path)
     dst_name = Path(str(video.file_path)).name
-    dst = config.videos_root / target_split / dst_name
->>>>>>> Stashed changes
+    if target_split == "train":
+        dst = config.videos_root / target_split / train_label / dst_name
+    else:
+        dst = config.videos_root / target_split / dst_name
     dry_run = bool(payload.get("dry_run", body.get("dry_run", False)))
 
     logger.info(
@@ -249,7 +235,11 @@ async def _list_videos_impl(
 
     entries: List[Dict[str, Any]] = []
     try:
-        for p in root.iterdir():
+        if split == "train":
+            candidates = root.rglob("*")
+        else:
+            candidates = root.iterdir()
+        for p in candidates:
             if not p.is_file():
                 continue
             try:

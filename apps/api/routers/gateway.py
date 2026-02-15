@@ -1,12 +1,6 @@
 from __future__ import annotations
 
 import logging
-<<<<<<< Updated upstream
-from typing import Any, Dict, List
-
-import httpx
-from fastapi import APIRouter, FastAPI, Header, HTTPException, Request, Response
-=======
 import os
 import uuid
 from datetime import datetime, timezone
@@ -14,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
->>>>>>> Stashed changes
 from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -267,39 +260,6 @@ async def relabel_video(
     response = await http_client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
     return JSONResponse(content=response.json(), status_code=response.status_code)
 
-<<<<<<< Updated upstream
-# POST /api/manifest/rebuild - Proxy to Media Mover (requires auth)
-@router.post("/api/manifest/rebuild")
-async def rebuild_manifest(
-    request: Request,
-    x_api_version: Optional[str] = Header(default=None, alias="X-API-Version"),
-    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
-):
-    ensure_api_version(x_api_version)
-    if not idempotency_key:
-        raise HTTPException(status_code=400, detail=error_payload("validation_error", "Idempotency-Key required"))
-    http_client = getattr(request.app.state, "http_client", client)
-    body = await request.json()
-    url = f"{MEDIA_MOVER_URL}/api/manifest/rebuild"
-    response = await http_client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
-    return JSONResponse(content=response.json(), status_code=response.status_code)
-
-
-# GET /api/videos/{video_id} - Proxy to Media Mover
-@router.get("/api/videos/{video_id}")
-async def get_video(video_id: str, request: Request):
-    # Use app.state.http_client if available (gateway app), otherwise use module-level client
-    http_client = getattr(request.app.state, "http_client", client)
-    media_mover_url = getattr(request.app.state, "config", None)
-    if media_mover_url and hasattr(media_mover_url, "media_mover_url"):
-        base_url = media_mover_url.media_mover_url
-    else:
-        base_url = MEDIA_MOVER_URL
-    
-    url = f"{base_url}/api/videos/{video_id}"
-    response = await http_client.get(url)
-    return JSONResponse(content=response.json(), status_code=response.status_code)
-=======
 # ============================================================================
 # n8n Agent Event Endpoints
 # ============================================================================
@@ -512,4 +472,3 @@ async def update_deployment_status(pipeline_id: str, request: Request):
         return JSONResponse(content=response.json(), status_code=response.status_code)
     except Exception:
         return JSONResponse(status_code=500, content=error_payload("internal_error", "Failed"))
->>>>>>> Stashed changes
