@@ -1,4 +1,7 @@
-"""Media Mover FastAPI application entrypoint."""
+"""Media Mover FastAPI application entrypoint.
+
+Bootstraps config, background services, and registers API routers.
+"""
 
 from __future__ import annotations
 
@@ -11,13 +14,15 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Load environment variables from .env file
+# Load environment variables from the API .env file early so config picks them up.
 env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
     load_dotenv(env_file)
     logging.getLogger(__name__).info(f"Loaded environment from {env_file}")
 
+# Legacy router lives under apps/api/routers (pre-v1 endpoints).
 from ..routers import media
+# Current v1 routers and internal service routers.
 from .routers import (
     dialogue,
     gateway_upstream,
@@ -34,7 +39,7 @@ from .services.thumbnail_watcher import ThumbnailWatcherService
 
 logger = logging.getLogger(__name__)
 
-# Global thumbnail watcher instance
+# Global thumbnail watcher instance (started/stopped with app lifespan).
 _thumbnail_watcher: ThumbnailWatcherService | None = None
 
 
@@ -43,7 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Perform setup/teardown for the FastAPI application."""
     global _thumbnail_watcher
 
-    # Load and validate configuration on startup
+    # Load and validate configuration on startup.
     try:
         config = load_and_validate_config(check_port=False)  # Port already bound by this point
         logger.info("Configuration loaded successfully")
@@ -56,7 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.error(f"Configuration validation failed: {e}")
         raise
     
-    # Start thumbnail watcher service
+    # Start thumbnail watcher service (for temp thumbnails).
     try:
         _thumbnail_watcher = ThumbnailWatcherService(
             videos_root=config.videos_root,
@@ -71,7 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     
     yield
     
-    # Cleanup: stop thumbnail watcher
+    # Cleanup: stop thumbnail watcher.
     if _thumbnail_watcher:
         try:
             await _thumbnail_watcher.stop()
@@ -83,7 +88,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     
-    # Load configuration
+    # Load configuration (env already loaded above).
     config = load_and_validate_config(check_port=False)
 
     app = FastAPI(
@@ -93,6 +98,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
 
+    # CORS is enabled for the UI/gateway origins if configured.
     if config.enable_cors:
         app.add_middleware(
             CORSMiddleware,
@@ -102,7 +108,7 @@ def create_app() -> FastAPI:
             allow_credentials=True,
         )
 
-    # Register v1 routers (current API)
+    # Register v1 routers (current API surface).
     app.include_router(health.router)
     app.include_router(media_v1.router)
     app.include_router(promote.router)
@@ -112,7 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(gateway_upstream.router)
     app.include_router(ingest.router)
     
-    # Register legacy routers for backward compatibility
+    # Register legacy routers for backward compatibility if enabled.
     if config.enable_legacy_endpoints:
         app.include_router(legacy.router)
         app.include_router(media.router)  # Old media router
@@ -123,4 +129,5 @@ def create_app() -> FastAPI:
     return app
 
 
+# ASGI app instance for uvicorn/gunicorn.
 app = create_app()
