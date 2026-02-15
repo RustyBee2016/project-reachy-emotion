@@ -14,7 +14,12 @@ WorkingDirectory=/home/rusty_admin/projects/reachy_08.4.2
 EnvironmentFile=-/home/rusty_admin/projects/reachy_08.4.2/apps/api/.env
 
 # Start command
-ExecStart=/media/rusty_admin/project_data/reachy_emotion/apps/api/.venv/bin/python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8083
+# Working directory establishes the base path (locate apps/ package including 'apps' object for FastAPI)
+WorkingDirectory=/media/rusty_admin/project_data/reachy_emotion
+# Guarantees /apps can be found even if working directory changes; provides permanent base path
+Environment=PYTHONPATH=/media/rusty_admin/project_data/reachy_emotion 
+# Uses Python interpreter inside project virtual environment; loads Uvicorn module; calls FastAPI object
+ExecStart=/home/rusty_admin/projects/reachy_08.4.2/venv/bin/python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8083
 
 # Health check after startup (wait 3 seconds then check)
 ExecStartPost=/bin/sleep 3
