@@ -10,7 +10,7 @@
 
 This guide walks through a **complete, real training run** with actual metrics and outputs. Use this as a reference to verify your own training is progressing correctly.
 
-**Scenario**: Training EfficientNet-B0 on 500 emotion videos (250 happy, 250 sad) for 30 epochs.
+**Scenario**: Training EfficientNet-B0 on 750 emotion videos (250 happy, 250 sad, 250 neutral) for 30 epochs.
 
 ---
 
@@ -26,28 +26,30 @@ $ tree -L 2 /media/project_data/reachy_emotion/videos/
 │   └── (empty - all videos promoted)
 ├── train
 │   ├── happy (250 videos)
-│   └── sad (250 videos)
+│   ├── sad (250 videos)
+│   └── neutral (250 videos)
 └── test
     ├── happy (50 videos)
-    └── sad (50 videos)
+    ├── sad (50 videos)
+    └── neutral (50 videos)
 
 # Verify counts
 $ find /media/project_data/reachy_emotion/videos/train -name "*.mp4" | wc -l
-500
+750
 
 $ find /media/project_data/reachy_emotion/videos/test -name "*.mp4" | wc -l
-100
+150
 ```
 
 ### 1.2 Configuration Used
 
 ```yaml
-# trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+# trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 # (actual config from this training run)
 
 model:
   backbone: efficientnet_b0
-  num_classes: 2
+  num_classes: 3
   input_size: 224
   dropout_rate: 0.3
   pretrained_weights: enet_b0_8_best_vgaf
@@ -75,7 +77,7 @@ early_stopping_enabled: true
 patience: 10
 min_delta: 0.001
 
-checkpoint_dir: /workspace/checkpoints/efficientnet_b0_2cls
+checkpoint_dir: /workspace/checkpoints/efficientnet_b0_3cls
 save_interval: 5
 
 gate_a_min_f1_macro: 0.84
@@ -85,7 +87,7 @@ gate_a_max_ece: 0.08
 gate_a_max_brier: 0.16
 
 mlflow_tracking_uri: file:///workspace/mlruns
-mlflow_experiment_name: efficientnet_b0_emotion_2cls
+mlflow_experiment_name: efficientnet_b0_emotion_3cls
 seed: 42
 deterministic: true
 mixed_precision: true
@@ -95,7 +97,7 @@ mixed_precision: true
 
 ```bash
 $ python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --run-id production_run_20260205
 ```
 
@@ -112,11 +114,11 @@ Model: enet_b0_8_best_vgaf (HSEmotion)
 Run ID: production_run_20260205
 ============================================================
 
-Loading configuration from: fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+Loading configuration from: fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 Configuration:
   Model: efficientnet_b0
-  Classes: 2 (happy, sad)
+  Classes: 3 (happy, sad, neutral)
   Input size: 224x224
   Batch size: 32
   Epochs: 30 (5 frozen + 25 unfrozen)
@@ -124,9 +126,9 @@ Configuration:
   Precision: FP16 (mixed)
 
 Dataset:
-  Train: 500 samples (250 happy, 250 sad)
-  Val: 100 samples (50 happy, 50 sad)
-  Class balance: 50.0% / 50.0% ✅
+  Train: 750 samples (250 happy, 250 sad, 250 neutral)
+  Val: 150 samples (50 happy, 50 sad, 50 neutral)
+  Class balance: 33.3% / 33.3% / 33.3% ✅
 
 Model architecture:
   Backbone: EfficientNet-B0 (HSEmotion pretrained)
@@ -134,7 +136,7 @@ Model architecture:
   Trainable parameters: 2,562 (Phase 1: head only)
 
 MLflow tracking: file:///workspace/mlruns
-Experiment: efficientnet_b0_emotion_2cls
+Experiment: efficientnet_b0_emotion_3cls
 
 ============================================================
 Starting Phase 1: Frozen Backbone (epochs 1-5)
@@ -295,7 +297,7 @@ Results:
 GATE A VALIDATION
 ============================================================
 
-Loading best model: /workspace/checkpoints/efficientnet_b0_2cls/best_model.pth
+Loading best model: /workspace/checkpoints/efficientnet_b0_3cls/best_model.pth
 Running evaluation on test set (100 samples)...
 
 Computing metrics...
@@ -346,7 +348,7 @@ Results saved to: outputs/gate_a/gate_a_production_run_20260205.json
 
 | Metric | Value | Meaning |
 |--------|-------|---------|
-| **Macro F1: 0.9089** | Excellent | Strong performance on both classes |
+| **Macro F1: 0.9089** | Excellent | Strong performance on all three classes |
 | **Balanced Accuracy: 0.9100** | Excellent | No class bias |
 | **Per-class F1 (happy): 0.9200** | Excellent | Slightly better at detecting happiness |
 | **Per-class F1 (sad): 0.8978** | Very Good | Sadness slightly harder to classify |
@@ -366,7 +368,7 @@ EXPORTING MODEL TO ONNX
 
 Gate A passed - proceeding with export...
 
-Loading checkpoint: /workspace/checkpoints/efficientnet_b0_2cls/best_model.pth
+Loading checkpoint: /workspace/checkpoints/efficientnet_b0_3cls/best_model.pth
 Converting to FP16 precision...
 Exporting to ONNX (opset 17)...
 
@@ -401,10 +403,10 @@ EXPORT COMPLETE
   "model_name": "emotion_efficientnet",
   "architecture": "efficientnet_b0",
   "pretrained_weights": "enet_b0_8_best_vgaf",
-  "num_classes": 2,
-  "class_names": ["happy", "sad"],
+  "num_classes": 3,
+  "class_names": ["happy", "sad", "neutral"],
   "input_shape": [1, 3, 224, 224],
-  "output_shape": [1, 2],
+  "output_shape": [1, 3],
   "precision": "fp16",
   "opset_version": 17,
   "gate_a_metrics": {

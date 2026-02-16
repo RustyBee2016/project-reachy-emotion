@@ -22,7 +22,7 @@ By the end of this guide, you will:
 
 The Reachy robot needs to recognize human emotions from video:
 - **Input**: Video frames showing a person's face
-- **Output**: Emotion classification (happy, sad, angry, etc.)
+- **Output**: Emotion classification (happy, sad, neutral, angry, etc.)
 
 ### Why This is Hard
 
@@ -103,7 +103,7 @@ Layer 4: Objects (faces, expressions)
         ↓
 Layer 5 (Late): High-level concepts
         ↓
-Classification Head: "This is happy/sad/angry"
+Classification Head: "This is happy/sad/neutral/angry"
 ```
 
 **Early layers** learn general features useful for ANY image task.
@@ -182,7 +182,7 @@ Input Image (224×224×3)
 └───────────────────┘
         │
         ▼
-Output: [happy, sad, angry, ...]
+Output: [happy, sad, neutral, angry, ...]
 ```
 
 ### Pre-trained Weights (HSEmotion)
@@ -354,11 +354,11 @@ Goal: Minimize loss by adjusting model weights.
 
 ### 2-Class Model (Happy/Sad)
 
-For the Reachy robot, we start with binary classification:
+For the Reachy robot, we now use 3-class classification with a neutral baseline:
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Classes | 2 (happy, sad) | Simpler task, easier to validate |
+| Classes | 3 (happy, sad, neutral) | Adds a neutral baseline for comparison while staying tractable |
 | Input size | 224×224 | Standard for EfficientNet-B0 |
 | Batch size | 32 | Good balance of speed/stability |
 | Phase 1 epochs | 5 | Enough to train head |
@@ -374,7 +374,7 @@ For full emotion recognition:
 |---------|-------|
 | Classes | 8 (anger, contempt, disgust, fear, happiness, neutral, sadness, surprise) |
 | Total epochs | 30 |
-| Everything else | Same as 2-class |
+| Everything else | Same as 3-class |
 
 ---
 

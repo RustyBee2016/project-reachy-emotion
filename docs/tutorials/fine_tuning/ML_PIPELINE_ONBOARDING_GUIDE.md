@@ -42,7 +42,7 @@ HSEmotion is a library providing **video-optimized emotion recognition** models:
 - **Pre-trained on**: VGGFace2 + AffectNet (large facial expression datasets)
 - **Model name**: `enet_b0_8_best_vgaf`
 - **8 classes**: anger, contempt, disgust, fear, happy, neutral, sad, surprise
-- **Our use**: Binary (happy/sad) for Phase 1, expandable to 8-class
+- **Our use**: 3-class (happy/sad/neutral) for Phase 1 to include a neutral baseline, expandable to 8-class
 
 ```python
 # Install HSEmotion
@@ -72,10 +72,10 @@ pip install emotiefflib
                     └──────────────────┘
                               ↓
                     ┌──────────────────┐
-                    │  FC: 1280 → 2    │ ← Classification Head
+                    │  FC: 1280 → 3    │ ← Classification Head
                     └──────────────────┘
                               ↓
-                      [happy, sad]
+                      [happy, sad, neutral]
 ```
 
 ---
@@ -105,7 +105,7 @@ from trainer.fer_finetune.model_efficientnet import create_efficientnet_model
 
 # Create model with HSEmotion weights
 model = create_efficientnet_model(
-    num_classes=2,           # Binary: happy, sad
+    num_classes=3,           # 3-class: happy, sad, neutral
     pretrained=True,         # Load HSEmotion weights
     dropout_rate=0.3,
 )
@@ -150,7 +150,7 @@ def predict_emotion(image_path: str, model, device) -> dict:
         probs = torch.softmax(logits, dim=1)
     
     # Decode
-    class_names = ["happy", "sad"]
+    class_names = ["happy", "sad", "neutral"]
     pred_idx = probs.argmax(dim=1).item()
     confidence = probs[0, pred_idx].item()
     
@@ -206,7 +206,7 @@ trainer/
 │   ├── dataset.py                     # Data loading
 │   ├── evaluate.py                    # Metrics
 │   └── specs/
-│       ├── efficientnet_b0_emotion_2cls.yaml  # Binary config
+│       ├── efficientnet_b0_emotion_3cls.yaml  # 3-class config
 │       └── efficientnet_b0_emotion_8cls.yaml  # 8-class config
 ```
 
@@ -225,25 +225,31 @@ Your training data should be organized as:
 │   │   ├── video_001.mp4
 │   │   ├── video_002.mp4
 │   │   └── ...
-│   └── sad/
-│       ├── video_101.mp4
-│       ├── video_102.mp4
+│   ├── sad/
+│   │   ├── video_101.mp4
+│   │   ├── video_102.mp4
+│   │   └── ...
+│   └── neutral/
+│       ├── video_201.mp4
+│       ├── video_202.mp4
 │       └── ...
 └── test/
     ├── happy/
     │   └── ...
-    └── sad/
+    ├── sad/
+    │   └── ...
+    └── neutral/
         └── ...
 ```
 
 ### Step 4.2: Understanding the Config File
 
 ```yaml
-# trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+# trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 model:
   backbone: efficientnet_b0
-  num_classes: 2
+  num_classes: 3
   pretrained_weights: enet_b0_8_best_vgaf   # HSEmotion weights
   freeze_backbone_epochs: 5                  # Phase 1 duration
   unfreeze_layers: ["blocks.6", "blocks.5"]  # Layers for Phase 2
@@ -251,7 +257,7 @@ model:
 data:
   data_root: /media/project_data/reachy_emotion/videos
   batch_size: 32
-  class_names: ["happy", "sad"]
+  class_names: ["happy", "sad", "neutral"]
   mixup_alpha: 0.2        # Data augmentation strength
 
 # Training
@@ -275,14 +281,14 @@ conda activate reachy_ml
 # Navigate to project
 cd /path/to/reachy_emotion
 
-# Start training (binary classification)
+# Start training (3-class classification)
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --run-id my_first_run
 
 # With custom data directory
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --data-dir /path/to/my/videos \
     --run-id custom_data_run
 ```
@@ -383,12 +389,12 @@ checkpoints/
 ```bash
 # Resume from latest checkpoint
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --resume checkpoints/latest.pth
 
 # Resume from specific epoch
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --resume checkpoints/checkpoint_epoch_10.pth
 ```
 
@@ -455,7 +461,7 @@ import mlflow
 mlflow.set_tracking_uri("file:///workspace/mlruns")
 
 # Get best run from experiment
-experiment = mlflow.get_experiment_by_name("efficientnet_b0_emotion_2cls")
+experiment = mlflow.get_experiment_by_name("efficientnet_b0_emotion_3cls")
 runs = mlflow.search_runs(experiment.experiment_id, order_by=["metrics.val_f1_macro DESC"])
 
 best_run = runs.iloc[0]
@@ -506,8 +512,8 @@ model:
 ### Commands Cheat Sheet
 
 ```bash
-# Train 2-class model
-python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+# Train 3-class model
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 # Train 8-class model
 python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_8cls.yaml

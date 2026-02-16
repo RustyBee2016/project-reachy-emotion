@@ -95,7 +95,7 @@ The training code expects images organized by class in `train/` and `test/`:
 
 | Configuration | Minimum per class | Recommended per class |
 |---------------|-------------------|----------------------|
-| 2-class (happy/sad) | 100 images | 500+ images |
+| 3-class (happy/sad/neutral) | 100 images | 500+ images |
 | 8-class (all emotions) | 50 images | 200+ images |
 
 **More data = better results** (generally)
@@ -617,7 +617,7 @@ Before training, verify:
 | Class balance | Balance script | Ratio > 0.5 |
 | Images load | Data loader test | No errors |
 | Batch shape | Print batch | [32, 3, 224, 224] |
-| Labels correct | Print labels | 0 and 1 for 2-class |
+| Labels correct | Print labels | 0, 1, and 2 for 3-class |
 
 ---
 

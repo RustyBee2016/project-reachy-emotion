@@ -200,7 +200,7 @@ reachy_emotion/
 │   │   ├── evaluate.py         # Metrics computation
 │   │   ├── export.py           # ONNX export
 │   │   └── specs/              # Config files
-│   │       ├── efficientnet_b0_emotion_2cls.yaml  # 2-class (RECOMMENDED)
+│   │       ├── efficientnet_b0_emotion_3cls.yaml  # 3-class (RECOMMENDED)
 │   │       └── efficientnet_b0_emotion_8cls.yaml  # 8-class
 │   └── tao/                    # NVIDIA TAO Toolkit (alternative)
 │
@@ -356,7 +356,7 @@ from trainer.fer_finetune.model_efficientnet import EfficientNetEmotionClassifie
 
 # Create model
 model = EfficientNetEmotionClassifier(
-    num_classes=2,
+    num_classes=3,
     pretrained_weights='enet_b0_8_best_vgaf',
     dropout_rate=0.3,
 )
@@ -392,8 +392,8 @@ Expected output:
 python -c "
 from trainer.fer_finetune.config import TrainingConfig
 
-# Load 2-class config
-config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml')
+# Load 3-class config
+config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml')
 
 print('✅ Config loaded successfully')
 print(f'   Model: {config.model.backbone}')

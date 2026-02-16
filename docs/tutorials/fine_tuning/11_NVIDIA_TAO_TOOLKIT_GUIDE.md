@@ -241,15 +241,15 @@ Setup complete!
 
 ### 3.1 Configuration File Structure
 
-The TAO spec file (`specs/emotionnet_2cls.yaml`) controls all training parameters:
+The TAO spec file (`specs/emotionnet_3cls.yaml`) controls all training parameters:
 
 ```yaml
-# trainer/tao/specs/emotionnet_2cls.yaml
+# trainer/tao/specs/emotionnet_3cls.yaml
 
 model:
   arch: "resnet18"              # Backbone architecture
   input_shape: [224, 224, 3]    # H, W, C format
-  num_classes: 2                # happy, sad
+  num_classes: 3                # happy, sad, neutral
   pretrained_weights: "imagenet"
   freeze_blocks: [0, 1]         # Transfer learning: freeze early layers
   dropout_rate: 0.3
@@ -257,7 +257,7 @@ model:
 dataset:
   train_data_path: "/workspace/data/train"
   val_data_path: "/workspace/data/test"
-  classes: ["happy", "sad"]
+  classes: ["happy", "sad", "neutral"]
   
   augmentation:
     enable: true
@@ -314,12 +314,16 @@ TAO expects a specific directory structure:
 │   │   ├── img_0001.jpg
 │   │   ├── img_0002.jpg
 │   │   └── ...
-│   └── sad/
+│   ├── sad/
+│   │   ├── img_0001.jpg
+│   │   └── ...
+│   └── neutral/
 │       ├── img_0001.jpg
 │       └── ...
 └── test/
     ├── happy/
-    └── sad/
+    ├── sad/
+    └── neutral/
 ```
 
 **Verify data is accessible in container:**
@@ -330,7 +334,7 @@ docker exec -it reachy-tao-train bash
 
 # Check data mount
 ls -la /workspace/data/train/
-# Should show: happy/ sad/
+# Should show: happy/ sad/ neutral/
 
 # Count images
 find /workspace/data/train -name "*.jpg" | wc -l
@@ -343,10 +347,10 @@ find /workspace/data/train -name "*.jpg" | wc -l
 # Inside TAO container
 cd /workspace
 
-# Run training with 2-class config
+# Run training with 3-class config
 tao classification train \
-    --experiment_spec_file=/workspace/specs/emotionnet_2cls.yaml \
-    --results_dir=/workspace/experiments/emotionnet_2cls \
+    --experiment_spec_file=/workspace/specs/emotionnet_3cls.yaml \
+    --results_dir=/workspace/experiments/emotionnet_3cls \
     --key=nvidia_tao_key
 ```
 
@@ -355,8 +359,8 @@ tao classification train \
 ```bash
 # From host machine
 docker exec -it reachy-tao-train tao classification train \
-    --experiment_spec_file=/workspace/specs/emotionnet_2cls.yaml \
-    --results_dir=/workspace/experiments/emotionnet_2cls \
+    --experiment_spec_file=/workspace/specs/emotionnet_3cls.yaml \
+    --results_dir=/workspace/experiments/emotionnet_3cls \
     --key=nvidia_tao_key
 ```
 
@@ -366,12 +370,12 @@ docker exec -it reachy-tao-train tao classification train \
 ============================================================
 NVIDIA TAO Classification Training
 Model: resnet18 (ImageNet pretrained)
-Classes: 2 (happy, sad)
+Classes: 3 (happy, sad, neutral)
 ============================================================
 
 Loading dataset...
-  Train: 500 images (250 happy, 250 sad)
-  Val: 100 images (50 happy, 50 sad)
+  Train: 750 images (250 happy, 250 sad, 250 neutral)
+  Val: 150 images (50 happy, 50 sad, 50 neutral)
 
 Building model...
   Architecture: ResNet-18
@@ -392,7 +396,7 @@ Epoch 10/50
 [Train] Loss: 0.3456 | Acc: 0.8420 | F1: 0.8312
 [Val]   Loss: 0.3123 | Acc: 0.8600 | F1: 0.8534
 LR: 0.0009
-★ New best model saved: emotionnet_2cls_epoch_10.tlt
+★ New best model saved: emotionnet_3cls_epoch_10.tlt
 ────────────────────────────────────────────────────────────
 
 ...
@@ -406,7 +410,7 @@ LR: 0.00001
 
 ============================================================
 Training Complete!
-Best model: emotionnet_2cls_epoch_45.tlt (Val F1: 0.9089)
+Best model: emotionnet_3cls_epoch_45.tlt (Val F1: 0.9089)
 ============================================================
 ```
 
@@ -439,9 +443,9 @@ mlflow ui --backend-store-uri file:///path/to/reachy_emotion/mlruns --port=5000
 ```bash
 # Inside TAO container
 tao classification evaluate \
-    --experiment_spec_file=/workspace/specs/emotionnet_2cls.yaml \
-    --model_path=/workspace/experiments/emotionnet_2cls/weights/emotionnet_2cls_epoch_45.tlt \
-    --results_dir=/workspace/experiments/emotionnet_2cls/eval \
+    --experiment_spec_file=/workspace/specs/emotionnet_3cls.yaml \
+    --model_path=/workspace/experiments/emotionnet_3cls/weights/emotionnet_3cls_epoch_45.tlt \
+    --results_dir=/workspace/experiments/emotionnet_3cls/eval \
     --key=nvidia_tao_key
 ```
 
@@ -452,7 +456,7 @@ tao classification evaluate \
 TAO Classification Evaluation
 ============================================================
 
-Loading model: emotionnet_2cls_epoch_45.tlt
+Loading model: emotionnet_3cls_epoch_45.tlt
 Evaluating on test set: 100 images
 
 Results:
@@ -512,18 +516,18 @@ docker exec -it reachy-tao-export bash
 
 # Export to TensorRT FP16
 tao classification export \
-    --model_path=/workspace/experiments/emotionnet_2cls/weights/emotionnet_2cls_epoch_45.tlt \
-    --output_file=/workspace/engines/emotionnet_2cls_fp16.etlt \
+    --model_path=/workspace/experiments/emotionnet_3cls/weights/emotionnet_3cls_epoch_45.tlt \
+    --output_file=/workspace/engines/emotionnet_3cls_fp16.etlt \
     --key=nvidia_tao_key \
     --data_type=fp16
 
 # Convert to TensorRT engine for Jetson
 tao converter \
-    /workspace/engines/emotionnet_2cls_fp16.etlt \
+    /workspace/engines/emotionnet_3cls_fp16.etlt \
     -k nvidia_tao_key \
     -d 3,224,224 \
     -o predictions/Softmax \
-    -e /workspace/engines/emotionnet_2cls_fp16.engine \
+    -e /workspace/engines/emotionnet_3cls_fp16.engine \
     -t fp16 \
     -m 1 \
     -b 1
@@ -536,8 +540,8 @@ INT8 requires calibration data for accuracy:
 ```bash
 # Create calibration cache
 tao classification calibration_tensorfile \
-    --experiment_spec_file=/workspace/specs/emotionnet_2cls.yaml \
-    --model_path=/workspace/experiments/emotionnet_2cls/weights/emotionnet_2cls_epoch_45.tlt \
+    --experiment_spec_file=/workspace/specs/emotionnet_3cls.yaml \
+    --model_path=/workspace/experiments/emotionnet_3cls/weights/emotionnet_3cls_epoch_45.tlt \
     --cal_image_dir=/workspace/calibration \
     --cal_cache_file=/workspace/engines/calibration.bin \
     --cal_batch_size=8 \
@@ -546,11 +550,11 @@ tao classification calibration_tensorfile \
 
 # Export with INT8
 tao converter \
-    /workspace/engines/emotionnet_2cls_fp16.etlt \
+    /workspace/engines/emotionnet_3cls_fp16.etlt \
     -k nvidia_tao_key \
     -d 3,224,224 \
     -o predictions/Softmax \
-    -e /workspace/engines/emotionnet_2cls_int8.engine \
+    -e /workspace/engines/emotionnet_3cls_int8.engine \
     -t int8 \
     -c /workspace/engines/calibration.bin \
     -b 1
@@ -574,7 +578,7 @@ tao converter \
 
 ```bash
 # From Ubuntu 1 (training server)
-scp /path/to/reachy_emotion/trainer/tao/experiments/engines/emotionnet_2cls_fp16.engine \
+scp /path/to/reachy_emotion/trainer/tao/experiments/engines/emotionnet_3cls_fp16.engine \
     jetson@10.0.4.150:/opt/reachy/models/
 ```
 
@@ -586,7 +590,7 @@ cat > /opt/reachy/configs/emotion_inference.txt << 'EOF'
 [property]
 gpu-id=0
 net-scale-factor=0.0039215697906911373
-model-engine-file=/opt/reachy/models/emotionnet_2cls_fp16.engine
+model-engine-file=/opt/reachy/models/emotionnet_3cls_fp16.engine
 labelfile-path=/opt/reachy/configs/emotion_labels.txt
 batch-size=1
 network-mode=2  # FP16
@@ -601,14 +605,14 @@ EOF
 ```bash
 # On Jetson
 python3 /opt/reachy/scripts/benchmark_engine.py \
-    --engine /opt/reachy/models/emotionnet_2cls_fp16.engine \
+    --engine /opt/reachy/models/emotionnet_3cls_fp16.engine \
     --iterations 1000
 
 # Expected output:
 # ============================================================
 # TensorRT Engine Benchmark
 # ============================================================
-# Engine: emotionnet_2cls_fp16.engine
+# Engine: emotionnet_3cls_fp16.engine
 # Precision: FP16
 # 
 # Performance:
@@ -728,14 +732,14 @@ tao info --verbose
 
 # Train
 docker exec -it reachy-tao-train tao classification train \
-    --experiment_spec_file=/workspace/specs/emotionnet_2cls.yaml \
-    --results_dir=/workspace/experiments/emotionnet_2cls
+    --experiment_spec_file=/workspace/specs/emotionnet_3cls.yaml \
+    --results_dir=/workspace/experiments/emotionnet_3cls
 
 # Export
 docker exec -it reachy-tao-export tao converter \
-    /workspace/engines/emotionnet_2cls.etlt \
+    /workspace/engines/emotionnet_3cls.etlt \
     -k nvidia_tao_key \
-    -e /workspace/engines/emotionnet_2cls_fp16.engine \
+    -e /workspace/engines/emotionnet_3cls_fp16.engine \
     -t fp16
 ```
 
@@ -746,7 +750,7 @@ trainer/tao/
 ├── setup_tao_env.sh           # Environment setup script
 ├── docker-compose-tao.yml     # Container definitions
 ├── specs/
-│   ├── emotionnet_2cls.yaml   # 2-class training config
+│   ├── emotionnet_3cls.yaml   # 3-class training config
 │   └── emotionnet_6cls.yaml   # 6-class training config
 └── experiments/               # Training outputs
     ├── weights/               # Trained models (.tlt)

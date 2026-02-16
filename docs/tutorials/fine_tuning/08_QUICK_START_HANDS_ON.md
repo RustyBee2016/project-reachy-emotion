@@ -96,7 +96,7 @@ def run_inference():
     # Load model with HSEmotion pre-trained weights
     print("\n2. Loading EfficientNet-B0 (HSEmotion weights)...")
     model = EfficientNetEmotionClassifier(
-        num_classes=2,  # happy, sad
+        num_classes=3,  # happy, sad, neutral
         pretrained_weights='enet_b0_8_best_vgaf',
         dropout_rate=0.3,
     )
@@ -323,7 +323,7 @@ def quick_train(data_dir='data_quick', epochs=3, batch_size=8):
     # Load model
     print("\nLoading model...")
     model = EfficientNetEmotionClassifier(
-        num_classes=2,
+        num_classes=3,
         pretrained_weights='enet_b0_8_best_vgaf',
         dropout_rate=0.3,
     )
@@ -483,7 +483,7 @@ def test_model():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Load trained model
-    model = EfficientNetEmotionClassifier(num_classes=2)
+    model = EfficientNetEmotionClassifier(num_classes=3)
     model.load_state_dict(torch.load('quick_model.pth'))
     model = model.to(device)
     model.eval()

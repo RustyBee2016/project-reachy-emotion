@@ -110,7 +110,7 @@ n8n/workflows/ml-agentic-ai_v.1/
 │  ────────                                                                │
 │  ┌──────────────────┐                                                   │
 │  │ Execute Training │  python trainer/train_efficientnet.py             │
-│  │ Script           │  --config efficientnet_b0_emotion_2cls.yaml       │
+│  │ Script           │  --config efficientnet_b0_emotion_3cls.yaml       │
 │  └────────┬─────────┘                                                   │
 │           │                                                              │
 │           ▼                                                              │
@@ -156,7 +156,7 @@ n8n/workflows/ml-agentic-ai_v.1/
 {
   "node": "Execute Command",
   "parameters": {
-    "command": "python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml --run-id {{ $json.run_id }}",
+    "command": "python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml --run-id {{ $json.run_id }}",
     "cwd": "/path/to/reachy_emotion"
   }
 }
@@ -185,7 +185,7 @@ All conditions met → POST to /training/start
 {
   "trigger_source": "agent_3_promotion",
   "run_id": "auto_20260205_143000",
-  "config_file": "efficientnet_b0_emotion_2cls.yaml",
+  "config_file": "efficientnet_b0_emotion_3cls.yaml",
   "dataset_stats": {
     "train_total": 500,
     "train_happy": 250,
@@ -224,7 +224,7 @@ curl -X POST "http://10.0.4.130:5678/webhook/training/start" \
   -d '{
     "trigger_source": "api_manual",
     "run_id": "manual_run_001",
-    "config_file": "efficientnet_b0_emotion_2cls.yaml"
+    "config_file": "efficientnet_b0_emotion_3cls.yaml"
   }'
 ```
 
@@ -254,7 +254,7 @@ training.completed ──────┬──── gate_a.passed ───▶ 
   "event": "training.started",
   "timestamp": "2026-02-05T14:30:00Z",
   "run_id": "production_run_20260205",
-  "config": "efficientnet_b0_emotion_2cls.yaml",
+  "config": "efficientnet_b0_emotion_3cls.yaml",
   "dataset": {
     "train_samples": 500,
     "val_samples": 100
