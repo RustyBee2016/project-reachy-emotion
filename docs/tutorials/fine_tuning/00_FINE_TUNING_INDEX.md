@@ -95,14 +95,14 @@ Before starting, ensure you have:
 ### Key Commands
 
 ```bash
-# Train 2-class model (happy/sad) — EfficientNet-B0
-python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+# Train 3-class model (happy/sad/neutral) — EfficientNet-B0
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 # Train 8-class model (all emotions)
 python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_8cls.yaml
 
 # Resume training from checkpoint
-python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml --resume checkpoints/latest.pth
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml --resume checkpoints/latest.pth
 
 # Export to ONNX
 python trainer/train_efficientnet.py --export-only --resume checkpoints/best_model.pth --export-path exports/
@@ -121,10 +121,10 @@ trainer/
 │   ├── evaluate.py             # Metrics computation
 │   ├── export.py               # ONNX export
 │   └── specs/
-│       ├── efficientnet_b0_emotion_2cls.yaml  # 2-class config (START HERE)
+│       ├── efficientnet_b0_emotion_3cls.yaml  # 3-class config (START HERE)
 │       └── efficientnet_b0_emotion_8cls.yaml  # 8-class config
 ├── tao/                        # NVIDIA TAO Toolkit (see Guide 11)
-│   ├── specs/emotionnet_2cls.yaml
+│   ├── specs/emotionnet_3cls.yaml
 │   ├── docker-compose-tao.yml
 │   └── setup_tao_env.sh
 ```

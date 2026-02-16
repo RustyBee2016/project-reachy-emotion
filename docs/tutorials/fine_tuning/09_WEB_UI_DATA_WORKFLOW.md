@@ -194,6 +194,7 @@ Video 5/5: ⏸️ Queued
 |----------|-------------|---------|
 | **Accept as Happy** | Clear happy expression visible | Ready for promotion |
 | **Accept as Sad** | Clear sad expression visible | Ready for promotion |
+| **Accept as Neutral** | Expression is emotionally neutral/baseline | Ready for promotion |
 | **Reject** | Unclear, multiple emotions, poor quality | Moved to rejected/ |
 
 ### Step 4.4: Quality Criteria
@@ -225,11 +226,12 @@ For a video to be labeled:
 │  Current Dataset Status:                                                 │
 │  ────────────────────────────────────────────────────────────────────── │
 │  TRAIN SET                          TEST SET                             │
-│  Happy: 245 videos                  Happy: 48 videos                     │
-│  Sad:   238 videos                  Sad:   52 videos                     │
+│  Happy:   245 videos                Happy:   48 videos                   │
+│  Sad:     238 videos                Sad:     52 videos                   │
+│  Neutral: 242 videos                Neutral:  50 videos                  │
 │  ────────────────────                ────────────────────                │
-│  Total: 483 videos                  Total: 100 videos                    │
-│  Balance: 50.7% / 49.3% ✅          Balance: 48% / 52% ✅               │
+│  Total:   725 videos                Total:   150 videos                  │
+│  Balance: 33.8%/32.8%/33.4% ✅      Balance: 32%/34.7%/33.3% ✅         │
 │                                                                          │
 │  ════════════════════════════════════════════════════════════════════   │
 │                                                                          │
@@ -252,8 +254,8 @@ For a video to be labeled:
 ### Step 5.3: Promotion Rules
 
 **For Training Set (`train/`):**
-- Videos MUST have a label (happy or sad)
-- Aim for 50/50 class balance
+- Videos MUST have a label (happy, sad, or neutral)
+- Aim for 1:1:1 class balance
 - No minimum per class, but more is better
 
 **For Test Set (`test/`):**
@@ -269,8 +271,9 @@ Dataset Balance Check:
 
 TRAINING SET
 ┌──────────────────────────────────────────────────────────┐
-│ Happy: ████████████████████████████████████████ 245 (50.7%)
-│ Sad:   ███████████████████████████████████████  238 (49.3%)
+│ Happy:   ████████████████████████████████████   245 (33.8%)
+│ Sad:     ███████████████████████████████████    238 (32.8%)
+│ Neutral: ████████████████████████████████████   242 (33.4%)
 └──────────────────────────────────────────────────────────┘
 Balance Ratio: 0.97 ✅ (threshold: > 0.80)
 
@@ -326,7 +329,7 @@ The Dashboard shows real-time status:
 When all conditions are met, the "Start Training" button becomes active:
 
 1. Click **"Start Training"**
-2. Select configuration: `efficientnet_b0_emotion_2cls.yaml`
+2. Select configuration: `efficientnet_b0_emotion_3cls.yaml`
 3. Set run name (optional)
 4. Training begins on Ubuntu 1
 
@@ -384,7 +387,7 @@ Response:
 
 1. **Generate diverse prompts** — Vary lighting, angles, and expressions
 2. **Reject ambiguous videos** — Better to have less data than noisy data
-3. **Maintain balance** — Keep both classes within 60/40 ratio
+3. **Maintain balance** — Keep all three classes within 60/40 ratio
 
 ### Workflow Efficiency
 
