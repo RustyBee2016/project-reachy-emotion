@@ -120,7 +120,7 @@ from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 def export_to_onnx(
     checkpoint_path: str,
     output_path: str,
-    num_classes: int = 2,
+    num_classes: int = 3,
     input_size: int = 224,
     opset_version: int = 17,
     use_fp16: bool = True,
@@ -312,7 +312,7 @@ def test_onnx_inference(onnx_path, test_image_path=None):
     logits = outputs[0][0]
     probs = np.exp(logits) / np.sum(np.exp(logits))  # Softmax
     
-    class_names = ['happy', 'sad']
+    class_names = ['happy', 'sad', 'neutral']
     predicted_class = class_names[np.argmax(probs)]
     confidence = np.max(probs)
     

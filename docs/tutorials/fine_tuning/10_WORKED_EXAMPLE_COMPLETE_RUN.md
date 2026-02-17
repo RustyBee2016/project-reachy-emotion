@@ -314,6 +314,7 @@ Macro F1             0.9089     ≥ 0.84       ✅ PASS
 Balanced Accuracy    0.9100     ≥ 0.85       ✅ PASS
 Per-class F1 (happy) 0.9200     ≥ 0.75       ✅ PASS
 Per-class F1 (sad)   0.8978     ≥ 0.75       ✅ PASS
+Per-class F1 (neutral) 0.9051    ≥ 0.75       ✅ PASS
 ──────────────────────────────────────────────────────────────
 
 CALIBRATION METRICS (Required)
@@ -327,14 +328,16 @@ Brier Score          0.1123     ≤ 0.16       ✅ PASS
 CONFUSION MATRIX
 ──────────────────────────────────────────────────────────────
               Predicted
-            happy    sad
-Actual happy   46      4
-       sad      5     45
+            happy    sad    neutral
+Actual happy   46      2      2
+       sad      3     45      2
+   neutral      2      3     45
 
 True Positives (happy): 46
 True Positives (sad): 45
+True Positives (neutral): 45
 False Positives: 9
-Total Correct: 91/100 (91.0%)
+Total Correct: 136/150 (90.7%)
 ──────────────────────────────────────────────────────────────
 
 ============================================================

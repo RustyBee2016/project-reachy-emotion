@@ -508,7 +508,7 @@ train_loader, val_loader = create_dataloaders(
     batch_size=32,
     num_workers=4,
     input_size=224,
-    class_names=['happy', 'sad'],
+    class_names=['happy', 'sad', 'neutral'],
 )
 
 print(f"Training batches: {len(train_loader)}")
@@ -535,7 +535,7 @@ Validation batches: 7
 
 Batch shape: torch.Size([32, 3, 224, 224])
 Labels shape: torch.Size([32])
-Label values: tensor([0, 1, 0, 1, 1, 0, 0, 1, 1, 0])
+Label values: tensor([0, 1, 2, 0, 2, 1, 0, 1, 2, 0])
 
 Image stats:
   Min: -2.118
@@ -576,10 +576,11 @@ def create_synthetic_data(output_dir, n_per_class=50):
     """Create simple synthetic images for testing."""
     output_dir = Path(output_dir)
     
-    classes = ['happy', 'sad']
+    classes = ['happy', 'sad', 'neutral']
     colors = {
-        'happy': (255, 255, 0),   # Yellow
-        'sad': (0, 0, 255),       # Blue
+        'happy': (255, 255, 0),      # Yellow
+        'sad': (0, 0, 255),          # Blue
+        'neutral': (160, 160, 160),  # Gray
     }
     
     for split in ['train', 'val']:

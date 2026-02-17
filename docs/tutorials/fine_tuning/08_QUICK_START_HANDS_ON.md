@@ -123,7 +123,7 @@ def run_inference():
         probs = torch.softmax(logits, dim=1)
     
     # Interpret results
-    class_names = ['happy', 'sad']
+    class_names = ['happy', 'sad', 'neutral']
     predicted_idx = probs.argmax(dim=1).item()
     confidence = probs[0, predicted_idx].item()
     
@@ -181,8 +181,9 @@ Predicted emotion: HAPPY
 Confidence: 62.3%
 
 All probabilities:
-  happy   : 62.3% ████████████
-  sad     : 37.7% ███████
+  happy   : 51.2% ██████████
+  sad     : 14.6% ███
+  neutral : 34.2% ███████
 
 ============================================================
 SUCCESS! You just ran emotion inference.
@@ -204,7 +205,7 @@ SUCCESS! You just ran emotion inference.
 cat > create_quick_data.py << 'EOF'
 """
 Create synthetic training data for quick testing.
-This creates colored images that simulate happy (warm) and sad (cool) tones.
+This creates colored images that simulate happy (warm), sad (cool), and neutral (balanced gray) tones.
 """
 
 import numpy as np
@@ -220,6 +221,7 @@ def create_synthetic_dataset(output_dir='data_quick', n_train=50, n_val=12):
     colors = {
         'happy': {'base': [255, 220, 150], 'var': 30},  # Warm yellow/orange
         'sad': {'base': [100, 120, 180], 'var': 25},    # Cool blue
+        'neutral': {'base': [160, 160, 160], 'var': 15},  # Balanced gray
     }
     
     print("Creating synthetic dataset...")
@@ -254,8 +256,8 @@ def create_synthetic_dataset(output_dir='data_quick', n_train=50, n_val=12):
             print(f"  {split}/{emotion}: {n} images")
     
     print(f"\nDataset created!")
-    print(f"  Train: {n_train * 2} images")
-    print(f"  Val: {n_val * 2} images")
+    print(f"  Train: {n_train * 3} images")
+    print(f"  Val: {n_val * 3} images")
     return output_dir
 
 if __name__ == '__main__':
@@ -431,9 +433,9 @@ QUICK TRAINING: EfficientNet-B0 Fine-Tuning
 Device: cuda
 
 Dataset: data_quick
-  Train: 100 images
-  Val: 24 images
-  Classes: ['happy', 'sad']
+  Train: 150 images
+  Val: 36 images
+  Classes: ['happy', 'sad', 'neutral']
 
 Loading model...
   Trainable parameters: 2,562
@@ -496,17 +498,19 @@ def test_model():
     ])
     
     # Test on both synthetic emotions
-    class_names = ['happy', 'sad']
+    class_names = ['happy', 'sad', 'neutral']
     
     print("\nTesting trained model on synthetic images:")
     print("-" * 40)
     
     for emotion in class_names:
         # Create test image
-        if emotion == 'happy':
-            color = [255, 220, 150]  # Warm
-        else:
-            color = [100, 120, 180]  # Cool
+        color_map = {
+            'happy': [255, 220, 150],   # Warm
+            'sad': [100, 120, 180],     # Cool
+            'neutral': [160, 160, 160], # Balanced
+        }
+        color = color_map[emotion]
         
         img = np.full((224, 224, 3), color, dtype=np.uint8)
         img = Image.fromarray(img)

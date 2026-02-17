@@ -468,13 +468,15 @@ Macro F1                0.9089     ≥ 0.84 ✅
 Balanced Accuracy       0.9100     ≥ 0.85 ✅
 Per-class F1 (happy)    0.9200     ≥ 0.75 ✅
 Per-class F1 (sad)      0.8978     ≥ 0.75 ✅
+Per-class F1 (neutral)  0.9051     ≥ 0.75 ✅
 ──────────────────────────────────────────────────────────────
 
 Confusion Matrix:
               Predicted
-            happy    sad
-Actual happy   46      4
-       sad      5     45
+            happy    sad    neutral
+Actual happy   46      2      2
+       sad      3     45      2
+   neutral      2      3     45
 
 ============================================================
 ✅ GATE A PASSED
@@ -594,7 +596,7 @@ model-engine-file=/opt/reachy/models/emotionnet_3cls_fp16.engine
 labelfile-path=/opt/reachy/configs/emotion_labels.txt
 batch-size=1
 network-mode=2  # FP16
-num-detected-classes=2
+num-detected-classes=3
 gie-unique-id=1
 output-blob-names=predictions/Softmax
 EOF

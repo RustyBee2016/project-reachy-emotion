@@ -207,10 +207,12 @@ reachy_emotion/
 ├── data/                       # Training data (create this)
 │   ├── train/                  # Training images
 │   │   ├── happy/
-│   │   └── sad/
+│   │   ├── sad/
+│   │   └── neutral/
 │   └── val/                    # Validation images
 │       ├── happy/
-│       └── sad/
+│       ├── sad/
+│       └── neutral/
 │
 ├── outputs/                    # Training outputs (created automatically)
 │   ├── checkpoints/            # Model checkpoints

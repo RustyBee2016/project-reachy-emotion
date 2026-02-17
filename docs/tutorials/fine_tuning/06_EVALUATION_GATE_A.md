@@ -321,7 +321,7 @@ def compute_brier(y_true, y_prob):
 metrics = evaluate_model(
     'outputs/checkpoints/best_model.pth',
     'data',
-    ['happy', 'sad'],
+    ['happy', 'sad', 'neutral'],
 )
 
 # Print results
@@ -333,6 +333,7 @@ print(f"Brier:              {metrics['brier']:.4f} (threshold: 0.16)")
 print(f"\nPer-class F1:")
 print(f"  happy: {metrics['f1_happy']:.4f}")
 print(f"  sad:   {metrics['f1_sad']:.4f}")
+print(f"  neutral: {metrics['f1_neutral']:.4f}")
 print(f"\nConfusion Matrix:")
 print(metrics['confusion_matrix'])
 ```
@@ -346,15 +347,16 @@ print(metrics['confusion_matrix'])
 ```
 Confusion Matrix:
               Predicted
-            happy    sad
-Actual  happy  [85]     15
-        sad     12    [88]
+            happy    sad   neutral
+Actual  happy  [45]     3        2
+        sad      4    [43]       3
+        neutral  2      5      [43]
 
 Reading:
-- 85 happy images correctly classified as happy
-- 15 happy images incorrectly classified as sad
-- 12 sad images incorrectly classified as happy
-- 88 sad images correctly classified as sad
+- 45 happy images correctly classified as happy
+- 43 sad images correctly classified as sad
+- 43 neutral images correctly classified as neutral
+- Off-diagonal counts show confusion between emotion pairs
 
 Diagonal = correct predictions (higher is better)
 Off-diagonal = errors (lower is better)
