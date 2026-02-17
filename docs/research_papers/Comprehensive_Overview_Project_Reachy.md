@@ -26,7 +26,7 @@ The primary objectives of Project Reachy are:
 
 1. **Data Generation & Curation**: Develop a web application for generating and classifying synthetic emotion videos using AI-powered video generation APIs.
 
-2. **Model Fine-Tuning**: Fine-tune an EfficientNet-B0 classifier (HSEmotion `enet_b0_8_best_vgaf`) pre-trained on VGGFace2 + AffectNet for binary emotion classification (happy vs. sad).
+2. **Model Fine-Tuning**: Fine-tune an EfficientNet-B0 classifier (HSEmotion `enet_b0_8_best_vgaf`) pre-trained on VGGFace2 + AffectNet for 3-class emotion classification (happy, sad, neutral).
 
 3. **Edge Deployment**: Deploy optimized TensorRT models to the Reachy Mini robot's NVIDIA Jetson Xavier NX for real-time inference.
 
@@ -54,7 +54,7 @@ Phase 1 establishes the foundational infrastructure for emotion classification:
 
 - **Data Curation Pipeline**: Videos flow through a structured directory hierarchy (`/videos/temp/` → `/videos/dataset_all/` → `/videos/train/` and `/videos/test/`) with human-in-the-loop labeling.
 
-- **Binary Classification**: The initial model targets two emotion classes—happy and sad—using an EfficientNet-B0 backbone (HSEmotion `enet_b0_8_best_vgaf`) fine-tuned with transfer learning. This architecture provides 3× latency improvement over ResNet-50 baselines.
+- **3-Class Classification**: The initial model targets three emotion classes—happy, sad, and neutral—using an EfficientNet-B0 backbone (HSEmotion `enet_b0_8_best_vgaf`) fine-tuned with transfer learning. This architecture provides 3× latency improvement over ResNet-50 baselines.
 
 - **Offline Validation**: Models must pass Gate A quality thresholds (macro F1 ≥ 0.84, balanced accuracy ≥ 0.85) before proceeding to deployment.
 
@@ -231,7 +231,7 @@ The classification model uses an EfficientNet-B0 backbone with transfer learning
 - **Pre-trained Weights**: HSEmotion `enet_b0_8_best_vgaf` (VGGFace2 + AffectNet)
 - **Source**: EmotiEffLib (`pip install emotiefflib`)
 - **Input Size**: 224×224 RGB images
-- **Output**: 2 classes (binary) or 8 classes (multi-class expansion)
+- **Output**: 3 classes (happy/sad/neutral) or 8 classes (multi-class expansion)
 - **Performance**: ~40 ms inference latency (p50), ~0.8 GB GPU memory—providing 3× headroom vs. ResNet-50
 - **Training Strategy**: Two-phase approach
   - Phase 1 (epochs 1-5): Frozen backbone, train classification head only

@@ -24,7 +24,7 @@
 ## Phase Mapping
 
 ### Phase 1 — Offline ML Classification
-- **Focus**: Web app + binary emotion classification (happy/sad)
+- **Focus**: Web app + 3-class emotion classification (happy/sad/neutral)
 - **Key Components**: Video generation, labeling UI, ResNet-50 fine-tuning, offline validation
 - **Codebase**: `apps/web/`, `apps/api/`, `trainer/`, database schema
 

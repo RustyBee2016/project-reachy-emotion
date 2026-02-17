@@ -1,12 +1,12 @@
 # Phase 1 Comprehensive Review: Offline Machine Learning Classification System
 
-**A Detailed Technical Analysis of the Web Application and Binary Emotion Classification Pipeline**
+**A Detailed Technical Analysis of the Web Application and Three-Class Emotion Classification Pipeline**
 
 ---
 
 ## Abstract
 
-This paper provides a detailed technical examination of Phase 1 of Project Reachy, focusing on the offline machine learning (ML) classification system. Phase 1 establishes the foundational infrastructure comprising a Streamlit-based web application for video generation and labeling, a FastAPI gateway for API orchestration, and an EfficientNet-B0 fine-tuning pipeline for binary emotion classification (happy vs. sad). The model leverages HSEmotion's `enet_b0_8_best_vgaf` weights pretrained on VGGFace2 + AffectNet, providing 3× latency improvement over prior ResNet-50 baselines while maintaining accuracy targets. Through annotated code examples from the codebase, we explain key functionalities including the retry-enabled API client, JSON schema validation, transfer learning with frozen backbone strategies, and data augmentation techniques. This paper serves as both a technical reference and an educational resource for graduate students seeking to understand production ML systems.
+This paper provides a detailed technical examination of Phase 1 of Project Reachy, focusing on the offline machine learning (ML) classification system. Phase 1 establishes the foundational infrastructure comprising a Streamlit-based web application for video generation and labeling, a FastAPI gateway for API orchestration, and an EfficientNet-B0 fine-tuning pipeline for 3-class emotion classification (happy, sad, neutral). The model leverages HSEmotion's `enet_b0_8_best_vgaf` weights pretrained on VGGFace2 + AffectNet, providing 3× latency improvement over prior ResNet-50 baselines while maintaining accuracy targets. Through annotated code examples from the codebase, we explain key functionalities including the retry-enabled API client, JSON schema validation, transfer learning with frozen backbone strategies, and data augmentation techniques. This paper serves as both a technical reference and an educational resource for graduate students seeking to understand production ML systems.
 
 **Keywords:** Streamlit, FastAPI, EfficientNet-B0, HSEmotion, transfer learning, data augmentation, emotion classification, API design
 
@@ -21,7 +21,7 @@ Phase 1 of Project Reachy implements a complete offline ML pipeline for emotion 
 1. **Video Generation**: Enable synthetic video creation using Luma AI's Ray-2 model
 2. **Human-in-the-Loop Labeling**: Provide a web interface for emotion classification
 3. **Data Curation**: Implement a promotion pipeline moving videos through staging directories
-4. **Model Training**: Fine-tune EfficientNet-B0 (HSEmotion `enet_b0_8_best_vgaf`) for binary classification
+4. **Model Training**: Fine-tune EfficientNet-B0 (HSEmotion `enet_b0_8_best_vgaf`) for 3-class classification (happy, sad, neutral)
 5. **Quality Validation**: Enforce Gate A metrics before model export
 
 ### 1.2 Key Components
@@ -364,7 +364,7 @@ class EmotionClassifier(nn.Module):
     Source: HSEmotion / EmotiEffLib (pip install emotiefflib)
     
     Supports:
-    - Binary classification (happy/sad)
+    - 3-class classification (happy/sad/neutral)
     - Multi-class classification (8 emotions)
     - Optional multi-task learning (emotions + valence/arousal)
     
@@ -708,7 +708,7 @@ class EmotionDataset(Dataset):
         
         # Set up class mapping
         if class_names is None:
-            class_names = ["happy", "sad"]
+            class_names = ["happy", "sad", "neutral"]
         self.class_names = class_names
         self.class_to_idx = {name: idx for idx, name in enumerate(class_names)}
         
