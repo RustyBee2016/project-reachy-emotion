@@ -26,7 +26,7 @@ Recent commit series inspected:
    - Migration toward v1 endpoints (`/api/v1/media/list`, `/api/v1/ingest/register-local`, `/api/v1/promote/stage`).
 
 4. **Policy/logic mismatch remains in orchestrator docs/workflow**:
-   - Some n8n docs/workflows still describe 2-class logic (`happy/sad`) and older labels, while current DB + web flow are 3-class (`happy/sad/neutral`) with strict split-label policy.
+   - Some n8n docs/workflows historically described 2-class logic (`happy/sad`) and older labels, while current DB + web flow uses 3-class (`happy/sad/neutral`) with strict split-label policy.
 
 ## Pipeline Script Inventory
 
@@ -85,7 +85,7 @@ Recent commit series inspected:
    - Recommendation: phase out legacy flow after hardening `register_local_video + stage` path.
 
 2. **n8n docs/workflow label sets are stale in places**
-   - Risk: operator confusion and incorrect assumptions (2-class vs 3-class).
+   - Risk: operator confusion and incorrect assumptions if legacy docs are not kept aligned to 3-class policy.
    - Recommendation: align all `detail_parameters_by_function` docs and SQL examples with 3-class policy.
 
 3. **Dual source of truth for listing (filesystem vs DB)**

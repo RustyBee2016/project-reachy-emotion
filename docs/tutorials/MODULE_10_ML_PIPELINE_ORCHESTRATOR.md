@@ -106,7 +106,7 @@ FROM video;
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  1. DATASET CHECK                                                       │
-│     ├── Train: ≥50 per class (happy, sad)                               │
+│     ├── Train: ≥50 per class (happy, sad, neutral)                               │
 │     └── Test: ≥20 per class                                             │
 │                                                                         │
 │  2. TRAINING (Agent 05)                                                 │
@@ -220,7 +220,7 @@ emit_complete
 **Expected Input**:
 ```json
 {
-  "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
+  "config": "fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",
   "auto_deploy": false,
   "correlation_id": "optional-id"
 }
@@ -555,7 +555,7 @@ Pipeline complete (model deployed)
 curl -X POST http://10.0.4.130:5678/webhook/ml/pipeline/start \
   -H "Content-Type: application/json" \
   -d '{
-    "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml"
+    "config": "fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml"
   }'
 ```
 

@@ -6,7 +6,7 @@
 
 ## Abstract
 
-This paper provides a detailed examination of Phase 2 of Project Reachy, focusing on the extension of the binary emotion classification system to incorporate nuanced emotional metrics that directly govern human-robot interaction (HRI). Phase 2 introduces three key enhancements: (1) **Degree of Emotion**—continuous confidence scores (0–1) representing emotion intensity, enabling the robot to modulate response strength based on prediction certainty, (2) **Primary Principles of Emotion (PPE)**—a theoretical framework based on Ekman's universal emotions that maps each detected emotion to specific LLM prompt conditioning and robot gesture selection, and (3) **Emotional Intelligence (EQ)**—the system's capacity to perceive emotions accurately, understand their meaning, respond appropriately, and critically, *self-assess* its own uncertainty. Through annotated code examples and detailed HRI scenarios, we explain how these concepts flow from model prediction through LLM response generation to physical robot behavior. This paper serves graduate students seeking to understand how probabilistic machine learning outputs translate into trustworthy, emotionally-aware robot behavior.
+This paper provides a detailed examination of Phase 2 of Project Reachy, focusing on the extension of the Phase 1 three-class emotion classification system to incorporate nuanced emotional metrics that directly govern human-robot interaction (HRI). Phase 2 introduces three key enhancements: (1) **Degree of Emotion**—continuous confidence scores (0–1) representing emotion intensity, enabling the robot to modulate response strength based on prediction certainty, (2) **Primary Principles of Emotion (PPE)**—a theoretical framework based on Ekman's universal emotions that maps each detected emotion to specific LLM prompt conditioning and robot gesture selection, and (3) **Emotional Intelligence (EQ)**—the system's capacity to perceive emotions accurately, understand their meaning, respond appropriately, and critically, *self-assess* its own uncertainty. Through annotated code examples and detailed HRI scenarios, we explain how these concepts flow from model prediction through LLM response generation to physical robot behavior. This paper serves graduate students seeking to understand how probabilistic machine learning outputs translate into trustworthy, emotionally-aware robot behavior.
 
 **Keywords:** human-robot interaction, calibration, Expected Calibration Error, Ekman emotions, emotion taxonomy, confidence estimation, LLM prompt engineering
 
@@ -16,9 +16,9 @@ This paper provides a detailed examination of Phase 2 of Project Reachy, focusin
 
 ### 1.1 Motivation: Beyond Discrete Labels
 
-Phase 1 of Project Reachy established a binary emotion classifier distinguishing "happy" from "sad" expressions. While effective for initial deployment, discrete classification presents limitations for sophisticated human-robot interaction:
+Phase 1 of Project Reachy established a three-class emotion classifier distinguishing "happy," "sad," and "neutral" expressions. While effective for initial deployment, discrete classification presents limitations for sophisticated human-robot interaction:
 
-1. **Loss of Nuance**: A person may appear "slightly sad" versus "deeply distressed"—binary labels obscure this critical distinction
+1. **Loss of Nuance**: A person may appear "slightly sad" versus "deeply distressed"—discrete class labels obscure this critical distinction
 2. **Confidence Misalignment**: A model may predict "happy" with 51% confidence versus 99% confidence—both yield the same label, yet imply vastly different certainty
 3. **Downstream Decision Quality**: The Reachy robot's gesture planner and LLM interaction system benefit from knowing *how confident* the model is, not just *what* it predicts
 
@@ -435,15 +435,15 @@ Each PPE emotion maps to specific Reachy gestures:
 
 ### 3.5 PPE Taxonomy Configuration
 
-The `DataConfig` class defines both binary and full taxonomies:
+The `DataConfig` class defines both the Phase 1 three-class taxonomy and the full PPE taxonomy:
 
 ```python
 @dataclass
 class DataConfig:
     """Dataset configuration."""
     
-    # Class mapping (binary default, expandable)
-    class_names: List[str] = field(default_factory=lambda: ["happy", "sad"])
+    # Class mapping (Phase 1 default, expandable)
+    class_names: List[str] = field(default_factory=lambda: ["happy", "sad", "neutral"])
     
     # For multi-class expansion (PPE)
     full_class_names: List[str] = field(default_factory=lambda: [
@@ -451,9 +451,9 @@ class DataConfig:
     ])
 ```
 
-**Explanation**: The configuration separates binary (`class_names`) from full taxonomy (`full_class_names`). Training scripts select the appropriate mapping:
+**Explanation**: The configuration separates the Phase 1 class set (`class_names`) from the full taxonomy (`full_class_names`). Training scripts select the appropriate mapping:
 
-- **Binary Mode**: `class_names = ["happy", "sad"]` → 2-class classification (Phase 1)
+- **Phase 1 Mode**: `class_names = ["happy", "sad", "neutral"]` → 3-class classification (Phase 1)
 - **Multi-Class Mode**: `class_names = full_class_names` → 8-class classification (Phase 2+)
 
 ### 3.3 Multi-Class Configuration
@@ -713,13 +713,13 @@ def brier_score(
 
 **Explanation**:
 
-1. **One-Hot Encoding**: True labels are converted to indicator vectors (e.g., label 1 → [0, 1] for binary)
+1. **One-Hot Encoding**: True labels are converted to indicator vectors (e.g., label 1 → [0, 1, 0] for 3-class)
 2. **Squared Error**: Each probability's deviation from the target is squared and summed
 3. **Averaging**: The sum is averaged across all samples
 
 **Interpretation**: 
 - Brier = 0.0: Perfect predictions (all probabilities match true labels exactly)
-- Brier = 0.25: Random guessing for binary classification
+- Brier ≈ 0.67: Uniform random guessing for 3-class classification
 - Gate A requires Brier ≤ 0.16, indicating better-than-random calibrated predictions
 
 ### 4.8 Maximum Calibration Error (MCE)
@@ -1066,7 +1066,7 @@ def calibrate_with_temperature(logits: torch.Tensor, temperature: float = 1.5) -
 
 ## 8. Conclusion
 
-Phase 2 of Project Reachy transforms a binary emotion classifier into a sophisticated emotional intelligence system that governs human-robot interaction. The three core concepts—Degree, PPE, and EQ—work together:
+Phase 2 of Project Reachy transforms a 3-class emotion classifier into a sophisticated emotional intelligence system that governs human-robot interaction. The three core concepts—Degree, PPE, and EQ—work together:
 
 ### 8.1 How It All Connects
 
