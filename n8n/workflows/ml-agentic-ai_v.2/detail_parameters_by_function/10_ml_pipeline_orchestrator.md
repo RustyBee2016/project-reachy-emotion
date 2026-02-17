@@ -105,7 +105,7 @@ IF: dataset.ready?
 
 ```json
 {
-  "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",  // Optional
+  "config": "fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",  // Optional
   "auto_deploy": false,                                        // Optional
   "correlation_id": "string"                                   // Optional
 }
@@ -124,7 +124,7 @@ IF: dataset.ready?
 #### JavaScript Code
 
 ```javascript
-// Initialize pipeline run
+// Initialize pipeline run for 3-class EfficientNet-B0
 const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
 const pipelineId = `ml_pipeline_${timestamp}`;
 
@@ -132,10 +132,10 @@ return [{
   json: {
     pipeline_id: pipelineId,
     model: 'efficientnet-b0-hsemotion',
-    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet',
+    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet_b0',
     stages: ['dataset_check', 'training', 'evaluation', 'deployment'],
     current_stage: 'dataset_check',
-    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml',
+    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml',
     auto_deploy: $json.auto_deploy || false,
     correlation_id: $json.correlation_id || pipelineId
   }
@@ -148,10 +148,10 @@ return [{
 {
   "pipeline_id": "ml_pipeline_20251129150000",
   "model": "efficientnet-b0-hsemotion",
-  "model_storage_path": "/media/rusty_admin/project_data/ml_models/efficientnet",
+  "model_storage_path": "/media/rusty_admin/project_data/ml_models/efficientnet_b0",
   "stages": ["dataset_check", "training", "evaluation", "deployment"],
   "current_stage": "dataset_check",
-  "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
+  "config": "fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",
   "auto_deploy": false,
   "correlation_id": "ml_pipeline_20251129150000"
 }
@@ -170,11 +170,13 @@ return [{
 #### SQL Query
 
 ```sql
-SELECT 
+SELECT
   COUNT(*) FILTER (WHERE label='happy' AND split='train') AS happy_train,
   COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train,
+  COUNT(*) FILTER (WHERE label='neutral' AND split='train') AS neutral_train,
   COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test,
-  COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test
+  COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test,
+  COUNT(*) FILTER (WHERE label='neutral' AND split='test') AS neutral_test
 FROM video;
 ```
 
@@ -197,15 +199,16 @@ FROM video;
 #### JavaScript Code
 
 ```javascript
-// Check dataset readiness
+// Check dataset readiness for 3-class model (happy, sad, neutral)
 const stats = items[0].json;
 const minTrainPerClass = 50;
 const minTestPerClass = 20;
 
-const trainReady = Math.min(stats.happy_train, stats.sad_train) >= minTrainPerClass;
-const testReady = Math.min(stats.happy_test, stats.sad_test) >= minTestPerClass;
-const balanced = Math.abs(stats.happy_train - stats.sad_train) / 
-                 Math.max(stats.happy_train, stats.sad_train) < 0.2;
+const trainReady = Math.min(stats.happy_train, stats.sad_train, stats.neutral_train) >= minTrainPerClass;
+const testReady = Math.min(stats.happy_test, stats.sad_test, stats.neutral_test) >= minTestPerClass;
+const maxTrain = Math.max(stats.happy_train, stats.sad_train, stats.neutral_train);
+const minTrain = Math.min(stats.happy_train, stats.sad_train, stats.neutral_train);
+const balanced = (maxTrain - minTrain) / maxTrain < 0.2;
 
 return [{
   json: {
@@ -224,8 +227,8 @@ return [{
 
 | Split | Minimum per Class | Balance Threshold |
 |-------|-------------------|-------------------|
-| train | 50 | < 20% imbalance |
-| test | 20 | N/A |
+| train | 50 (per class: happy, sad, neutral) | < 20% imbalance |
+| test | 20 (per class: happy, sad, neutral) | N/A |
 
 #### Output Schema
 
@@ -234,8 +237,10 @@ return [{
   "dataset_stats": {
     "happy_train": 55,
     "sad_train": 52,
+    "neutral_train": 50,
     "happy_test": 22,
-    "sad_test": 21
+    "sad_test": 21,
+    "neutral_test": 20
   },
   "dataset_ready": true,
   "train_ready": true,
@@ -292,7 +297,7 @@ return [{
 | `pipeline_id` | `={{$json.pipeline_id}}` | Pipeline ID |
 | `correlation_id` | `={{$json.correlation_id}}` | Correlation ID |
 | `config` | `={{$json.config}}` | Training config |
-| `dataset_hash` | `={{$json.dataset_stats.happy_train + '_' + $json.dataset_stats.sad_train}}` | Dataset version |
+| `dataset_hash` | `={{$json.dataset_stats.happy_train + '_' + $json.dataset_stats.sad_train + '_' + $json.dataset_stats.neutral_train}}` | Dataset version |
 
 #### Test Status: ✅ OPERATIONAL
 
@@ -593,7 +598,7 @@ When `auto_deploy: false` (default):
 curl -X POST http://localhost:5678/webhook/ml/pipeline/start \
   -H "Content-Type: application/json" \
   -d '{
-    "config": "fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml",
+    "config": "fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",
     "auto_deploy": false
   }'
 ```
