@@ -19,7 +19,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Initialize pipeline run\nconst timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst pipelineId = `ml_pipeline_${timestamp}`;\n\nreturn [{\n  json: {\n    pipeline_id: pipelineId,\n    model: 'efficientnet-b0-hsemotion',\n    model_storage_path: '/media/rusty_admin/project_data/ml_models/resnet50',\n    stages: ['dataset_check', 'training', 'evaluation', 'deployment'],\n    current_stage: 'dataset_check',\n    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml',\n    auto_deploy: $json.auto_deploy || false,\n    correlation_id: $json.correlation_id || pipelineId\n  }\n}];"
+        "jsCode": "// Initialize pipeline run\nconst timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst pipelineId = `ml_pipeline_${timestamp}`;\n\nreturn [{\n  json: {\n    pipeline_id: pipelineId,\n    model: 'efficientnet-b0-hsemotion',\n    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet_b0',\n    stages: ['dataset_check', 'training', 'evaluation', 'deployment'],\n    current_stage: 'dataset_check',\n    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml',\n    auto_deploy: $json.auto_deploy || false,\n    correlation_id: $json.correlation_id || pipelineId\n  }\n}];"
       },
       "id": "init_pipeline",
       "name": "Code: init.pipeline",
@@ -30,7 +30,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT COUNT(*) FILTER (WHERE label='happy' AND split='train') AS happy_train, COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train, COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test, COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test FROM video;"
+        "query": "SELECT COUNT(*) FILTER (WHERE label='happy' AND split='train') AS happy_train, COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train, COUNT(*) FILTER (WHERE label='neutral' AND split='train') AS neutral_train, COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test, COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test, COUNT(*) FILTER (WHERE label='neutral' AND split='test') AS neutral_test FROM video;"
       },
       "id": "db_dataset_stats",
       "name": "Postgres: dataset.stats",
@@ -42,7 +42,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Check dataset readiness\nconst stats = items[0].json;\nconst minTrainPerClass = 50;\nconst minTestPerClass = 20;\n\nconst trainReady = Math.min(stats.happy_train, stats.sad_train) >= minTrainPerClass;\nconst testReady = Math.min(stats.happy_test, stats.sad_test) >= minTestPerClass;\nconst balanced = Math.abs(stats.happy_train - stats.sad_train) / Math.max(stats.happy_train, stats.sad_train) < 0.2;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    dataset_stats: stats,\n    dataset_ready: trainReady && testReady,\n    train_ready: trainReady,\n    test_ready: testReady,\n    balanced: balanced,\n    current_stage: trainReady ? 'training' : 'dataset_check'\n  }\n}];"
+        "jsCode": "// Check dataset readiness\nconst stats = items[0].json;\nconst minTrainPerClass = 50;\nconst minTestPerClass = 20;\n\nconst trainReady = Math.min(stats.happy_train, stats.sad_train, stats.neutral_train) >= minTrainPerClass;\nconst testReady = Math.min(stats.happy_test, stats.sad_test, stats.neutral_test) >= minTestPerClass;\nconst maxTrain = Math.max(stats.happy_train, stats.sad_train, stats.neutral_train);\nconst minTrain = Math.min(stats.happy_train, stats.sad_train, stats.neutral_train);\nconst balanced = maxTrain > 0 ? (maxTrain - minTrain) / maxTrain < 0.2 : false;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    dataset_stats: stats,\n    dataset_ready: trainReady && testReady,\n    train_ready: trainReady,\n    test_ready: testReady,\n    balanced: balanced,\n    current_stage: trainReady ? 'training' : 'dataset_check'\n  }\n}];"
       },
       "id": "check_dataset",
       "name": "Code: check.dataset",
@@ -73,7 +73,7 @@
             {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
             {"name": "correlation_id", "value": "={{$json.correlation_id}}"},
             {"name": "config", "value": "={{$json.config}}"},
-            {"name": "dataset_hash", "value": "={{$json.dataset_stats.happy_train + '_' + $json.dataset_stats.sad_train}}"}
+            {"name": "dataset_hash", "value": "={{$json.dataset_stats.happy_train + '_' + $json.dataset_stats.sad_train + '_' + $json.dataset_stats.neutral_train}}"}
           ]
         }
       },

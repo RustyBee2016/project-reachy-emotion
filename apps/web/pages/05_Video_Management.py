@@ -8,6 +8,14 @@ import streamlit as st
 from apps.web import api_client
 from apps.web.components.video_player import render_video_or_thumb
 
+
+def _is_uuid_identifier(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (TypeError, ValueError):
+        return False
+
 st.set_page_config(page_title="Video Management", layout="wide")
 st.title("05 - Video Management")
 
@@ -47,7 +55,7 @@ else:
             st.write(f"Size: {item.get('size_bytes', '?')}")
 
 st.divider()
-st.subheader("Batch Promote")
+st.subheader("Batch Promote / Stage")
 st.write(f"Selected videos: {len(st.session_state.batch_selected)}")
 
 dest_split = st.selectbox("Destination", ["train", "test"], index=0)
@@ -59,19 +67,41 @@ dry_run = st.toggle("Dry run", value=True)
 if st.button("Execute Batch Promote", disabled=not st.session_state.batch_selected):
     ok = 0
     failed = 0
+    skipped = 0
     for vid in list(st.session_state.batch_selected):
         try:
-            api_client.promote(
-                video_id=vid,
-                dest_split=dest_split,
-                label=label,
-                dry_run=dry_run,
-                correlation_id=str(uuid.uuid4()),
-                use_gateway=True,
-            )
+            correlation_id = str(uuid.uuid4())
+
+            if split == "temp":
+                if not _is_uuid_identifier(vid):
+                    # Temp listings can expose filename stems; skip non-UUID to avoid false promotions.
+                    skipped += 1
+                    continue
+                api_client.stage_to_dataset_all(
+                    video_ids=[vid],
+                    label=label or "neutral",
+                    dry_run=dry_run,
+                    correlation_id=correlation_id,
+                )
+            else:
+                if not _is_uuid_identifier(vid):
+                    skipped += 1
+                    continue
+                api_client.promote(
+                    video_id=vid,
+                    dest_split=dest_split,
+                    label=label,
+                    dry_run=dry_run,
+                    correlation_id=correlation_id,
+                    use_gateway=True,
+                )
             ok += 1
         except Exception:
             failed += 1
-    st.success(f"Batch complete at {datetime.utcnow().isoformat()} | success={ok} failed={failed}")
+    st.success(
+        f"Batch complete at {datetime.utcnow().isoformat()} | success={ok} failed={failed} skipped={skipped}"
+    )
+    if skipped:
+        st.warning("Some items were skipped because they lacked UUID identifiers required by promotion APIs.")
     if not dry_run:
         st.session_state.batch_selected = []

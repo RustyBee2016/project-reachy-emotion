@@ -38,7 +38,7 @@ Conflicts between automation and policy defer to the human project owner (Russ).
 
 ## Environment Overview
 - **Training Node (Ubuntu 1):**  
-  NVIDIA GPU workstation running TAO Toolkit 4.x for EmotionNet fine-tuning.  
+  NVIDIA GPU workstation running PyTorch-based EfficientNet-B0 fine-tuning workflows.  
   Handles FastAPI-based Media Mover service (base: `https://10.0.4.130/api/media`) and Postgres database.
 - **Web/UI Node (Ubuntu 2):**  
   Streamlit frontend behind Nginx, interacts with FastAPI and Postgres.  
@@ -48,7 +48,7 @@ Conflicts between automation and policy defer to the human project owner (Russ).
   PostgreSQL 16 cluster (local) at `10.0.4.130:5432` using the `reachy_dev` role against the `reachy_emotion` database. Stores metadata, video URLs, hashes, and promotion logs.  
 - **Storage:**  
   Local SSD under `/media/project_data/reachy_emotion/videos/` with subfolders:  
-  `temp/`, `train/`, and `test/`.  
+  `temp/`, `dataset_all/`, `train/`, `test/`, `thumbs/`, and `manifests/`.  
 - **Networking:**  
   Static LAN IPs — Ubuntu 1 (10.0.4.130), Ubuntu 2 (10.0.4.140), Jetson (10.0.4.150).  
 - **Model:**  
@@ -84,21 +84,22 @@ Initiated by the web UI or generation workflow. Operates in local-only mode; no 
 Manage user-assisted classification and dataset promotion.
 
 **Updated Responsibilities (v08.4.2):**
-- Maintain training split integrity (`videos/train/`) by ensuring all accepted items carry a valid label (`happy`, `sad`, or `neutral`).  
-- Enforce the **no-label rule** for the `test` split.  
+- Enforce 3-class labeling policy (`happy`, `sad`, `neutral`) for accepted clips.  
+- Stage accepted clips from `videos/temp/` into `videos/dataset_all/` with explicit labels.  
+- Enforce the **no-label rule** for sampled `test` outputs.  
 - Interface with the web UI to update per-class counts and 1:1:1 balance status (happy, sad, neutral).  
 - Coordinate with the Database API to apply the `chk_split_label` constraint and maintain per-split quotas.  
-- Log each promotion event (`temp → train` or `temp → test`) with `intended_emotion`, timestamp, and `sha256`.  
+- Log each promotion event (`temp → dataset_all`, then sampling events to `train/test`) with `intended_emotion`, timestamp, and `sha256`.  
 
 ### Agent 3 — Promotion / Curation Agent
 **Purpose:**  
 Oversee controlled movement of media between filesystem stages.
 
 **Updated Responsibilities:**
-- Allow promotion to `videos/test/` only through the Labeling Agent interface after user acceptance.  
-- Verify `label IS NULL` for all test items.  
-- Prevent class imbalance by checking counters before each move.  
-- Update the Postgres `split` field transactionally with the filesystem move via Media Mover (`POST /api/media/promote`, alias supported at `POST /api/promote`).  
+- Stage accepted clips into `videos/dataset_all/` using `POST /api/v1/promote/stage`.  
+- Orchestrate per-run randomized sampling into `videos/train/` and `videos/test/` using `POST /api/v1/promote/sample`.  
+- Verify `label IS NULL` policy for sampled `test` outputs and class-balance constraints across all 3 classes.  
+- Keep promotion state synchronized with filesystem operations and audit logs.  
 - Notify the UI of the updated ratio and readiness status (via WebSocket or polling).  
 
 ---
@@ -240,7 +241,7 @@ Execute physical gestures on the Reachy Mini robot based on emotion context and 
 ## Orchestration Policy
 - **Retries:** Exponential backoff with jitter; `max_attempts = 5` for transient errors.  
 - **Idempotency:** All write operations (promotion, delete, train) must include `Idempotency-Key`.  
-  - Promotion calls use Media Mover at base `https://10.0.4.130/api/media` (`POST /api/media/promote`; compatibility alias `POST /api/promote`).
+  - Staging/sampling calls use Media Mover promote v1 endpoints (`POST /api/v1/promote/stage`, `POST /api/v1/promote/sample`) with compatibility fallback support only where required.
 - **Circuit Breakers:** Trip on high latency or error spikes to protect upstreams (e.g. LM Studio).  
 - **Queue Discipline:** Default FIFO per agent; limit concurrency per agent role.  
 - **Dead Letter Queue:** Failed tasks beyond retries require human review.  
@@ -249,11 +250,11 @@ Execute physical gestures on the Reachy Mini robot based on emotion context and 
 ---
 
 ## Approval Rules
-- **Dataset Promotions:** Require human confirmation (`temp → train/test`).  
+- **Dataset Promotions:** Require human confirmation (`temp → dataset_all`, then run-scoped sampling to `train/test`).  
 - **Model Deployments:** Require two-stage approval (`shadow → canary`, `canary → rollout`).  
 - **Privacy Policy Changes:** Require explicit owner consent.  
 
-Evidence must reference Gate A/B/C records defined in `requirements_08.4.2.md`.
+Evidence must reference Gate A/B/C records defined in `memory-bank/requirements.md`.
 
 ---
 

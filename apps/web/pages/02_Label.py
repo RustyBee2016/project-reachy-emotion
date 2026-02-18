@@ -18,9 +18,9 @@ st.set_page_config(page_title="Label & Promote", layout="wide")
 
 st.title("02 — Label & Promote")
 
-st.caption("Browse clips and promote with split/label policy enforcement.")
+st.caption("Browse clips and apply label/staging with split-label policy enforcement.")
 
-split = st.selectbox("Split", ["temp", "train", "test"], index=0)
+split = st.selectbox("Split", ["temp", "dataset_all", "train", "test"], index=0)
 execute_mode = st.toggle("Execute promotions (otherwise dry-run)", value=False)
 
 result = None
@@ -73,25 +73,37 @@ else:
                     render_video_or_thumb(url=url, thumb_url=thumb, width=160)
                 with cols[4]:
                     with st.popover("Promote"):
-                        dest = st.radio("Destination", ["train", "test"], horizontal=True)
-                        lbl = None
-                        if dest == "train":
-                            lbl = st.selectbox("Label", ["happy", "sad", "neutral"], index=0)
-                        action_label = "Promote Now" if execute_mode else "Simulate Promote"
+                        lbl = st.selectbox("Label", ["happy", "sad", "neutral"], index=0)
+
+                        if split == "temp":
+                            st.caption("Policy: temp clips are staged to dataset_all before train/test sampling.")
+                            action_label = "Stage Now" if execute_mode else "Simulate Stage"
+                        else:
+                            st.caption("Legacy compatibility promotion path.")
+                            dest = st.radio("Destination", ["train", "test"], horizontal=True)
+                            action_label = "Promote Now" if execute_mode else "Simulate Promote"
+
                         if st.button(action_label, key=f"prom_{video_id}"):
                             try:
-                                resp = api_client.promote(
-                                    video_id=str(video_id),
-                                    dest_split=dest,
-                                    label=lbl,
-                                    dry_run=not execute_mode,
-                                    use_gateway=True,
-                                )
+                                if split == "temp":
+                                    resp = api_client.stage_to_dataset_all(
+                                        video_ids=[str(video_id)],
+                                        label=lbl,
+                                        dry_run=not execute_mode,
+                                    )
+                                else:
+                                    resp = api_client.promote(
+                                        video_id=str(video_id),
+                                        dest_split=dest,
+                                        label=lbl if dest == "train" else None,
+                                        dry_run=not execute_mode,
+                                        use_gateway=True,
+                                    )
                                 if execute_mode:
                                     st.success("Promotion executed.")
                                 else:
-                                    st.success("Promotion plan (dry-run).")
+                                    st.success("Operation plan (dry-run).")
                                 st.json(resp)
                             except Exception as e:  # noqa: BLE001
-                                st.error("Promotion failed.")
+                                st.error("Operation failed.")
                                 st.exception(e)

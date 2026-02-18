@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-02-10
+**Last Updated**: 2026-02-18
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -29,6 +29,9 @@ This index provides curated entry points to project context, decisions, and refe
 - **[Runbook: Rollback Procedure](./runbooks/rollback-procedure.md)** — ZFS snapshot rollback and manifest rebuild.
 - **[Runbook: NAS Backup & Restore](./runbooks/nas-backup-restore.md)** — Nightly rsync, quarterly restore test, hash verification.
 - **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, engine export, DeepStream config update.
+
+## Operational Analyses
+- **[Video Pipeline Analysis (2026-02-18)](../video_pipeline_01.md)** — End-to-end pipeline walkthrough, promotion-gap analysis, DB readiness review, and remediation summary.
 
 ---
 

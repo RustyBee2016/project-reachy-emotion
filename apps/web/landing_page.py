@@ -89,13 +89,59 @@ def _refresh_video_metadata(current: dict) -> Optional[str]:
     return None
 
 
-def _ensure_video_id(current: dict) -> Optional[str]:
-    """Return cached video_id or attempt to refresh it."""
+def _register_current_video_if_needed(current: dict, correlation_id: str) -> Optional[str]:
+    """Register current temp video in backend when UUID metadata is missing."""
+
+    backend_path = current.get("backend_path")
+    name = current.get("name")
+    path = current.get("path")
+
+    candidate_name = None
+    for value in (backend_path, name, path):
+        if isinstance(value, str) and value:
+            candidate_name = Path(value).name
+            break
+
+    if not candidate_name:
+        return None
+
+    rel_path = f"temp/{candidate_name}"
+    try:
+        register_response = register_local_video(
+            file_path=rel_path,
+            correlation_id=correlation_id,
+            metadata={"source": "landing_page"},
+            file_name=candidate_name,
+            idempotency_key=correlation_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Unable to register local video for promotion: {exc}")
+        return None
+
+    resolved = _extract_video_id(register_response)
+    if isinstance(resolved, str) and resolved:
+        current["video_id"] = resolved
+        current["backend_path"] = _extract_file_path(register_response) or rel_path
+        return resolved
+    return None
+
+
+def _ensure_video_id(current: dict, correlation_id: str) -> Optional[str]:
+    """Return a UUID video_id or attempt refresh/registration fallback."""
 
     video_id = current.get("video_id")
-    if isinstance(video_id, str) and video_id:
+    if isinstance(video_id, str) and _is_uuid_identifier(video_id):
         return video_id
-    return _refresh_video_metadata(current)
+
+    refreshed = _refresh_video_metadata(current)
+    if isinstance(refreshed, str) and _is_uuid_identifier(refreshed):
+        return refreshed
+
+    registered = _register_current_video_if_needed(current, correlation_id)
+    if isinstance(registered, str) and _is_uuid_identifier(registered):
+        return registered
+
+    return refreshed if isinstance(refreshed, str) else None
 
 
 def _is_uuid_identifier(value: Optional[str]) -> bool:
@@ -109,6 +155,9 @@ def _is_uuid_identifier(value: Optional[str]) -> bool:
 
 
 def _legacy_clip_identifier(current: dict, video_id: Optional[str]) -> Optional[str]:
+    if isinstance(video_id, str) and video_id:
+        return video_id
+
     if isinstance(video_id, str) and video_id:
         return video_id
 
@@ -439,12 +488,12 @@ with col9:
     if st.button("❌ Incorrect", key="delete_video", use_container_width=True):
         if st.session_state.current_video:
             try:
+                correlation_id = str(uuid.uuid4())
                 current = st.session_state.current_video
-                video_id = _ensure_video_id(current)
+                video_id = _ensure_video_id(current, correlation_id)
                 if not video_id:
                     st.error("Unable to resolve video ID for removal. Please retry after refresh.")
                 else:
-                    correlation_id = str(uuid.uuid4())
                     reject_video(
                         video_id=video_id,
                         correlation_id=correlation_id,
@@ -459,29 +508,63 @@ with col9:
     if st.button("✅ Submit Classification", type="primary", use_container_width=True):
         if st.session_state.current_video and selected_emotion:
             try:
+                correlation_id = str(uuid.uuid4())
                 current = st.session_state.current_video
-                video_id = _ensure_video_id(current)
+                video_id = _ensure_video_id(current, correlation_id)
                 if not video_id:
                     st.error(
                         "Unable to resolve video ID for promotion. Please wait a moment or refresh before trying again."
                     )
                 else:
-                    correlation_id = str(uuid.uuid4())
-                    clip_id = _legacy_clip_identifier(current, video_id)
-                    if not clip_id:
-                        st.error("Unable to resolve a clip identifier for promotion.")
-                    else:
-                        promote_via_gateway(
-                            video_id=clip_id,
-                            dest_split="train",
-                            label=selected_emotion,
-                            dry_run=False,
-                            correlation_id=correlation_id,
-                            use_gateway=True,
-                            idempotency_key=correlation_id,
-                        )
-                        st.success(f"✅ Classified as: **{selected_emotion}**")
-                        st.info("Video promoted to train split with label")
+                    stage_succeeded = False
+
+                    if _is_uuid_identifier(video_id):
+                        try:
+                            response = stage_to_dataset_all(
+                                video_ids=[video_id],
+                                label=selected_emotion,
+                                dry_run=False,
+                                correlation_id=correlation_id,
+                            )
+                            stage_succeeded = True
+                            st.success(f"✅ Classified as: **{selected_emotion}**")
+                            st.info("Video staged to dataset_all with metadata saved to database")
+
+                            promoted = response.get("promoted_ids", [])
+                            skipped = response.get("skipped_ids", [])
+                            failed = response.get("failed_ids", [])
+                            if promoted:
+                                st.caption(f"✅ Promoted: {len(promoted)} video(s)")
+                            if skipped:
+                                st.caption(f"⏭️ Skipped: {len(skipped)} video(s)")
+                            if failed:
+                                st.warning(f"⚠️ Failed: {len(failed)} video(s)")
+                        except Exception as stage_exc:  # noqa: BLE001
+                            st.warning(
+                                f"Stage endpoint failed ({stage_exc}); falling back to legacy promote flow."
+                            )
+
+                    if not stage_succeeded:
+                        clip_id = _legacy_clip_identifier(current, video_id)
+                        if not clip_id:
+                            st.error("Unable to resolve a clip identifier for legacy promotion.")
+                        elif not _is_uuid_identifier(clip_id):
+                            st.error(
+                                "Unable to promote via fallback path because the resolved video identifier is not a UUID. "
+                                "Please refresh and retry so the clip can be registered first."
+                            )
+                        else:
+                            promote_via_gateway(
+                                video_id=clip_id,
+                                dest_split="train",
+                                label=selected_emotion,
+                                dry_run=False,
+                                correlation_id=correlation_id,
+                                use_gateway=True,
+                                idempotency_key=correlation_id,
+                            )
+                            st.success(f"✅ Classified as: **{selected_emotion}**")
+                            st.info("Video promoted to train split via gateway compatibility path")
 
                     st.session_state.current_video = None
             except Exception as e:  # noqa: BLE001

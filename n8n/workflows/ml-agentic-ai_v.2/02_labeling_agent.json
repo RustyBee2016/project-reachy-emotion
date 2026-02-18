@@ -18,7 +18,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Validate and normalize label submission\nconst body = $json.body ?? $json;\nconst allowedLabels = new Set(['happy', 'sad', 'angry', 'neutral', 'surprise', 'fearful']);\nconst allowedActions = new Set(['label_only', 'promote_train', 'promote_test', 'discard']);\n\nfunction uuidv4() {\n  return crypto.randomUUID ? crypto.randomUUID() : \n    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n      const r = (Math.random() * 16) | 0;\n      const v = c === 'x' ? r : (r & 0x3 | 0x8);\n      return v.toString(16);\n    });\n}\n\nconst video_id = body.video_id;\nconst label = (body.label || '').toLowerCase();\nconst action = body.action || 'label_only';\nconst rater_id = body.rater_id || 'anonymous';\nconst notes = body.notes || '';\nconst idempotency_key = body.idempotency_key || uuidv4();\n\nif (!video_id) throw new Error('video_id required');\nif (!allowedLabels.has(label)) throw new Error(`Invalid label: ${label}`);\nif (!allowedActions.has(action)) throw new Error(`Invalid action: ${action}`);\n\nreturn [{\n  json: {\n    video_id,\n    label,\n    action,\n    rater_id,\n    notes,\n    idempotency_key,\n    correlation_id: body.correlation_id || `label-${Date.now()}`\n  }\n}];"
+        "jsCode": "// Validate and normalize label submission\nconst body = $json.body ?? $json;\nconst allowedLabels = new Set(['happy', 'sad', 'neutral']);\nconst allowedActions = new Set(['label_only', 'promote_train', 'promote_test', 'discard']);\n\nfunction uuidv4() {\n  return crypto.randomUUID ? crypto.randomUUID() : \n    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {\n      const r = (Math.random() * 16) | 0;\n      const v = c === 'x' ? r : (r & 0x3 | 0x8);\n      return v.toString(16);\n    });\n}\n\nconst video_id = body.video_id;\nconst label = (body.label || '').toLowerCase();\nconst action = body.action || 'label_only';\nconst rater_id = body.rater_id || 'anonymous';\nconst notes = body.notes || '';\nconst idempotency_key = body.idempotency_key || uuidv4();\n\nif (!video_id) throw new Error('video_id required');\nif (!allowedLabels.has(label)) throw new Error(`Invalid label: ${label}`);\nif (!allowedActions.has(action)) throw new Error(`Invalid action: ${action}`);\n\nreturn [{\n  json: {\n    video_id,\n    label,\n    action,\n    rater_id,\n    notes,\n    idempotency_key,\n    correlation_id: body.correlation_id || `label-${Date.now()}`\n  }\n}];"
       },
       "id": "validate_payload",
       "name": "Code: validate.payload",
@@ -222,7 +222,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT \n  COUNT(CASE WHEN label = 'happy' AND split = 'train' THEN 1 END) AS happy_count,\n  COUNT(CASE WHEN label = 'sad' AND split = 'train' THEN 1 END) AS sad_count,\n  COUNT(*) FILTER (WHERE split = 'train') AS total_train\nFROM video;",
+        "query": "SELECT \n  COUNT(CASE WHEN label = 'happy' AND split = 'train' THEN 1 END) AS happy_count,\n  COUNT(CASE WHEN label = 'sad' AND split = 'train' THEN 1 END) AS sad_count,\n  COUNT(CASE WHEN label = 'neutral' AND split = 'train' THEN 1 END) AS neutral_count,\n  COUNT(*) FILTER (WHERE split = 'train') AS total_train\nFROM video;",
         "options": {}
       },
       "id": "db_class_balance",
@@ -240,7 +240,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"video_id\": $json.video_id,\n  \"label\": $json.label,\n  \"action\": $json.action,\n  \"class_balance\": {\n    \"happy\": $json.happy_count,\n    \"sad\": $json.sad_count,\n    \"total_train\": $json.total_train,\n    \"balanced\": Math.abs($json.happy_count - $json.sad_count) <= 5\n  },\n  \"correlation_id\": $json.correlation_id\n} }}"
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"video_id\": $json.video_id,\n  \"label\": $json.label,\n  \"action\": $json.action,\n  \"class_balance\": {\n    \"happy\": $json.happy_count,\n    \"sad\": $json.sad_count,\n    \"neutral\": $json.neutral_count,\n    \"total_train\": $json.total_train,\n    \"balanced\": Math.max($json.happy_count, $json.sad_count, $json.neutral_count) - Math.min($json.happy_count, $json.sad_count, $json.neutral_count) <= 10\n  },\n  \"correlation_id\": $json.correlation_id\n} }}"
       },
       "id": "respond_success",
       "name": "Respond: success",
