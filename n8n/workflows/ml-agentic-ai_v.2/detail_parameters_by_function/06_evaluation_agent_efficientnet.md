@@ -95,14 +95,15 @@ IF: test_set.balanced? (min 20/class)
 
 **Type:** `n8n-nodes-base.postgres` (v2.4)  
 **Position:** [-400, 300]  
-**Purpose:** Checks test data balance (happy vs sad counts).
+**Purpose:** Checks test data balance (happy, sad, neutral counts).
 
 #### SQL Query
 
 ```sql
-SELECT 
+SELECT
   COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test,
-  COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test
+  COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test,
+  COUNT(*) FILTER (WHERE label='neutral' AND split='test') AS neutral_test
 FROM video;
 ```
 
@@ -126,7 +127,7 @@ FROM video;
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `conditions.number[0].value1` | `={{Math.min($json.happy_test, $json.sad_test)}}` | Minimum class count |
+| `conditions.number[0].value1` | `={{Math.min($json.happy_test, $json.sad_test, $json.neutral_test)}}` | Minimum class count |
 | `conditions.number[0].operation` | `largerEqual` | ≥ comparison |
 | `conditions.number[0].value2` | `20` | Minimum threshold |
 
@@ -177,9 +178,9 @@ from trainer.fer_finetune.dataset import create_dataloaders
 from trainer.fer_finetune.evaluate import evaluate_model, generate_report
 import json
 
-model = load_pretrained_model('{{$json.checkpoint_path}}', num_classes=2)
+model = load_pretrained_model('{{$json.checkpoint_path}}', num_classes=3)
 _, val_loader = create_dataloaders('/media/project_data/reachy_emotion/videos', batch_size=32)
-results = evaluate_model(model, val_loader, class_names=['happy', 'sad'])
+results = evaluate_model(model, val_loader, class_names=['happy', 'sad', 'neutral'])
 report = generate_report(results, '/workspace/experiments/{{$json.run_id}}/eval_report.txt')
 print(json.dumps(results))
 "

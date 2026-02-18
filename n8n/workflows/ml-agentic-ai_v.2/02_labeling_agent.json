@@ -222,7 +222,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT \n  COUNT(CASE WHEN label = 'happy' AND split = 'train' THEN 1 END) AS happy_count,\n  COUNT(CASE WHEN label = 'sad' AND split = 'train' THEN 1 END) AS sad_count,\n  COUNT(*) FILTER (WHERE split = 'train') AS total_train\nFROM video;",
+        "query": "SELECT \n  COUNT(CASE WHEN label = 'happy' AND split = 'train' THEN 1 END) AS happy_count,\n  COUNT(CASE WHEN label = 'sad' AND split = 'train' THEN 1 END) AS sad_count,\n  COUNT(CASE WHEN label = 'neutral' AND split = 'train' THEN 1 END) AS neutral_count,\n  COUNT(*) FILTER (WHERE split = 'train') AS total_train\nFROM video;",
         "options": {}
       },
       "id": "db_class_balance",
@@ -240,7 +240,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"video_id\": $json.video_id,\n  \"label\": $json.label,\n  \"action\": $json.action,\n  \"class_balance\": {\n    \"happy\": $json.happy_count,\n    \"sad\": $json.sad_count,\n    \"total_train\": $json.total_train,\n    \"balanced\": Math.abs($json.happy_count - $json.sad_count) <= 5\n  },\n  \"correlation_id\": $json.correlation_id\n} }}"
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"video_id\": $json.video_id,\n  \"label\": $json.label,\n  \"action\": $json.action,\n  \"class_balance\": {\n    \"happy\": $json.happy_count,\n    \"sad\": $json.sad_count,\n    \"neutral\": $json.neutral_count,\n    \"total_train\": $json.total_train,\n    \"balanced\": Math.max($json.happy_count, $json.sad_count, $json.neutral_count) - Math.min($json.happy_count, $json.sad_count, $json.neutral_count) <= 10\n  },\n  \"correlation_id\": $json.correlation_id\n} }}"
       },
       "id": "respond_success",
       "name": "Respond: success",

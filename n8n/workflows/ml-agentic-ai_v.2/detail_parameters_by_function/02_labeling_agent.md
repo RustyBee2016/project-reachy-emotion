@@ -6,7 +6,7 @@
 
 ## Overview
 
-The Labeling Agent manages user-assisted classification and dataset promotion. It validates label submissions, applies labels to videos in the database, and routes actions to appropriate handlers (label_only, promote_train, promote_test, discard). It maintains training split integrity and tracks class balance for 50/50 happy/sad distribution.
+The Labeling Agent manages user-assisted classification and dataset promotion. It validates label submissions, applies labels to videos in the database, and routes actions to appropriate handlers (label_only, promote_train, promote_test, discard). It maintains training split integrity and tracks class balance across happy/sad/neutral classes.
 
 ## Node Inventory (Alphabetical)
 
@@ -509,9 +509,10 @@ action IN ('label_only', 'promote_train', 'promote_test', 'discard', 'relabel')
 #### SQL Query
 
 ```sql
-SELECT 
+SELECT
   COUNT(CASE WHEN label = 'happy' AND split = 'train' THEN 1 END) AS happy_count,
   COUNT(CASE WHEN label = 'sad' AND split = 'train' THEN 1 END) AS sad_count,
+  COUNT(CASE WHEN label = 'neutral' AND split = 'train' THEN 1 END) AS neutral_count,
   COUNT(*) FILTER (WHERE split = 'train') AS total_train
 FROM video;
 ```
@@ -528,7 +529,8 @@ FROM video;
 {
   "happy_count": 45,
   "sad_count": 42,
-  "total_train": 87
+  "neutral_count": 40,
+  "total_train": 127
 }
 ```
 
@@ -541,8 +543,8 @@ FROM video;
 | `Video` | 33-78 | Video model with label and split fields |
 
 **Balance Calculation:**
-- **Balanced:** `Math.abs(happy_count - sad_count) <= 5`
-- **Target:** 50/50 distribution between happy and sad
+- **Balanced:** `Math.max(happy_count, sad_count, neutral_count) - Math.min(happy_count, sad_count, neutral_count) <= 10`
+- **Target:** Balanced distribution across happy, sad, and neutral
 
 #### Test Status: ✅ OPERATIONAL
 
@@ -572,8 +574,10 @@ FROM video;
     "class_balance": {
       "happy": $json.happy_count,
       "sad": $json.sad_count,
+      "neutral": $json.neutral_count,
       "total_train": $json.total_train,
-      "balanced": Math.abs($json.happy_count - $json.sad_count) <= 5
+      "balanced": Math.max($json.happy_count, $json.sad_count, $json.neutral_count) -
+                  Math.min($json.happy_count, $json.sad_count, $json.neutral_count) <= 10
     },
     "correlation_id": $json.correlation_id
   }
@@ -586,12 +590,13 @@ FROM video;
 {
   "status": "success",
   "video_id": "uuid",
-  "label": "happy|sad",
+  "label": "happy|sad|neutral",
   "action": "label_only|promote_train|promote_test|discard",
   "class_balance": {
     "happy": 45,
     "sad": 42,
-    "total_train": 87,
+    "neutral": 40,
+    "total_train": 127,
     "balanced": true
   },
   "correlation_id": "string"
@@ -754,7 +759,8 @@ curl -X POST http://localhost:5678/webhook/label \
   "class_balance": {
     "happy": 45,
     "sad": 43,
-    "total_train": 88,
+    "neutral": 40,
+    "total_train": 128,
     "balanced": true
   },
   "correlation_id": "label-1701234567890"
