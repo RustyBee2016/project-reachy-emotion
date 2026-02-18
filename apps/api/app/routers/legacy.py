@@ -116,43 +116,6 @@ async def legacy_list_videos_compat(
     return old_format
 
 
-@router.post("/api/media/promote")
-async def legacy_promote(
-    request: Request,
-    config: AppConfig = Depends(get_config),
-) -> JSONResponse:
-    """Legacy promote endpoint (stub).
-    
-    DEPRECATED: Use /api/v1/promote/stage instead.
-    
-    This endpoint is a stub that returns a success response but does not
-    actually perform any promotion. It exists only for backward compatibility.
-    """
-    logger.warning(
-        "Legacy endpoint accessed",
-        extra={
-            "endpoint": "/api/media/promote",
-            "new_endpoint": "/api/v1/promote/stage"
-        }
-    )
-    
-    body: Dict[str, Any] = await request.json()
-    
-    response = JSONResponse(
-        status_code=200,
-        content={
-            "status": "ok",
-            "message": "This is a legacy stub endpoint. Use /api/v1/promote/stage for actual promotion.",
-            "deprecated": True,
-            "new_endpoint": "/api/v1/promote/stage"
-        }
-    )
-    
-    _add_deprecation_headers(response)
-    
-    return response
-
-
 @router.get("/api/media")
 async def legacy_media_root() -> JSONResponse:
     """Legacy media root endpoint.

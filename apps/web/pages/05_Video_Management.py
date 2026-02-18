@@ -14,7 +14,7 @@ st.title("05 - Video Management")
 if "batch_selected" not in st.session_state:
     st.session_state.batch_selected = []
 
-split = st.selectbox("Split", ["temp", "dataset_all", "train", "test"], index=0)
+split = st.selectbox("Split", ["temp", "train", "test"], index=0)
 limit = st.slider("Limit", min_value=10, max_value=200, value=50, step=10)
 
 try:

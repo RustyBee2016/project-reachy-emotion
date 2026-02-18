@@ -32,7 +32,6 @@ from api_client import (
     reject_video,
     upload_video as ingest_video,
     list_videos as list_videos_api,
-    stage_to_dataset_all,
     register_local_video,
 )
 
@@ -110,6 +109,9 @@ def _is_uuid_identifier(value: Optional[str]) -> bool:
 
 
 def _legacy_clip_identifier(current: dict, video_id: Optional[str]) -> Optional[str]:
+    if isinstance(video_id, str) and video_id:
+        return video_id
+
     backend_path = current.get("backend_path")
     if isinstance(backend_path, str) and backend_path:
         return Path(backend_path).name
@@ -117,9 +119,6 @@ def _legacy_clip_identifier(current: dict, video_id: Optional[str]) -> Optional[
     name = current.get("name")
     if isinstance(name, str) and name:
         return Path(name).name
-
-    if isinstance(video_id, str) and video_id:
-        return video_id
 
     path = current.get("path")
     if isinstance(path, str) and path:
@@ -218,6 +217,7 @@ st.markdown('<h1 class="main-header">Welcome to Capstone Video App</h1>', unsafe
 # Section 1: Upload Existing Video
 st.markdown('<div class="section-container">', unsafe_allow_html=True)
 col1, col2, col3 = st.columns([3, 2, 2])
+upload_for_training = True
 
 with col1:
     uploaded_file = st.file_uploader(
@@ -228,7 +228,7 @@ with col1:
     )
 
 with col2:
-    upload_for_training = st.checkbox("Upload for Training", value=False)
+    st.caption("Classification flow targets train split.")
 
 with col3:
     if st.button("Upload Video", type="primary", disabled=uploaded_file is None):
@@ -467,50 +467,21 @@ with col9:
                     )
                 else:
                     correlation_id = str(uuid.uuid4())
-                    stage_succeeded = False
-
-                    if _is_uuid_identifier(video_id):
-                        try:
-                            response = stage_to_dataset_all(
-                                video_ids=[video_id],
-                                label=selected_emotion,
-                                dry_run=False,
-                                correlation_id=correlation_id,
-                            )
-                            stage_succeeded = True
-                            st.success(f"✅ Classified as: **{selected_emotion}**")
-                            st.info("Video staged to dataset_all with metadata saved to database")
-
-                            promoted = response.get("promoted_ids", [])
-                            skipped = response.get("skipped_ids", [])
-                            failed = response.get("failed_ids", [])
-                            if promoted:
-                                st.caption(f"✅ Promoted: {len(promoted)} video(s)")
-                            if skipped:
-                                st.caption(f"⏭️ Skipped: {len(skipped)} video(s)")
-                            if failed:
-                                st.warning(f"⚠️ Failed: {len(failed)} video(s)")
-                        except Exception as stage_exc:  # noqa: BLE001
-                            st.warning(
-                                f"Stage endpoint failed ({stage_exc}); falling back to legacy promote flow."
-                            )
-
-                    if not stage_succeeded:
-                        clip_id = _legacy_clip_identifier(current, video_id)
-                        if not clip_id:
-                            st.error("Unable to resolve a clip identifier for legacy promotion.")
-                        else:
-                            promote_via_gateway(
-                                video_id=clip_id,
-                                dest_split="train",
-                                label=selected_emotion,
-                                dry_run=False,
-                                correlation_id=correlation_id,
-                                use_gateway=True,
-                                idempotency_key=correlation_id,
-                            )
-                            st.success(f"✅ Classified as: **{selected_emotion}**")
-                            st.info("Video promoted to train split via gateway compatibility path")
+                    clip_id = _legacy_clip_identifier(current, video_id)
+                    if not clip_id:
+                        st.error("Unable to resolve a clip identifier for promotion.")
+                    else:
+                        promote_via_gateway(
+                            video_id=clip_id,
+                            dest_split="train",
+                            label=selected_emotion,
+                            dry_run=False,
+                            correlation_id=correlation_id,
+                            use_gateway=True,
+                            idempotency_key=correlation_id,
+                        )
+                        st.success(f"✅ Classified as: **{selected_emotion}**")
+                        st.info("Video promoted to train split with label")
 
                     st.session_state.current_video = None
             except Exception as e:  # noqa: BLE001

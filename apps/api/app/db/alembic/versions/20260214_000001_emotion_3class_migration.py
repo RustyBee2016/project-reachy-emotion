@@ -7,6 +7,7 @@ Create Date: 2026-02-14
 
 from __future__ import annotations
 
+import logging
 import sqlalchemy as sa
 from alembic import op
 
@@ -48,6 +49,8 @@ CASE
 END
 """
 
+logger = logging.getLogger(__name__)
+
 
 def _table_exists(inspector: sa.Inspector, table_name: str) -> bool:
     return table_name in inspector.get_table_names()
@@ -79,87 +82,16 @@ def _normalize_legacy_labels() -> None:
 
 
 def _narrow_enum_constraints() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-
-    if _column_exists(inspector, "video", "label"):
-        with op.batch_alter_table("video") as batch_op:
-            batch_op.alter_column(
-                "label",
-                existing_type=old_emotion_enum,
-                type_=new_emotion_enum,
-                existing_nullable=True,
-            )
-            batch_op.create_check_constraint(
-                "chk_video_split_label_policy",
-                """
-                (
-                    split IN ('temp', 'test', 'purged') AND label IS NULL
-                ) OR (
-                    split IN ('dataset_all', 'train') AND label IS NOT NULL
-                )
-                """,
-            )
-
-    if _column_exists(inspector, "promotion_log", "intended_label"):
-        with op.batch_alter_table("promotion_log") as batch_op:
-            batch_op.alter_column(
-                "intended_label",
-                existing_type=old_emotion_enum,
-                type_=new_emotion_enum,
-                existing_nullable=True,
-            )
-
-    if _column_exists(inspector, "label_event", "label"):
-        with op.batch_alter_table("label_event") as batch_op:
-            batch_op.alter_column(
-                "label",
-                existing_type=old_emotion_enum,
-                type_=new_emotion_enum,
-                existing_nullable=False,
-            )
+    # NOTE:
+    # Some deployed environments have legacy check constraints with names/types
+    # that diverge from alembic metadata expectations. Running batch enum
+    # rewrites there can abort the transaction before later compatibility
+    # migrations execute. We normalize labels in SQL and leave DDL untouched.
+    logger.warning("Skipping enum constraint narrowing due to schema drift tolerance mode")
 
 
 def _widen_enum_constraints() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-
-    if _column_exists(inspector, "video", "label"):
-        with op.batch_alter_table("video") as batch_op:
-            batch_op.alter_column(
-                "label",
-                existing_type=new_emotion_enum,
-                type_=old_emotion_enum,
-                existing_nullable=True,
-            )
-            batch_op.create_check_constraint(
-                "chk_video_split_label_policy",
-                """
-                (
-                    split IN ('temp', 'test', 'purged') AND label IS NULL
-                ) OR (
-                    split IN ('dataset_all', 'train') AND label IS NOT NULL
-                )
-                """,
-            )
-
-    if _column_exists(inspector, "promotion_log", "intended_label"):
-        with op.batch_alter_table("promotion_log") as batch_op:
-            batch_op.alter_column(
-                "intended_label",
-                existing_type=new_emotion_enum,
-                type_=old_emotion_enum,
-                existing_nullable=True,
-            )
-
-    if _column_exists(inspector, "label_event", "label"):
-        with op.batch_alter_table("label_event") as batch_op:
-            batch_op.alter_column(
-                "label",
-                existing_type=new_emotion_enum,
-                type_=old_emotion_enum,
-                existing_nullable=False,
-            )
+    logger.warning("Skipping enum constraint widening due to schema drift tolerance mode")
 
 
 def upgrade() -> None:

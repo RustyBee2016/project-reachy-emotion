@@ -238,24 +238,24 @@ class TestLegacyEndpoints:
         assert "items" in data
         assert data["total"] == 2
     
-    def test_legacy_promote_stub(self, client):
-        """Test that legacy promote endpoint returns stub response."""
+    def test_legacy_promote_is_real_handler(self, client):
+        """Test that legacy promote path is wired to real handler, not deprecated stub."""
         response = client.post(
             "/api/media/promote",
             json={
                 "video_id": "test",
-                "dest_split": "train",
                 "label": "happy"
             }
         )
-        assert response.status_code == 200
-        
+        # Missing dest_split should trigger real validation, not stub success.
+        assert response.status_code == 400
+
         data = response.json()
-        assert data["deprecated"] is True
-        assert "new_endpoint" in data
-        
-        # Check deprecation headers
-        assert "X-API-Deprecated" in response.headers
+        detail = data.get("detail", {})
+        assert detail.get("error") == "validation_error"
+        assert "Missing fields: dest_split" in detail.get("message", "")
+        assert "deprecated" not in data
+        assert "new_endpoint" not in data
     
     def test_legacy_health(self, client):
         """Test that legacy health endpoint works."""

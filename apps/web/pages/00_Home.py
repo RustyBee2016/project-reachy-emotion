@@ -76,9 +76,40 @@ def _set_current_video(payload: Dict[str, Any]) -> None:
     st.session_state.current_video = payload
 
 
+def _refresh_video_metadata(current: Dict[str, Any]) -> Optional[str]:
+    """Resolve a missing video_id by matching current file name against temp listing."""
+    file_path = current.get("file_path")
+    if not isinstance(file_path, str) or not file_path:
+        return None
+
+    filename = Path(file_path).name
+    try:
+        listing = api_client.list_videos(split="temp", limit=200, offset=0)
+    except Exception:
+        return None
+
+    for item in listing.get("items", []):
+        candidate_path = item.get("file_path")
+        if isinstance(candidate_path, str) and Path(candidate_path).name == filename:
+            candidate_id = item.get("video_id")
+            if isinstance(candidate_id, str) and candidate_id:
+                current["video_id"] = candidate_id
+                current["file_path"] = candidate_path
+                return candidate_id
+    return None
+
+
+def _ensure_video_id(current: Dict[str, Any]) -> Optional[str]:
+    video_id = current.get("video_id")
+    if isinstance(video_id, str) and video_id:
+        return video_id
+    return _refresh_video_metadata(current)
+
+
 def _upload_section() -> None:
     st.markdown('<div class="section-container">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([3, 2, 2])
+    upload_for_training = True
 
     with col1:
         uploaded_file = st.file_uploader(
@@ -89,7 +120,7 @@ def _upload_section() -> None:
         )
 
     with col2:
-        upload_for_training = st.checkbox("Upload for Training", value=False)
+        st.caption("Classification flow targets train split.")
 
     with col3:
         if st.button("Upload Video", type="primary", disabled=uploaded_file is None):
@@ -104,11 +135,7 @@ def _upload_section() -> None:
                         upload_for_training=upload_for_training,
                         correlation_id=correlation_id,
                     )
-                    video_id = (
-                        payload.get("video_id")
-                        or payload.get("clip")
-                        or Path(uploaded_file.name).stem
-                    )
+                    video_id = payload.get("video_id") or payload.get("clip")
                     file_path = payload.get("file_path") or f"videos/temp/{uploaded_file.name}"
                     _set_current_video(
                         {
@@ -196,7 +223,10 @@ def _reject_current_video(reason: Optional[str] = None) -> None:
     if not current:
         return
     correlation_id = str(uuid.uuid4())
-    video_id = current.get("video_id")
+    video_id = _ensure_video_id(current)
+    if not video_id:
+        st.error("Unable to resolve video ID for reject.")
+        return
     try:
         api_client.reject_video(video_id=video_id, correlation_id=correlation_id, reason=reason)
         st.warning("Video marked as incorrect and deletion has been requested.")
@@ -210,10 +240,12 @@ def _promote_current_video(selected_emotion: str) -> None:
     if not current:
         return
     correlation_id = str(uuid.uuid4())
-    video_id = current.get("video_id")
-    for_training = bool(current.get("for_training"))
-    dest_split = "train" if for_training else "test"
-    label = selected_emotion if for_training else None
+    video_id = _ensure_video_id(current)
+    if not video_id:
+        st.error("Unable to resolve video ID for promotion.")
+        return
+    dest_split = "train"
+    label = selected_emotion
 
     try:
         resp = api_client.promote(
@@ -249,7 +281,7 @@ def _classification_section() -> None:
 
     with col_controls:
         current = st.session_state.current_video
-        dest_label = "training" if current and current.get("for_training") else "test"
+        dest_label = "training"
         st.markdown("**Enter the emotion type:**")
         emotions = ["neutral", "happy", "sad"]
         selected_emotion = st.selectbox(

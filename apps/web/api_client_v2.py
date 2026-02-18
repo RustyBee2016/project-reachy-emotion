@@ -112,6 +112,10 @@ class ReachyAPIClient:
             headers['Authorization'] = f'Bearer {self.config.api_token}'
         
         return headers
+
+    def _promotion_url(self) -> str:
+        """Gateway promotion endpoint."""
+        return f"{self.config.gateway_url.rstrip('/')}/api/promote"
     
     def _generate_idempotency_key(self, *args) -> str:
         """Generate idempotency key from arguments."""
@@ -301,42 +305,51 @@ class ReachyAPIClient:
         
         Args:
             video_id: Video UUID to promote
-            dest_split: Destination split (dataset_all, train, test)
-            label: Emotion label (required for dataset_all)
+            dest_split: Destination split (train or test)
+            label: Emotion label (required for train)
             dry_run: If True, validate without executing
             correlation_id: Request tracking ID
         
         Returns:
             Promotion result with status
         """
-        # Validate inputs
-        if dest_split == 'dataset_all' and not label:
-            raise ValueError("Label required when promoting to dataset_all")
+        normalized_split = dest_split.strip().lower()
+        if normalized_split not in {'train', 'test'}:
+            raise ValueError("dest_split must be one of: train, test")
+
+        normalized_label: Optional[str] = None
+        if label is not None:
+            normalized_label = label.strip().lower()
+        if normalized_split == 'train':
+            if normalized_label not in {'happy', 'sad', 'neutral'}:
+                raise ValueError("train promotions require label in {happy, sad, neutral}")
+        else:
+            normalized_label = None
         
         # Generate idempotency key
-        idempotency_key = self._generate_idempotency_key(video_id, dest_split, label)
+        idempotency_key = self._generate_idempotency_key(video_id, normalized_split, normalized_label)
         
         payload = {
             'video_id': video_id,
-            'dest_split': dest_split,
+            'dest_split': normalized_split,
             'dry_run': dry_run
         }
         
-        if label:
-            payload['label'] = label
+        if normalized_label:
+            payload['label'] = normalized_label
         if correlation_id:
             payload['correlation_id'] = correlation_id
         
         headers = {'Idempotency-Key': idempotency_key}
         
         result = self._make_request(
-            'POST', 
-            '/promote',
+            'POST',
+            self._promotion_url(),
             json=payload,
             headers=headers
         )
         
-        logger.info(f"Video {video_id} promoted to {dest_split}: {result.get('status')}")
+        logger.info(f"Video {video_id} promoted to {normalized_split}: {result.get('status')}")
         return result
     
     async def batch_promote_async(
@@ -398,17 +411,27 @@ class ReachyAPIClient:
         label: str
     ) -> Dict[str, Any]:
         """Single async promotion."""
-        url = urljoin(self.config.base_url, '/promote')
-        idempotency_key = self._generate_idempotency_key(video_id, dest_split, label)
+        normalized_split = dest_split.strip().lower()
+        normalized_label = label.strip().lower() if isinstance(label, str) else ""
+        if normalized_split not in {"train", "test"}:
+            raise ValueError("dest_split must be one of: train, test")
+        if normalized_split == "train" and normalized_label not in {"happy", "sad", "neutral"}:
+            raise ValueError("train promotions require label in {happy, sad, neutral}")
+        if normalized_split == "test":
+            normalized_label = ""
+
+        url = self._promotion_url()
+        idempotency_key = self._generate_idempotency_key(video_id, normalized_split, normalized_label)
         
         headers = self._default_headers()
         headers['Idempotency-Key'] = idempotency_key
         
         payload = {
             'video_id': video_id,
-            'dest_split': dest_split,
-            'label': label
+            'dest_split': normalized_split,
         }
+        if normalized_label:
+            payload['label'] = normalized_label
         
         try:
             async with session.post(url, json=payload, headers=headers) as response:

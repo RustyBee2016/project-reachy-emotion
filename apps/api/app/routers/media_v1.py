@@ -78,7 +78,8 @@ async def list_videos(
 
     videos = []
     try:
-        for p in root.iterdir():
+        iterator = root.rglob("*") if split == "train" else root.iterdir()
+        for p in iterator:
             if not p.is_file():
                 continue
             try:
@@ -147,8 +148,9 @@ async def get_video_metadata(
         split_path = config.videos_root / split
         if not split_path.exists():
             continue
-            
-        for p in split_path.iterdir():
+
+        iterator = split_path.rglob("*") if split == "train" else split_path.iterdir()
+        for p in iterator:
             if p.stem == video_id and p.is_file():
                 try:
                     st = p.stat()

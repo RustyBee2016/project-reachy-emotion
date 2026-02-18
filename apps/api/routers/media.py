@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..app.config import AppConfig, get_config
 from ..app.db.models import PromotionLog, Video
@@ -100,7 +103,8 @@ async def promote(
         )
 
     clip = payload["clip"]
-    video_id = str(body.get("video_id") or Path(str(clip)).stem)
+    raw_video_id = body.get("video_id")
+    video_id = Path(str(raw_video_id)).stem if raw_video_id is not None else Path(str(clip)).stem
     target_split = payload["target"]
     train_label = body.get("label") or payload.get("label")
     train_label = str(train_label).strip().lower() if train_label is not None else None
@@ -115,6 +119,20 @@ async def promote(
         )
 
     video = await db.get(Video, video_id)
+    if video is None:
+        candidate_file_names = []
+        for candidate in (raw_video_id, clip):
+            if candidate is None:
+                continue
+            name = Path(str(candidate)).name
+            if name:
+                candidate_file_names.append(name)
+        for file_name in candidate_file_names:
+            stmt = select(Video).where(Video.file_path.endswith(f"/{file_name}"))
+            video = (await db.execute(stmt)).scalar_one_or_none()
+            if video is not None:
+                video_id = str(video.video_id)
+                break
     if video is None:
         raise HTTPException(
             status_code=404,
@@ -190,7 +208,32 @@ async def promote(
             extra_data={"adapter_mode": adapter_mode},
         )
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        try:
+            if dst.exists() and not src.exists():
+                src.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(dst), str(src))
+        except Exception:
+            logger.exception(
+                "media_mover_promote_compensation_failed",
+                extra={
+                    "video_id": video_id,
+                    "src": str(src),
+                    "dst": str(dst),
+                    "correlation_id": payload.get("correlation_id", ""),
+                },
+            )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "Promotion database commit failed after file move; rollback attempted",
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        ) from exc
 
     return JSONResponse(
         status_code=200,

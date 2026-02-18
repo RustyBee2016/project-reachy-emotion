@@ -120,8 +120,9 @@ def create_app() -> FastAPI:
     
     # Register legacy routers for backward compatibility if enabled.
     if config.enable_legacy_endpoints:
-        app.include_router(legacy.router)
+        # Ensure /api/media/promote resolves to the real implementation in the old media router.
         app.include_router(media.router)  # Old media router
+        app.include_router(legacy.router)
         logger.info("Legacy endpoints enabled (will be removed in v0.09.x)")
     else:
         logger.info("Legacy endpoints disabled")

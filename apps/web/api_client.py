@@ -232,7 +232,7 @@ def promote(
     use_gateway: bool = False,
     idempotency_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Promote a video to a different split (legacy endpoint).
+    """Promote a video to a different split (gateway/media compatibility endpoint).
     
     Args:
         video_id: Video ID to promote
@@ -246,9 +246,22 @@ def promote(
     Returns:
         Response dictionary
     """
-    payload: Dict[str, Any] = {"video_id": video_id, "dest_split": dest_split, "dry_run": dry_run}
+    normalized_split = dest_split.strip().lower()
+    if normalized_split not in {"train", "test"}:
+        raise ValueError("dest_split must be one of: train, test")
+
+    normalized_label: Optional[str] = None
     if label is not None:
-        payload["label"] = label
+        normalized_label = label.strip().lower()
+    if normalized_split == "train":
+        if normalized_label not in {"happy", "sad", "neutral"}:
+            raise ValueError("train promotions require label in {happy, sad, neutral}")
+    else:
+        normalized_label = None
+
+    payload: Dict[str, Any] = {"video_id": video_id, "dest_split": normalized_split, "dry_run": dry_run}
+    if normalized_label is not None:
+        payload["label"] = normalized_label
     if correlation_id:
         payload["correlation_id"] = correlation_id
 
