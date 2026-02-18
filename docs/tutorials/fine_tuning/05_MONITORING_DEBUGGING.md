@@ -46,7 +46,7 @@ mlflow server \
 │  MLflow Experiments                                                  │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  Experiment: reachy_emotion_2cls                                    │
+│  Experiment: reachy_emotion_3cls                                    │
 │  ┌─────────────────────────────────────────────────────────────┐   │
 │  │ Run Name          │ Status  │ val_f1  │ val_loss │ Duration │   │
 │  ├───────────────────┼─────────┼─────────┼──────────┼──────────┤   │
@@ -271,7 +271,7 @@ import torch
 from trainer.fer_finetune.model_efficientnet import EfficientNetEmotionClassifier
 
 model = EfficientNetEmotionClassifier(
-    num_classes=2,
+    num_classes=3,
     pretrained_weights='enet_b0_8_best_vgaf',
 )
 device = torch.device('cuda')
@@ -294,7 +294,7 @@ print(f"Gradients computed: {model.classifier.weight.grad is not None}")
 # Verify config loads correctly
 from trainer.fer_finetune.config import TrainingConfig
 
-config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml')
+config = TrainingConfig.from_yaml('trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml')
 print(f"Learning rate: {config.learning_rate}")
 print(f"Batch size: {config.data.batch_size}")
 print(f"Data root: {config.data.data_root}")

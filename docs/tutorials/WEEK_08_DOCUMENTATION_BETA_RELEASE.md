@@ -1331,7 +1331,7 @@ All notable changes to this project will be documented in this file.
   - Security headers
 
 ### Changed
-- Updated EfficientNet-B0 model architecture for 2-class (happy/sad) classification
+- Updated EfficientNet-B0 model architecture for 3-class (happy/sad/neutral) classification
 - Improved error handling with consistent error format
 - Enhanced documentation with tutorials and runbooks
 

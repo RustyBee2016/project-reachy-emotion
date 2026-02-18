@@ -192,7 +192,7 @@ def export_to_onnx(
 onnx_path = export_to_onnx(
     checkpoint_path='outputs/checkpoints/best_model.pth',
     output_path='outputs/exports/emotion_classifier.onnx',
-    num_classes=2,
+    num_classes=3,
     input_size=224,
     use_fp16=True,
 )
@@ -341,7 +341,7 @@ import onnxruntime as ort
 
 from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 
-def compare_pytorch_onnx(checkpoint_path, onnx_path, num_classes=2):
+def compare_pytorch_onnx(checkpoint_path, onnx_path, num_classes=3):
     """Compare outputs from PyTorch and ONNX models."""
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -439,7 +439,7 @@ compare_pytorch_onnx(
 scp outputs/exports/emotion_classifier.onnx jetson@10.0.4.150:/opt/reachy/models/
 
 # Transfer config
-scp trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml jetson@10.0.4.150:/opt/reachy/configs/
+scp trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml jetson@10.0.4.150:/opt/reachy/configs/
 ```
 
 ---

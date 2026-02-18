@@ -6,7 +6,7 @@
 
 ## 🎯 Project in One Sentence
 
-> Reachy is a companion robot that detects human emotions (happy/sad) via camera and responds with speech and gestures.
+> Reachy is a companion robot that detects human emotions (happy/sad/neutral) via camera and responds with speech and gestures.
 
 ---
 

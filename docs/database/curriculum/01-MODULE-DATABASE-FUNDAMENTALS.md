@@ -35,7 +35,7 @@ path,emotion,created
 **Problems with this approach:**
 
 - No way to prevent duplicate entries
-- Can't enforce rules (e.g., "emotion must be happy/sad/angry")
+- Can't enforce rules (e.g., "emotion must be happy/sad/neutral (or another allowed enum value)")
 - Slow searches when file grows large
 - Multiple users can corrupt data simultaneously
 - No way to undo mistakes

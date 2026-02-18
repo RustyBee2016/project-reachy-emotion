@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS label_event (
 -- Test label update (pick an existing video_id or insert test data)
 UPDATE video SET label = 'happy' WHERE video_id = 'test-id-here';
 
--- Verify the label constraint allows: happy, sad, angry, neutral, surprise, fearful
+-- Verify the label constraint allows: happy, sad, neutral
 -- Or that it's a free varchar that accepts these values
 ```
 
@@ -258,7 +258,7 @@ Unlike the Ingest Agent (linear flow), the Labeling Agent handles **four differe
 │           ▼                                                             │
 │  ┌──────────────────┐                                                   │
 │  │      Code:       │  Validate: video_id required                      │
-│  │ validate.payload │  label ∈ {happy, sad, angry, neutral, ...}        │
+│  │ validate.payload │  label ∈ {happy, sad, neutral}        │
 │  │                  │  action ∈ {label_only, promote_train, ...}        │
 │  └────────┬─────────┘                                                   │
 │           │                                                             │

@@ -17,7 +17,7 @@ The Reachy Emotion Recognition system enables a humanoid robot (Reachy Mini) to:
 
 The web application you'll be working on serves as the **human-in-the-loop interface** for:
 - Uploading and generating training videos
-- Labeling emotions (happy, sad, angry, etc.)
+- Labeling emotions (happy, sad, neutral)
 - Monitoring training progress
 - Controlling model deployment to the robot
 

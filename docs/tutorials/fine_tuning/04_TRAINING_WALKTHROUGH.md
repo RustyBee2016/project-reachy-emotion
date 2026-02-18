@@ -21,15 +21,15 @@ By the end of this guide, you will:
 
 ### The Config File
 
-Training is controlled by a YAML configuration file. Let's examine `efficientnet_b0_emotion_2cls.yaml`:
+Training is controlled by a YAML configuration file. Let's examine `efficientnet_b0_emotion_3cls.yaml`:
 
 ```yaml
-# trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+# trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 # Model settings
 model:
   backbone: efficientnet_b0             # HSEmotion EfficientNet-B0
-  num_classes: 2                        # happy, sad
+  num_classes: 3                        # happy, sad, neutral
   input_size: 224                       # Image size (224x224)
   dropout_rate: 0.3                     # Dropout before FC head
   pretrained_weights: enet_b0_8_best_vgaf
@@ -63,7 +63,7 @@ patience: 10
 min_delta: 0.001
 
 # Checkpointing
-checkpoint_dir: /workspace/checkpoints/efficientnet_b0_2cls
+checkpoint_dir: /workspace/checkpoints/efficientnet_b0_3cls
 save_interval: 5
 
 # Quality gates (Gate A)
@@ -75,7 +75,7 @@ gate_a_max_brier: 0.16
 
 # Experiment tracking
 mlflow_tracking_uri: file:///workspace/mlruns
-mlflow_experiment_name: efficientnet_b0_emotion_2cls
+mlflow_experiment_name: efficientnet_b0_emotion_3cls
 
 # Reproducibility
 seed: 42
@@ -118,23 +118,23 @@ ls data/val/
 ### Step 2.2: Start Training
 
 ```bash
-# Basic training command (binary happy/sad)
+# Basic training command (3-class happy/sad/neutral)
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 # With custom run ID
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --run-id my_first_training
 
 # With custom video root
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --data-dir /path/to/my/videos
 
 # With custom output directory
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --output-dir /path/to/outputs
 ```
 
@@ -147,7 +147,7 @@ Model: enet_b0_8_best_vgaf (HSEmotion)
 Run ID: efficientnet_b0_20260205_140501
 ============================================================
 
-Loading config: fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+Loading config: fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 Trainer initialized on device: cuda
 Model params: 4,013,954 total, 2,562 trainable
 
@@ -341,7 +341,7 @@ mlflow server --host 0.0.0.0 --port 5000
 Training saves checkpoints automatically (path from `checkpoint_dir` in the config):
 
 ```
-/workspace/checkpoints/efficientnet_b0_2cls/
+/workspace/checkpoints/efficientnet_b0_3cls/
 ├── latest.pth          # Most recent checkpoint
 ├── best_model.pth      # Best validation F1
 ├── checkpoint_epoch_5.pth
@@ -371,18 +371,18 @@ If training is interrupted (crash, timeout, etc.):
 ```bash
 # Resume from latest checkpoint
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
-    --resume /workspace/checkpoints/efficientnet_b0_2cls/latest.pth
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
+    --resume /workspace/checkpoints/efficientnet_b0_3cls/latest.pth
 
 # Resume from specific checkpoint
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
-    --resume /workspace/checkpoints/efficientnet_b0_2cls/checkpoint_epoch_10.pth
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
+    --resume /workspace/checkpoints/efficientnet_b0_3cls/checkpoint_epoch_10.pth
 ```
 
 Output when resuming:
 ```
-Loading checkpoint: /workspace/checkpoints/efficientnet_b0_2cls/latest.pth
+Loading checkpoint: /workspace/checkpoints/efficientnet_b0_3cls/latest.pth
 Resumed from epoch 15, phase 2
 Best metric so far: 0.8534
 Trainable params: 526,850
@@ -446,7 +446,7 @@ Resuming training run: efficientnet_b0_20260205_140501 from epoch 16
 2. **Run short training** (5 epochs):
    ```bash
   python trainer/train_efficientnet.py \
-      --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+      --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
       --data-dir data_test \
       --run-id test_run_001
   ```
@@ -458,7 +458,7 @@ Resuming training run: efficientnet_b0_20260205_140501 from epoch 16
 
 4. **Check the checkpoint**:
    ```bash
-  ls /workspace/checkpoints/efficientnet_b0_2cls/
+  ls /workspace/checkpoints/efficientnet_b0_3cls/
   ```
 
 ---
@@ -522,10 +522,10 @@ RuntimeError: CUDA out of memory
 
 ```bash
 # Start training
-python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+python trainer/train_efficientnet.py --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 
 # Resume training
-python trainer/train_efficientnet.py --config ... --resume /workspace/checkpoints/efficientnet_b0_2cls/latest.pth
+python trainer/train_efficientnet.py --config ... --resume /workspace/checkpoints/efficientnet_b0_3cls/latest.pth
 
 # Custom data directory
 python trainer/train_efficientnet.py --config ... --data-dir /path/to/videos
@@ -558,7 +558,7 @@ In Phase 2, the model will have **multiple output heads** (per requirements v0.0
         ┌──────────┐ ┌──────────┐ ┌──────────────┐
         │Categorical│ │  Degree  │ │   Gesture    │
         │   Head    │ │   Head   │ │  Alignment   │
-        │(happy/sad)│ │  (0–1)   │ │   Summary    │
+        │(happy/sad/neutral)│ │  (0–1)   │ │   Summary    │
         └──────────┘ └──────────┘ └──────────────┘
               │           │              │
               ▼           ▼              ▼
@@ -568,7 +568,7 @@ In Phase 2, the model will have **multiple output heads** (per requirements v0.0
 
 | Head | Output | Purpose |
 |------|--------|---------|
-| **Categorical** | Class label (happy, sad, etc.) | Same as Phase 1 |
+| **Categorical** | Class label (happy, sad, neutral, etc.) | Same as Phase 1 |
 | **Degree** | Scalar 0–1 | How intensely the emotion is expressed |
 | **Gesture Alignment** | Summary vector | Drives Reachy's gesture planning |
 

@@ -70,7 +70,7 @@ print(f'HSEmotion weights: {\"CACHED\" if w.exists() else \"NOT CACHED — will 
 | Fine-Tuning Index | `00_FINE_TUNING_INDEX.md` | Navigation hub & learning paths |
 | Onboarding Guide | `ML_PIPELINE_ONBOARDING_GUIDE.md` | Primary learner reference |
 | Quick Start | `08_QUICK_START_HANDS_ON.md` | Session 0 — first hands-on |
-| 2-class Config | `trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml` | Config walkthrough |
+| 3-class Config | `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml` | Config walkthrough |
 | Sample videos | `/media/project_data/reachy_emotion/videos/` | Demo data |
 
 **Session-specific:**
@@ -92,7 +92,7 @@ cd /path/to/reachy_emotion
 
 # Quick 2-epoch test
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --run-id trainer_test_$(date +%Y%m%d)
 ```
 
@@ -179,7 +179,7 @@ By the end, learners should be able to:
 
 **Key points**:
 - HSEmotion already learned "what faces expressing emotions look like"
-- We only need to teach "which emotions we care about" (happy vs sad)
+- We only need to teach "which emotions we care about" (happy vs sad vs neutral baseline)
 - This is why we freeze the backbone initially
 
 ### Concept 2: Two-Phase Training
@@ -272,9 +272,9 @@ Jetson Xavier NX — 120 ms total budget:
 **When learners ask about `use_multi_task: false` in the config**:
 
 ```
-Phase 1 (now):     [Image] → [EfficientNet-B0] → [happy/sad]
+Phase 1 (now):     [Image] → [EfficientNet-B0] → [happy/sad/neutral]
 
-Phase 2 (future):  [Image] → [EfficientNet-B0] → [happy/sad]     (categorical head)
+Phase 2 (future):  [Image] → [EfficientNet-B0] → [happy/sad/neutral]     (categorical head)
                                                  → [0.0 – 1.0]    (degree head)
                                                  → [gesture cue]   (alignment head)
 ```
@@ -302,7 +302,7 @@ Phase 2 (future):  [Image] → [EfficientNet-B0] → [happy/sad]     (categorica
 > A: Both provide EfficientNet weights optimized for emotion recognition from the same research group (HSE). `emotiefflib` is the newer, video-optimized package. We install both for maximum compatibility. See `requirements.md §6.7` for details.
 
 **Q: Can we add more emotion classes later?**
-> A: Yes! The 8-class config (`efficientnet_b0_emotion_8cls.yaml`) is ready. We start with binary (happy/sad) for Phase 1 simplicity, but the architecture supports all 8 Ekman emotions.
+> A: Yes! The 8-class config (`efficientnet_b0_emotion_8cls.yaml`) is ready. We start with 3-class (happy/sad/neutral) for Phase 1 simplicity, but the architecture supports all 8 Ekman emotions.
 
 **Q: What is `use_multi_task: false` in the config?**
 > A: Phase 2 will add degree-of-emotion (scalar 0–1) and gesture alignment heads alongside the current categorical head. It's disabled now because the degree labels and gesture targets don't exist yet. Tell learners: "Know it's coming, don't enable it yet." See Guide 04 Appendix.
@@ -320,7 +320,7 @@ Phase 2 (future):  [Image] → [EfficientNet-B0] → [happy/sad]     (categorica
 
 **Q: What if my F1 score is stuck below 0.84?**
 > A: Checklist:
-> 1. Data balance — equal happy/sad videos?
+> 1. Data balance — equal happy/sad/neutral counts?
 > 2. Data quality — are faces clearly visible?
 > 3. More epochs — try 50 instead of 30
 > 4. Learning rate — try 0.0001 instead of 0.0003
@@ -367,7 +367,7 @@ import torch
 from trainer.fer_finetune.model_efficientnet import create_efficientnet_model
 
 # Load model
-model = create_efficientnet_model(num_classes=2, pretrained=True)
+model = create_efficientnet_model(num_classes=3, pretrained=True)
 model.eval()
 
 # Show model summary
@@ -383,7 +383,7 @@ Open the config file and walk through each section:
 
 ```bash
 # Display config with comments
-cat trainer/fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml
+cat trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml
 ```
 
 **Talking points for each section**:
@@ -398,7 +398,7 @@ Start training and narrate what's happening:
 
 ```bash
 python trainer/train_efficientnet.py \
-    --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml \
+    --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml \
     --run-id demo_session
 ```
 
@@ -431,7 +431,7 @@ mlflow ui --backend-store-uri file:///workspace/mlruns
 ### Exercise 1: Modify and Train (30 minutes)
 
 **Instructions for learners**:
-1. Copy the 2-class config to a new file
+1. Copy the 3-class config to a new file
 2. Change one hyperparameter (e.g., learning rate)
 3. Run training with a unique run-id
 4. Compare results in MLflow
@@ -464,7 +464,7 @@ data:
 
 **Instructions for learners** (requires Web UI running on Ubuntu 2):
 1. Open the Streamlit UI at `http://10.0.4.140:8501`
-2. Generate 4 synthetic videos (2 happy, 2 sad)
+2. Generate 6 synthetic videos (2 happy, 2 sad, 2 neutral)
 3. Label each video in the labeling interface
 4. Promote videos from `temp` → `dataset_all`
 5. Verify the videos appear in `dataset_all/` on the filesystem
@@ -590,7 +590,7 @@ trainer/
 │   └── config.py                  # Config dataclass — know all options
 │                                   # Including use_multi_task (Phase 2)
 ├── tao/
-│   ├── specs/emotionnet_2cls.yaml # TAO config (ResNet-18, not EfficientNet)
+│   ├── specs/emotionnet_3cls.yaml # TAO config (ResNet-18, not EfficientNet)
 │   └── docker-compose-tao.yml    # TAO container definitions
 ```
 
@@ -647,9 +647,9 @@ Print this for learners:
 ╔══════════════════════════════════════════════════════════════╗
 ║           EfficientNet-B0 Training Quick Reference           ║
 ╠══════════════════════════════════════════════════════════════╣
-║ TRAIN (2-class):                                             ║
+║ TRAIN (3-class):                                             ║
 ║   python trainer/train_efficientnet.py \                     ║
-║     --config fer_finetune/specs/efficientnet_b0_emotion_2cls.yaml ║
+║     --config fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml ║
 ║                                                              ║
 ║ RESUME:                                                      ║
 ║   python trainer/train_efficientnet.py \                     ║

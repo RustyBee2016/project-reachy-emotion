@@ -703,7 +703,7 @@ detector = FaceDetector(target_size=224, device="cpu")
 dataset = EmotionDataset(
     data_dir="/media/project_data/reachy_emotion/videos",
     split="train",
-    class_names=["happy", "sad"],
+    class_names=["happy", "sad", "neutral"],
     face_detector=detector,
 )
 

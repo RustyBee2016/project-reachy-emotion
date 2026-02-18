@@ -101,8 +101,8 @@ Macro F1 = (0.87 + 0.85) / 2 = 0.86 ✅ (≥ 0.84)
 **Balanced Accuracy** = Average recall across all classes.
 
 ```
-Balanced Accuracy = (Recall_happy + Recall_sad) / 2
-                  = (0.85 + 0.88) / 2
+Balanced Accuracy = (Recall_happy + Recall_sad + Recall_neutral) / 3
+                  = (0.85 + 0.88 + 0.865) / 3
                   = 0.865 ✅ (≥ 0.85)
 ```
 
@@ -374,7 +374,7 @@ Interpretation:
      → Good overall classification performance
   
   ✅ Balanced Accuracy (0.8612) > 0.85
-     → Model performs well on both classes
+     → Model performs well on all three classes
   
   ✅ ECE (0.0623) < 0.08
      → Confidence scores are well-calibrated

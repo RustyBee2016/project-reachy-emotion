@@ -260,7 +260,7 @@ Expected response:
 ```json
 {
   "source_url": "string (required)",
-  "label": "string (optional: happy, sad)",
+  "label": "string (optional: happy, sad, neutral)",
   "meta": {
     "generator": "string",
     "timestamp": "ISO8601 datetime"

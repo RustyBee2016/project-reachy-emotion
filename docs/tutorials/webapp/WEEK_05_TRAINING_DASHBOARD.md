@@ -216,8 +216,11 @@ def _render_dataset_readiness():
         labels = stats.get("labels", {})
         happy = labels.get("happy", 0)
         sad = labels.get("sad", 0)
-        if happy > 0 and sad > 0:
-            balance = min(happy, sad) / max(happy, sad)
+        neutral = labels.get("neutral", 0)
+        if happy > 0 and sad > 0 and neutral > 0:
+            classes = [happy, sad, neutral]
+            valid_classes = [c for c in classes if c > 0]
+            balance = min(valid_classes) / max(valid_classes) if valid_classes else 0
             st.metric("Balance Ratio", f"{balance:.0%}")
         else:
             st.metric("Balance Ratio", "N/A")

@@ -173,7 +173,6 @@ st.markdown("""
     }
     .happy { background-color: #d4edda; color: #155724; }
     .sad { background-color: #cce5ff; color: #004085; }
-    .angry { background-color: #f8d7da; color: #721c24; }
     .neutral { background-color: #e2e3e5; color: #383d41; }
 </style>
 """, unsafe_allow_html=True)
@@ -227,7 +226,7 @@ def _render_prompt_builder():
     with col1:
         emotion = st.selectbox(
             "Target Emotion",
-            options=["happy", "sad", "angry", "neutral"],
+            options=["happy", "sad", "neutral"],
             key="selected_emotion_select",
         )
         st.session_state.selected_emotion = emotion
@@ -378,7 +377,7 @@ def _render_batch_generation():
     with col1:
         batch_emotion = st.selectbox(
             "Emotion",
-            options=["happy", "sad"],
+            options=["happy", "sad", "neutral"],
             key="batch_emotion",
         )
     
@@ -650,13 +649,16 @@ def render_dataset_stats(stats: Dict[str, Any]):
         st.bar_chart(df.set_index("Label"))
     
     # Balance indicator
-    if "happy" in labels and "sad" in labels:
+    if "happy" in labels and "sad" in labels and "neutral" in labels:
         happy = labels["happy"]
         sad = labels["sad"]
-        total = happy + sad
+        neutral = labels["neutral"]
+        total = happy + sad + neutral
         
         if total > 0:
-            balance = min(happy, sad) / max(happy, sad) if max(happy, sad) > 0 else 0
+            classes = [happy, sad, neutral]
+            valid_classes = [c for c in classes if c > 0]
+            balance = (min(valid_classes) / max(valid_classes)) if valid_classes else 0
             
             if balance >= 0.8:
                 st.success(f"✓ Dataset balanced ({balance:.0%})")
