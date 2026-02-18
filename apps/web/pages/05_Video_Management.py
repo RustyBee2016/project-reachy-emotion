@@ -77,11 +77,13 @@ if st.button("Execute Batch Promote", disabled=not st.session_state.batch_select
                     # Temp listings can expose filename stems; skip non-UUID to avoid false promotions.
                     skipped += 1
                     continue
-                api_client.stage_to_dataset_all(
-                    video_ids=[vid],
+                api_client.promote(
+                    video_id=vid,
+                    dest_split="train",
                     label=label or "neutral",
                     dry_run=dry_run,
                     correlation_id=correlation_id,
+                    use_gateway=True,
                 )
             else:
                 if not _is_uuid_identifier(vid):

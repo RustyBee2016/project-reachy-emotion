@@ -24,7 +24,7 @@
 | 0.08.3.2| 2025-09-20 | Team             | Integrated **Reachy_Storage.md** guidance: canonical FS layout, mini‑FastAPI endpoints, MLflow lineage, NAS redundancy, DB schema, ops playbooks, acceptance criteria |
 | 0.08.3.3| 2025-10-06 | Team             | Pin TAO container/image version; document workspace mounts and envs; canonicalize storage root on Ubuntu 1; add explicit endpoint map; clarify EmotionNet schema; note Media Mover on Ubuntu 1 |
 | 0.08.4.2| 2025-10-16 | Team             | Project renamed to Reachy_Local_08.4.2; updated README alignment; agentic AI system integration; enhanced privacy controls and deployment gates |
-| 0.08.4.3| 2025-10-28 | Team             | Introduced `/videos/dataset_all/` staging, randomized train/test selection workflows, and updated promotion/manifest requirements |
+| 0.08.4.3| 2025-10-28 | Team             | Introduced run-scoped dataset preparation workflows and updated promotion/manifest requirements |
 | 0.09.0  | 2026-01-14 | Russell Bray     | Renamed to Reachy_EQ_PPE_Degree_Mini_01; added emotion-degree telemetry (0–5), Reachy Mini Lite gesture orchestration, multi-task training updates, and refreshed documentation |
 | 0.09.1  | 2026-01-25 | Cascade          | Swapped backbone to EfficientNet-B0 (HSEmotion enet_b0_8_best_vgaf) for 3× latency/memory headroom on Jetson; documented EfficientNet-B2 trade-offs |
 
@@ -67,7 +67,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - Python API used for emotion recognition
 - Advanced AI/ML capabilities use generated videos for model fine‑tuning
 - Safety features and privacy protection
-- **Primary storage on local filesystem** (ext4 or ZFS) with canonical layout: `/videos/{temp,dataset_all,train,test,thumbs,manifests}`. Labeled clips persist in `dataset_all`; `train`/`test` are regenerated per fine-tuning run from that corpus.
+- **Primary storage on local filesystem** (ext4 or ZFS) with canonical layout: `/videos/{temp,train,test,thumbs,manifests}`. Labeled clips are promoted into `train/<label>` and run-specific frame datasets are generated for each fine-tuning run.
 - **mini‑FastAPI “media mover”** to list media, serve thumbnails (via Nginx), perform atomic promotions, and rebuild manifests
 - **MLflow (file‑backed)** for experiment/run tracking (params, metrics, artifacts) tied to dataset hashes and optional ZFS snapshot tags
 - **Synology NAS redundancy** via NFS/SMB mirroring of `/videos/*` and MLflow artifacts; SSD remains the hot path
@@ -91,7 +91,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 ## 4. Architecture & Data Flow
 
-**Hot Path (low‑latency):** Jetson/ingest → `/videos/temp` → human labeling in web UI → `POST /api/media/promote` (stage into `/videos/dataset_all`) → per-run sampling engine copies randomized subsets into `/videos/train` and `/videos/test` → rebuild manifests → training/eval → gated deploy.
+**Hot Path (low‑latency):** Jetson/ingest → `/videos/temp` → human labeling in web UI → `POST /api/media/promote` (direct promote into `/videos/train/<label>`) → per-run frame extractor selects 10 random frames/video into `train/<label>/<run_id>` and consolidated `train/<run_id>/<label>` → run manifests → training/eval → gated deploy.
 
 **Serving:** Nginx serves `/thumbs/`; the Ubuntu 2 FastAPI gateway exposes `/api/videos/*`, `/api/v1/promote/*`, `/health`, `/metrics`, and WebSockets for cues, while the Ubuntu 1 Media Mover (`https://10.0.4.130/api/media`) handles filesystem mutations.
 
@@ -119,11 +119,11 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 ### 5.2 Storage & Media API
 - **FR‑STOR‑001 — Media listing**  
-  `GET /api/videos/list?split={temp|dataset_all|train|test}&limit=&offset=` returns `video_id, path, size, mtime`.
-- **FR‑STOR‑002 — Stage to dataset**  
-  `POST /api/media/promote {video_id, dest_split="dataset_all", label, dry_run?}` atomically moves accepted clips from `/videos/temp` into `/videos/dataset_all` while updating Postgres metadata and promotion logs.
-- **FR‑STOR‑003 — Randomized train/test selection**  
-  `POST /api/media/promote {run_id, dest_split="train"|"test", sample_strategy, sample_fraction, seed?, dry_run?}` copies clips from `/videos/dataset_all` into `/videos/train` and `/videos/test` for a specific training run, enforcing label policy (`train` labeled, `test` unlabeled) and returning selection manifests.
+  `GET /api/videos/list?split={temp|train|test}&limit=&offset=` returns `video_id, path, size, mtime`.
+- **FR‑STOR‑002 — Promote labeled clip to train**  
+  `POST /api/media/promote {video_id, dest_split="train", label, dry_run?}` atomically moves accepted clips from `/videos/temp` into `/videos/train/<label>/` while updating Postgres metadata and promotion logs.
+- **FR‑STOR‑003 — Run-specific frame extraction dataset**  
+  Fine-tuning prep extracts **10 random frames per source video** from `/videos/train/<label>/*.mp4` into `/videos/train/<label>/<run_id>/`, then consolidates into `/videos/train/<run_id>/<label>/`. Run manifests enumerate the consolidated frame paths for training.
 - **FR‑STOR‑004 — Thumbnails**  
   `GET /api/videos/{id}/thumb` returns file/redirect; thumbnails pre‑generated at `/videos/thumbs/{video_id}.jpg`.
 - **FR‑STOR‑005 — Manifest rebuild**  
@@ -329,8 +329,8 @@ The project is organized into three sequential phases, each building on the prev
 3. Ubuntu 1 returns tone‑matched text.
 4. Ubuntu 2 enqueues cue; Jetson receives via WebSocket and acknowledges.
 5. Browser shows emotion, confidence, LLM text, video URL, thumbnail.
-6. User curates → DB updated; clip promoted `temp → dataset_all` via Media Mover (label enforcement occurs here).
-7. Training orchestrator requests a balanced sample → Media Mover copies randomized subsets from `dataset_all` into `train/` and `test/`, tagging selections with `run_id` and respecting configured fractions (e.g., 70%/30%) and label policy (`test` unlabeled).
+6. User curates → DB updated; clip promoted `temp → train/<label>` via Media Mover (label enforcement occurs here).
+7. Training orchestrator prepares run-specific frame datasets by extracting 10 random frames/video into `train/<label>/<run_id>` and consolidated `train/<run_id>/<label>`.
 8. TAO retraining; new TRT engine versioned/signed; packaged for DeepStream `nvinfer`.
 
 ---
@@ -369,8 +369,8 @@ Endpoint: `POST http://10.0.4.140:1234/v1/chat/completions` (messages array with
 - `GET https://10.0.4.140/api/videos/list` — filter/paginate/lists
 - `GET https://10.0.4.140/api/videos/{video_id}` — metadata lookup
 - `PATCH https://10.0.4.140/api/videos/{video_id}/label` — label updates (422 on validation)
-- `POST https://10.0.4.140/api/v1/promote/stage` — stage clips from `temp` → `dataset_all`
-- `POST https://10.0.4.140/api/v1/promote/sample` — sample balanced train/test selections
+- `POST https://10.0.4.140/api/promote` — promote clips from `temp` → `train/<label>`
+- `POST https://10.0.4.140/api/manifest/rebuild` — rebuild manifests per run
 - `POST https://10.0.4.140/api/v1/promote/reset-manifest` — rebuild manifests per run
 
 ### 13.5 Media Mover (Ubuntu 2 → Ubuntu 1)
@@ -390,16 +390,17 @@ Server → client: `{ type: "tts|gesture", text, gesture_id, correlation_id, exp
 ---
 
 ## 14. Data Storage & Curation Workflow
-- **Directories on Ubuntu 1**: `/videos/temp/`, `/videos/dataset_all/`, `/videos/train/`, `/videos/test/`, `/videos/thumbs/`, `/videos/manifests/`
-- **Path convention**: DB keeps **relative** `storage_path` (e.g., `videos/dataset_all/abc123.mp4`); `split` now includes `temp`, `dataset_all`, `train`, `test`.
+- **Directories on Ubuntu 1**: `/videos/temp/`, `/videos/train/`, `/videos/test/`, `/videos/thumbs/`, `/videos/manifests/`
+- **Path convention**: DB keeps **relative** `storage_path` (e.g., `videos/train/happy/abc123.mp4`); `split` includes `temp`, `train`, `test`.
 - **On‑ingest**: compute `sha256`, `size_bytes`; `ffprobe` metadata; generate `thumbs/{stem}.jpg`.
-- **Staging**: accepted clips move `temp → dataset_all`; labels validated and promotion log appended during the move.
-- **Run sampling**: per training run, the promotion service copies randomized subsets from `dataset_all` into `train/` and `test/`, attaching a `run_id`. `train` copies retain labels; `test` copies enforce `label IS NULL` in DB.
+- **Promotion**: accepted clips move `temp → train/<label>`; labels validated and promotion log appended during the move.
+- **Run frame extraction**: per training run, dataset prep extracts 10 random frames per source video into `train/<label>/<run_id>/` and builds consolidated training frames in `train/<run_id>/<label>/`.
+- **Run manifests**: each run writes `manifests/<run_id>_train.jsonl` with frame paths and source-video metadata.
 - **Dedup**: unique index on `(sha256, size_bytes)` applies across all splits.
 - **Dry‑run**: supported for both staging and sampling operations to preview counts and collisions.
 - **Idempotency**: enforced via `Idempotency-Key` on writes.
-- **Integrity & audits**: nightly reconciler verifies `dataset_all` plus active run splits; manifests include `run_id` metadata.
-- **Retention**: `temp/` TTL 7–14 days; `train/` and `test/` can be pruned per run after artifacts are sealed; `dataset_all/` retains the canonical labeled corpus.
+- **Integrity & audits**: nightly reconciler verifies `train/` labeled sources plus active run-frame directories; manifests include `run_id` and `source_video` metadata.
+- **Retention**: `temp/` TTL 7–14 days; `train/<run_id>/` and `train/<label>/<run_id>/` can be pruned per run after artifacts are sealed.
 
 ---
 
@@ -408,7 +409,7 @@ Server → client: `{ type: "tts|gesture", text, gesture_id, correlation_id, exp
 CREATE TABLE video (
   video_id       UUID PRIMARY KEY,
   file_path      TEXT NOT NULL, -- relative path under videos/
-  split          TEXT CHECK (split IN ('temp','dataset_all','train','test')) NOT NULL,
+  split          TEXT CHECK (split IN ('temp','train','test')) NOT NULL,
   label          TEXT,
   duration_sec   NUMERIC,
   fps            NUMERIC,
@@ -519,8 +520,9 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 ---
 
 ### Changelog
-- [2025-10-28 21:37:00] - Added `/videos/dataset_all/` staging workflow, randomized train/test selection requirements, API/schema updates, and monitoring expectations.
+- [2025-10-28 21:37:00] - Added staged dataset preparation workflows, randomized train/test selection requirements, API/schema updates, and monitoring expectations.
 - [2025-11-26 03:55:00] - Documented `/api/v1/promote/*` gateway endpoints, refreshed DB credentials (`reachy_dev`), noted full gateway test pass, and aligned observability/networking details.
+- [2026-02-18 11:50:00] - Updated architecture to direct `temp -> train/<label>` promotion and run-specific frame extraction (10 frames/video) into `train/<label>/<run_id>` with consolidated `train/<run_id>/<label>` datasets and frame-based manifests.
 
 ---
 
@@ -539,7 +541,8 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 ---
 
 ## 24. Acceptance Criteria
-- **Gateway+Media Mover expose** `list`, `thumb`, `promote` (stage/sample), `relabel`, `manifest rebuild`, and `reset-manifest` with auth and atomic moves
+- **Gateway+Media Mover expose** `list`, `thumb`, direct `promote` (`temp -> train/<label>`), `relabel`, and manifest rebuild endpoints with auth and atomic moves
+- **Training prep outputs run-specific frame datasets** in `train/<label>/<run_id>` and consolidated `train/<run_id>/<label>` with exactly 10 sampled frames per source video when sufficient frames exist
 - MLflow runs contain **dataset_hash** and (if ZFS) **snapshot_ref** with artifacts visible in UI
 - NAS sync passes nightly; quarterly restore verified
 - Nginx thumbnail latency and manifest rebuild times meet targets in §6.3

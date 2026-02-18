@@ -8,6 +8,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import subprocess
 
+import cv2
+import numpy as np
+
 from trainer.train_emotionnet import TrainingOrchestrator
 from trainer.export_to_trt import TensorRTExporter
 
@@ -20,15 +23,15 @@ def temp_dirs():
     
     # Create directory structure
     dataset_dir = base_path / 'dataset'
-    dataset_all = dataset_dir / 'dataset_all'
-    dataset_all.mkdir(parents=True)
+    train_root = dataset_dir / 'train'
+    train_root.mkdir(parents=True)
     
     # Create sample videos (3-class: happy, sad, neutral)
     for emotion in ['happy', 'sad', 'neutral']:
-        emotion_dir = dataset_all / emotion
+        emotion_dir = train_root / emotion
         emotion_dir.mkdir()
         for i in range(5):
-            (emotion_dir / f'{emotion}_{i}.mp4').write_text(f'video {i}')
+            _write_test_video(emotion_dir / f'{emotion}_{i}.mp4')
     
     output_dir = base_path / 'output'
     output_dir.mkdir()
@@ -88,7 +91,7 @@ class TestTrainingOrchestrator:
         )
         
         dataset_info = orchestrator.prepare_dataset(
-            run_id='test_run_001',
+            run_id='epoch_01',
             train_fraction=0.7,
             seed=42
         )
@@ -96,7 +99,8 @@ class TestTrainingOrchestrator:
         assert 'train_count' in dataset_info
         assert 'test_count' in dataset_info
         assert 'dataset_hash' in dataset_info
-        assert dataset_info['train_count'] + dataset_info['test_count'] == 10
+        assert dataset_info['train_count'] == 150
+        assert dataset_info['test_count'] == 0
     
     def test_parse_training_output(self, temp_dirs):
         """Test parsing TAO training output."""
@@ -310,7 +314,7 @@ Training completed
         
         # Run pipeline (will skip actual training due to mock)
         results = orchestrator.run_training_pipeline(
-            run_id='test_pipeline_001',
+            run_id='epoch_01',
             train_fraction=0.7,
             seed=42
         )
@@ -401,6 +405,23 @@ class TestErrorHandling:
         
         assert success is False
         assert 'error' in metrics
+
+
+def _write_test_video(path: Path, frame_count: int = 20) -> None:
+    """Create a tiny synthetic MP4 video for frame extraction tests."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writer = cv2.VideoWriter(
+        str(path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        10.0,
+        (32, 32),
+    )
+    if not writer.isOpened():
+        raise RuntimeError(f"Unable to create test video: {path}")
+    for idx in range(frame_count):
+        frame = np.full((32, 32, 3), idx % 255, dtype=np.uint8)
+        writer.write(frame)
+    writer.release()
 
 
 if __name__ == '__main__':

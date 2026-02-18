@@ -82,7 +82,7 @@ GATEWAY_UI_ORIGINS=http://localhost:8501,http://10.0.4.140:8501
   10.0.4.130:/media/rusty_admin/project_data/reachy_emotion/videos  /mnt/videos  nfs  defaults  0  0
   ```
 
-- After adding the entry run `sudo mount -a` (or reboot) and verify `ls /mnt/videos` shows the expected `temp/`, `dataset_all/`, etc. Without this mount, thumbnail and proxy routes will fail because the gateway cannot read the shared media tree.
+- After adding the entry run `sudo mount -a` (or reboot) and verify `ls /mnt/videos` shows the expected `temp/`, `train/`, `test/`, `thumbs/`, and `manifests/` directories. Without this mount, thumbnail and proxy routes will fail because the gateway cannot read the shared media tree.
 
 ### Reverse Proxy / TLS
 

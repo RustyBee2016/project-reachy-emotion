@@ -516,55 +516,26 @@ with col9:
                         "Unable to resolve video ID for promotion. Please wait a moment or refresh before trying again."
                     )
                 else:
-                    stage_succeeded = False
-
-                    if _is_uuid_identifier(video_id):
-                        try:
-                            response = stage_to_dataset_all(
-                                video_ids=[video_id],
-                                label=selected_emotion,
-                                dry_run=False,
-                                correlation_id=correlation_id,
-                            )
-                            stage_succeeded = True
-                            st.success(f"✅ Classified as: **{selected_emotion}**")
-                            st.info("Video staged to dataset_all with metadata saved to database")
-
-                            promoted = response.get("promoted_ids", [])
-                            skipped = response.get("skipped_ids", [])
-                            failed = response.get("failed_ids", [])
-                            if promoted:
-                                st.caption(f"✅ Promoted: {len(promoted)} video(s)")
-                            if skipped:
-                                st.caption(f"⏭️ Skipped: {len(skipped)} video(s)")
-                            if failed:
-                                st.warning(f"⚠️ Failed: {len(failed)} video(s)")
-                        except Exception as stage_exc:  # noqa: BLE001
-                            st.warning(
-                                f"Stage endpoint failed ({stage_exc}); falling back to legacy promote flow."
-                            )
-
-                    if not stage_succeeded:
-                        clip_id = _legacy_clip_identifier(current, video_id)
-                        if not clip_id:
-                            st.error("Unable to resolve a clip identifier for legacy promotion.")
-                        elif not _is_uuid_identifier(clip_id):
-                            st.error(
-                                "Unable to promote via fallback path because the resolved video identifier is not a UUID. "
-                                "Please refresh and retry so the clip can be registered first."
-                            )
-                        else:
-                            promote_via_gateway(
-                                video_id=clip_id,
-                                dest_split="train",
-                                label=selected_emotion,
-                                dry_run=False,
-                                correlation_id=correlation_id,
-                                use_gateway=True,
-                                idempotency_key=correlation_id,
-                            )
-                            st.success(f"✅ Classified as: **{selected_emotion}**")
-                            st.info("Video promoted to train split via gateway compatibility path")
+                    clip_id = _legacy_clip_identifier(current, video_id)
+                    if not clip_id:
+                        st.error("Unable to resolve a clip identifier for promotion.")
+                    elif not _is_uuid_identifier(clip_id):
+                        st.error(
+                            "Unable to promote because the resolved video identifier is not a UUID. "
+                            "Please refresh and retry so the clip can be registered first."
+                        )
+                    else:
+                        promote_via_gateway(
+                            video_id=clip_id,
+                            dest_split="train",
+                            label=selected_emotion,
+                            dry_run=False,
+                            correlation_id=correlation_id,
+                            use_gateway=True,
+                            idempotency_key=correlation_id,
+                        )
+                        st.success(f"✅ Classified as: **{selected_emotion}**")
+                        st.info(f"Video promoted from temp to train/{selected_emotion}")
 
                     st.session_state.current_video = None
             except Exception as e:  # noqa: BLE001

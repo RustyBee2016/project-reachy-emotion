@@ -77,6 +77,10 @@ class EmotionDataset(Dataset):
         self.data_dir = Path(data_dir)
         self.split = split
         self.split_dir = self.data_dir / split
+        if not self.split_dir.exists():
+            class_dirs = [self.data_dir / name for name in (class_names or ["happy", "sad", "neutral"])]
+            if any(path.exists() for path in class_dirs):
+                self.split_dir = self.data_dir
         self.transform = transform
         self.frame_sampling = frame_sampling
         self.frames_per_video = frames_per_video

@@ -11,9 +11,11 @@ Local-first, LAN-contained pipeline for real-time emotion recognition on the Rea
 - **Fine-tuning stack standardized on 3-class EfficientNet-B0 (HSEmotion)**
   - Training config: `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`
   - Pipeline target labels: `happy`, `sad`, `neutral`
-- **Promotion flow now follows staged dataset policy**
-  - Human labeling stages clips `temp -> dataset_all` via `POST /api/v1/promote/stage`
-  - Train/test sets are built via per-run sampling (`POST /api/v1/promote/sample`)
+- **Promotion and fine-tuning flow updated for frame-first runs**
+  - Human labeling promotes clips directly `temp -> train/<emotion>` via gateway/media promote endpoints
+  - At fine-tune time, each run extracts 10 random frames per source video into:
+    - `train/happy/<epoch_id>`, `train/sad/<epoch_id>`, `train/neutral/<epoch_id>`
+  - A consolidated run dataset is created at `train/<epoch_id>/<emotion>/` and used for training/manifests
 - **Web app promotion reliability hardened**
   - Landing page classification now aggressively resolves/registers UUID-backed `video_id` before promotion
   - Non-UUID fallback promotions are blocked to prevent false-success UI paths
@@ -56,7 +58,7 @@ This repo is organized for a 3-node local lab:
      curl -s http://10.0.4.130:1234/v1/models | jq .
      ```
 2. Media + Nginx + Media Mover:
-   - Create directories: `/videos/temp`, `/videos/dataset_all`, `/videos/train`, `/videos/test`, `/videos/thumbs`, `/videos/manifests`.
+   - Create directories: `/videos/temp`, `/videos/train`, `/videos/test`, `/videos/thumbs`, `/videos/manifests`.
    - Configure Nginx to serve `/videos/` at `http(s)://10.0.4.130/videos/...`.
    - Start the Media Mover API on port `8083` (see `memory-bank/requirements.md` §16).
 3. PostgreSQL (metadata only):
@@ -104,16 +106,28 @@ X-API-Version: v1
 }
 ```
 
-### Stage to Dataset Corpus — Ubuntu 2 → Ubuntu 1 (Media Mover)
+### Promote Classified Clip to Train — Ubuntu 2 → Ubuntu 1 (Media Mover/Gateway)
 ```http
-POST http://10.0.4.130:8083/api/v1/promote/stage HTTP/1.1
+POST http://10.0.4.140:8000/api/promote HTTP/1.1
 Content-Type: application/json
 X-API-Version: v1
 Idempotency-Key: <uuid>
 ```
 ```json
-{ "video_ids": ["<video-uuid>"], "label": "sad", "dry_run": false }
+{
+  "video_id": "<video-uuid>",
+  "dest_split": "train",
+  "label": "sad",
+  "dry_run": false,
+  "correlation_id": "<uuid>"
+}
 ```
+
+### Run-Specific Frame Extraction (Fine-Tune Prep)
+- Source videos: `train/<emotion>/*.mp4`
+- Per-run extracted frames: `train/<emotion>/<epoch_id>/*.jpg` (10 random frames/video)
+- Consolidated training set for run: `train/<epoch_id>/<emotion>/*.jpg`
+- Run manifests: `manifests/<epoch_id>_train.jsonl`
 
 ### Error Payload (standard)
 ```json

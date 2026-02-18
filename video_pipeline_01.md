@@ -24,21 +24,27 @@ It also identifies code-level gaps, database readiness, and concrete recommendat
    - `/api/v1/ingest/register-local`
 4. Metadata is captured (sha256, size, ffprobe fields), with thumbnail generation.
 
-### B. Human Labeling / Staging
+### B. Human Labeling / Promotion
 
 1. User labels clip as one of: `happy`, `sad`, `neutral`.
-2. Preferred promotion path is v1 stage endpoint:
-   - `POST /api/v1/promote/stage`
-3. Service behavior (`PromoteService.stage_to_dataset_all`):
+2. Current promotion path is direct classify+promote:
+   - `POST /api/promote` (gateway compatibility path)
+3. Service behavior (`/api/media/promote` compatibility route):
    - Validates UUID IDs and 3-class label
-   - Moves file `temp/* -> dataset_all/*` atomically via file mover
+   - Moves file `temp/* -> train/<label>/*`
    - Updates DB split/label and writes promotion log
 
-### C. Sampling for Train/Test
+### C. Run-Specific Frame Extraction for Training
 
-1. Orchestrator calls `POST /api/v1/promote/sample` with `run_id`, `target_split`, `sample_fraction`.
-2. Service copies files from `dataset_all` into `train/{run_id}/...` or `test/{run_id}/...`.
-3. DB side records `training_selection` rows and promotion logs.
+1. Orchestrator calls `DatasetPreparer.prepare_training_dataset(run_id=...)`.
+2. For each source video in `train/{happy|sad|neutral}/*.mp4`, 10 random frames are extracted to:
+   - `train/happy/<run_id>/`
+   - `train/sad/<run_id>/`
+   - `train/neutral/<run_id>/`
+3. Frames are then consolidated to a single run dataset:
+   - `train/<run_id>/<label>/*.jpg`
+4. Run manifests are generated as:
+   - `manifests/<run_id>_train.jsonl`
 
 ### D. Manifest / Training / Eval / Deploy
 
@@ -78,8 +84,8 @@ It also identifies code-level gaps, database readiness, and concrete recommendat
 
 ## Gap 1: Legacy/v1 endpoint drift in tooling and docs
 
-- Some docs and pages still describe direct `temp -> train/test` promotion.
-- Current policy is staged corpus first (`temp -> dataset_all`), then sampled train/test.
+- Some docs still described an old staged-corpus policy after direct promote changes.
+- Training docs needed explicit run-specific frame extraction paths.
 
 Impact:
 - Operator confusion.
@@ -117,13 +123,13 @@ Impact:
 Resolution applied:
 - Stronger UUID resolution + register-local fallback, and explicit non-UUID fallback rejection in `apps/web/landing_page.py`.
 
-## Gap 5: Label/Video Management pages used legacy promotion assumptions (partially fixed)
+## Gap 5: Label/Video Management pages used legacy promotion assumptions (fixed)
 
 - Pages assumed direct promote behavior and had limited staging semantics.
 
 Resolution applied:
-- `apps/web/pages/02_Label.py` now stages temp clips to dataset_all.
-- `apps/web/pages/05_Video_Management.py` now stages temp clips and skips non-UUID IDs safely.
+- `apps/web/pages/02_Label.py` now promotes temp clips directly to `train/<label>`.
+- `apps/web/pages/05_Video_Management.py` now batch-promotes temp clips directly to `train/<label>`.
 
 ## Gap 6: Database migration split-brain (legacy SQL vs Alembic)
 
@@ -167,42 +173,42 @@ Conclusion:
 
 ---
 
-## 6) Promotion Process Deep Dive
+## 6) Promotion + Frame Extraction Process Deep Dive
 
-### Stage operation (`/api/v1/promote/stage`)
+### Direct classify/promotion operation (`/api/promote`)
 
 Inputs:
-- `video_ids` (UUID list)
-- `label` (happy/sad/neutral)
+- `video_id` (UUID)
+- `dest_split="train"`
+- `label` (`happy|sad|neutral`)
 - `dry_run`
 
 Execution path:
-1. Validate UUID list and label.
-2. Fetch matching `video` rows.
-3. Accept only rows with `split='temp'`.
-4. Move filesystem object to `dataset_all` atomically.
-5. Update `video` row (`split='dataset_all'`, label set, new path).
-6. Insert `promotion_log` record.
-7. Schedule manifest rebuild.
+1. Validate UUID and 3-class label.
+2. Fetch `video` row for `split='temp'`.
+3. Move filesystem object to `train/<label>/`.
+4. Update `video` row (`split='train'`, label set, new path).
+5. Insert `promotion_log` record.
 
 Failure handling:
-- File move errors trigger rollback of moved files and DB transaction rollback.
+- File move errors trigger rollback/compensation handling and DB rollback.
 
-### Sample operation (`/api/v1/promote/sample`)
+### Run frame extraction operation (`DatasetPreparer.prepare_training_dataset`)
 
 Inputs:
-- `run_id`, `target_split` (train/test), `sample_fraction`, `strategy`, optional `seed`, `dry_run`
+- `run_id` (e.g., `epoch_01`)
+- `seed` (optional, deterministic fallback from run_id)
 
 Execution path:
-1. Validate request fields.
-2. Load dataset_all candidates excluding already-selected run/split IDs.
-3. Balanced random sample across labels.
-4. Copy files into run-scoped train/test destinations.
-5. Persist training selections and promotion logs.
-6. Schedule manifest rebuild.
-
-Policy behavior:
-- `target_split='test'` rows are persisted with `label=NULL`.
+1. Scan source videos from `train/happy/*.mp4`, `train/sad/*.mp4`, `train/neutral/*.mp4`.
+2. Randomly select 10 frames per source video.
+3. Write frames into label/run folders:
+   - `train/happy/<run_id>/`, `train/sad/<run_id>/`, `train/neutral/<run_id>/`
+4. Build consolidated run dataset:
+   - `train/<run_id>/<label>/*.jpg`
+5. Emit run manifest:
+   - `manifests/<run_id>_train.jsonl`
+6. Compute run-specific `dataset_hash` from consolidated frame files.
 
 ---
 
@@ -212,12 +218,12 @@ Policy behavior:
    - Operationally deprecate root SQL migration files.
    - Add explicit startup or CI check to confirm app Alembic head is applied.
 
-2. **P0: Standardize all web pages on staged flow**
-   - Remove remaining direct `temp -> train/test` UX language.
-   - Make stage + sample intent explicit in operator interfaces.
+2. **P0: Standardize docs + runbooks on direct promote + frame extraction flow**
+   - Remove remaining legacy staged-corpus and sampling language where no longer true.
+   - Make `train/<label>/<run_id>` and `train/<run_id>/<label>` conventions explicit.
 
-3. **P1: Add integration tests for promotion reliability**
-   - Cases: missing UUID, register-local fallback, stage dry-run/execute, sample dry-run/execute.
+3. **P1: Add integration tests for frame extraction reliability**
+   - Cases: unreadable videos, low-frame videos, deterministic output with same seed, manifest integrity.
 
 4. **P1: Audit docs for stale ports and endpoint aliases**
    - Ensure all references use current API base/ports and v1 endpoints first.
@@ -233,17 +239,20 @@ Policy behavior:
 - `apps/web/landing_page.py`
 - `apps/web/pages/02_Label.py`
 - `apps/web/pages/05_Video_Management.py`
-- `n8n/workflows/ml-agentic-ai_v.2/02_labeling_agent.json`
-- `n8n/workflows/ml-agentic-ai_v.2/10_ml_pipeline_orchestrator.json`
+- `trainer/prepare_dataset.py`
+- `trainer/fer_finetune/dataset.py`
+- `tests/test_dataset_prep.py`
+- `tests/test_dataset_preparation.py`
+- `tests/test_training_pipeline.py`
 - `README.md`
-- `AGENTS.md`
+- `memory-bank/requirements.md`
 - `video_pipeline_01.md` (this document)
 
 ---
 
 ## 9) Validation Summary
 
-- Submit Classification reliability issue on landing page has been addressed with stronger UUID resolution + registration fallback.
-- Similar promotion-path issues were addressed in Label and Video Management pages.
-- n8n orchestration drift from 2-class to 3-class has been corrected in key workflows.
-- Database architecture is fundamentally viable, but migration source-of-truth and enum consistency need tighter operational controls.
+- Submit Classification now promotes directly to `train/<label>`.
+- Fine-tuning prep now extracts 10 random frames per video into run-scoped label folders and consolidated run datasets.
+- Training manifests are now frame-based (`<run_id>_train.jsonl`) and include source-video references.
+- Database architecture remains viable; migration discipline and enum alignment are still recommended follow-ups.

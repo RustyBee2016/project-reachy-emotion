@@ -18,7 +18,7 @@ st.set_page_config(page_title="Label & Promote", layout="wide")
 
 st.title("02 — Label & Promote")
 
-st.caption("Browse clips and apply label/staging with split-label policy enforcement.")
+st.caption("Browse clips and apply labels with split-label policy enforcement.")
 
 split = st.selectbox("Split", ["temp", "dataset_all", "train", "test"], index=0)
 execute_mode = st.toggle("Execute promotions (otherwise dry-run)", value=False)
@@ -76,8 +76,8 @@ else:
                         lbl = st.selectbox("Label", ["happy", "sad", "neutral"], index=0)
 
                         if split == "temp":
-                            st.caption("Policy: temp clips are staged to dataset_all before train/test sampling.")
-                            action_label = "Stage Now" if execute_mode else "Simulate Stage"
+                            st.caption("Policy: classified temp clips are promoted directly to train/<label>.")
+                            action_label = "Promote to Train" if execute_mode else "Simulate Promote"
                         else:
                             st.caption("Legacy compatibility promotion path.")
                             dest = st.radio("Destination", ["train", "test"], horizontal=True)
@@ -86,10 +86,12 @@ else:
                         if st.button(action_label, key=f"prom_{video_id}"):
                             try:
                                 if split == "temp":
-                                    resp = api_client.stage_to_dataset_all(
-                                        video_ids=[str(video_id)],
+                                    resp = api_client.promote(
+                                        video_id=str(video_id),
+                                        dest_split="train",
                                         label=lbl,
                                         dry_run=not execute_mode,
+                                        use_gateway=True,
                                     )
                                 else:
                                     resp = api_client.promote(
