@@ -6,6 +6,7 @@ import logging
 import shutil
 import subprocess
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -198,6 +199,7 @@ async def promote(
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
             video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
+            now = datetime.now(timezone.utc)
             video = Video(
                 video_id=str(uuid.uuid4()),
                 file_path=str(existing_path.relative_to(video_root)),
@@ -205,6 +207,8 @@ async def promote(
                 label=None,
                 size_bytes=stat.st_size,
                 sha256=digest.hexdigest(),
+                created_at=now,
+                updated_at=now,
             )
             db.add(video)
             try:
