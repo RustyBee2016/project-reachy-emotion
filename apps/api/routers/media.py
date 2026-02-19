@@ -129,7 +129,7 @@ async def promote(
             if name:
                 candidate_file_names.append(name)
         for file_name in candidate_file_names:
-            stmt = select(Video).where(Video.file_path.endswith(f"/{file_name}"))
+            stmt = select(Video).where(Video.file_path.endswith(file_name))
             video = (await db.execute(stmt)).scalar_one_or_none()
             if video is not None:
                 video_id = str(video.video_id)
