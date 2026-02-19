@@ -221,6 +221,7 @@ async def post_promotion(
             json=body,
             headers={"Idempotency-Key": idempotency_key},
         )
+        logger.info("promotion_proxy_result", extra={"correlation_id": body.get("correlation_id"), "idempotency_key": idempotency_key, "upstream_status": upstream.status_code})
 
         content_type = upstream.headers.get("content-type", "application/json")
         if upstream.is_error and content_type.startswith("application/json"):

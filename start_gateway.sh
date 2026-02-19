@@ -52,4 +52,4 @@ exec uvicorn apps.gateway.main:app \
     --host "$GATEWAY_API_HOST" \
     --port "$GATEWAY_API_PORT" \
     --log-level "$(echo $GATEWAY_LOG_LEVEL | tr '[:upper:]' '[:lower:]')" \
-    --no-access-log
+
