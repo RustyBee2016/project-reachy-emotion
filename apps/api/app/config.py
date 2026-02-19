@@ -225,7 +225,7 @@ class AppConfig:
     
     @property
     def dataset_path(self) -> Path:
-        """Full path to dataset_all directory."""
+        """Full path to legacy dataset_all directory (compatibility only)."""
         return self.videos_root / self.dataset_dir
     
     @property
@@ -279,7 +279,6 @@ class AppConfig:
         # Validate required subdirectories exist or can be created
         required_dirs = [
             self.temp_path,
-            self.dataset_path,
             self.train_path,
             self.test_path,
             self.thumbs_path,
@@ -346,7 +345,7 @@ class AppConfig:
             "storage": {
                 "videos_root": str(self.videos_root),
                 "temp_path": str(self.temp_path),
-                "dataset_path": str(self.dataset_path),
+                "legacy_dataset_path": str(self.dataset_path),
                 "train_path": str(self.train_path),
                 "test_path": str(self.test_path),
                 "thumbs_path": str(self.thumbs_path),

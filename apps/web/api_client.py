@@ -188,7 +188,7 @@ def list_videos(split: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
     Uses the v1 API endpoint which returns standardized response format.
     
     Args:
-        split: Video split (temp, train, test, dataset_all)
+        split: Video split (temp, train, test, purged)
         limit: Maximum number of videos to return
         offset: Pagination offset
         
@@ -409,36 +409,35 @@ def stage_to_dataset_all(
     dry_run: bool = False,
     correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Stage videos from temp to dataset_all with emotion label metadata.
-    
-    This uses the database-backed promotion service that persists metadata
-    to PostgreSQL and performs atomic filesystem operations.
-    
-    Args:
-        video_ids: List of video IDs to stage
-        label: Emotion label (happy, sad, angry, surprise, fear, neutral)
-        dry_run: If True, validate without executing
-        correlation_id: Optional correlation ID for tracking
-        
-    Returns:
-        Response with promoted_ids, skipped_ids, failed_ids
+    """Deprecated compatibility shim for legacy stage API callers.
+
+    Routes each video_id through direct promotion semantics:
+      temp -> train/<label> via /api/media/promote
     """
-    url = f"{_base_url()}/api/v1/promote/stage"
-    payload: Dict[str, Any] = {
-        "video_ids": video_ids,
-        "label": label,
+    promoted_ids: list[str] = []
+    skipped_ids: list[str] = []
+    failed_ids: list[str] = []
+
+    for video_id in video_ids:
+        try:
+            _ = promote(
+                video_id=video_id,
+                dest_split="train",
+                label=label,
+                dry_run=dry_run,
+                correlation_id=correlation_id,
+                use_gateway=False,
+            )
+            promoted_ids.append(video_id)
+        except Exception:
+            failed_ids.append(video_id)
+
+    return {
+        "status": "accepted" if not failed_ids else "error",
+        "promoted_ids": promoted_ids,
+        "skipped_ids": skipped_ids,
+        "failed_ids": failed_ids,
         "dry_run": dry_run,
+        "deprecated": True,
+        "message": "stage_to_dataset_all() is deprecated; use promote(..., dest_split='train').",
     }
-    headers = _headers()
-    if correlation_id:
-        headers["X-Correlation-ID"] = correlation_id
-    
-    resp = requests.post(
-        url,
-        headers=headers,
-        json=payload,
-        timeout=30,
-        verify=_request_verify(_base_url(), "API"),
-    )
-    resp.raise_for_status()
-    return resp.json()

@@ -29,8 +29,8 @@ async def test_async_roundtrip(tmp_path: Path) -> None:
     # type: AsyncSession
     async with sessionmaker() as session:  
         video = models.Video(
-            file_path="dataset_all/clip_async.mp4",
-            split="dataset_all",
+            file_path="train/clip_async.mp4",
+            split="train",
             label="sad",
             size_bytes=8192,
             sha256="e" * 64,

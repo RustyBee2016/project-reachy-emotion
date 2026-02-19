@@ -249,10 +249,10 @@ def test_step_5_refresh_video_metadata():
         return False
 
 
-def test_step_6_stage_to_dataset_all():
-    """Step 6: Test stage_to_dataset_all() endpoint."""
+def test_step_6_direct_promote_train():
+    """Step 6: Test direct /api/media/promote endpoint."""
     print("\n" + "="*60)
-    print("STEP 6: stage_to_dataset_all() Endpoint")
+    print("STEP 6: Direct /api/media/promote Endpoint")
     print("="*60)
     
     try:
@@ -265,15 +265,17 @@ def test_step_6_stage_to_dataset_all():
         
         print(f"  Testing with fake video_id: {test_video_id}")
         print(f"  Emotion label: {TEST_EMOTION}")
+        print(f"  Destination split: train")
         print(f"  Dry run: True")
         
         base_url = api_client._base_url()
-        url = f"{base_url}/promote/stage"
+        url = f"{base_url}/api/media/promote"
         
         print(f"  URL: {url}")
         
         payload = {
-            "video_ids": [test_video_id],
+            "video_id": test_video_id,
+            "dest_split": "train",
             "label": TEST_EMOTION,
             "dry_run": True,
         }
@@ -287,7 +289,7 @@ def test_step_6_stage_to_dataset_all():
         
         print(f"  HTTP Status: {response.status_code}")
         
-        if response.status_code == 202:
+        if response.status_code in (200, 202):
             data = response.json()
             print(f"  ✅ Success! Endpoint is working")
             print(f"  Response: {data}")
@@ -328,7 +330,7 @@ def main():
     results["Step 3: List Videos Endpoint"] = test_step_3_list_videos_endpoint()
     results["Step 4: list_videos() Function"] = test_step_4_api_client_list_videos()
     results["Step 5: Refresh Metadata Logic"] = test_step_5_refresh_video_metadata()
-    results["Step 6: stage_to_dataset_all()"] = test_step_6_stage_to_dataset_all()
+    results["Step 6: direct /api/media/promote"] = test_step_6_direct_promote_train()
     
     # Summary
     print("\n" + "="*70)

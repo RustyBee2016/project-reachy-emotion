@@ -52,13 +52,13 @@ INSERT INTO video (video_id, file_path, split, size_bytes, sha256) VALUES
 
 ```
 
-**1.3** Update one video to have label='happy' and split='dataset_all':
+**1.3** Update one video to have label='happy' and split='train':
 ```sql
 -- Your answer:
 
 ```
 
-**1.4** Try to set split='dataset_all' without a label (should fail):
+**1.4** Try to set split='train' without a label (should fail):
 ```sql
 -- Your answer:
 
@@ -80,11 +80,11 @@ SELECT file_path, size_bytes FROM video WHERE file_path LIKE 'videos/lab1/%';
 SELECT COUNT(*) FROM video WHERE split = 'temp';
 
 -- 1.3
-UPDATE video SET split = 'dataset_all', label = 'happy'
+UPDATE video SET split = 'train', label = 'happy'
 WHERE file_path = 'videos/lab1/001.mp4';
 
 -- 1.4 (Will fail with constraint violation)
-UPDATE video SET split = 'dataset_all'
+UPDATE video SET split = 'train'
 WHERE file_path = 'videos/lab1/002.mp4';
 -- ERROR: violates check constraint "chk_video_split_label_policy"
 ```
@@ -145,7 +145,7 @@ SELECT conname, consrc
 FROM pg_constraint
 WHERE conrelid = 'video'::regclass
   AND conname LIKE '%split%';
--- Or simply check enums.py: temp, dataset_all, train, test, purged
+-- Or simply check enums.py: temp, train, test, purged (+ dataset_all for legacy compatibility)
 
 -- 2.2
 SELECT file_path, metadata
@@ -174,7 +174,7 @@ EXPLAIN ANALYZE SELECT * FROM video WHERE split = 'temp';
 
 ```
 
-**3.2** Find the total size of all videos in dataset_all (in MB):
+**3.2** Find the total size of all videos in train (in MB):
 ```sql
 -- Your answer:
 
@@ -205,7 +205,7 @@ ORDER BY split;
 -- 3.2
 SELECT ROUND(SUM(size_bytes) / 1048576.0, 2) as total_mb
 FROM video
-WHERE split = 'dataset_all';
+WHERE split = 'train';
 
 -- 3.3 (replace RUN_ID with actual UUID)
 SELECT v.file_path, v.label, ts.target_split
@@ -229,15 +229,15 @@ WHERE ts.video_id IS NULL;
 ```sql
 -- Insert labeled videos for testing
 INSERT INTO video (file_path, split, label, size_bytes, duration_sec) VALUES
-    ('videos/lab4/happy_001.mp4', 'dataset_all', 'happy', 1000000, 5.0),
-    ('videos/lab4/happy_002.mp4', 'dataset_all', 'happy', 1500000, 6.0),
-    ('videos/lab4/sad_001.mp4', 'dataset_all', 'sad', 1200000, 5.5),
+    ('videos/lab4/happy_001.mp4', 'train', 'happy', 1000000, 5.0),
+    ('videos/lab4/happy_002.mp4', 'train', 'happy', 1500000, 6.0),
+    ('videos/lab4/sad_001.mp4', 'train', 'sad', 1200000, 5.5),
     ('videos/lab4/temp_001.mp4', 'temp', NULL, 800000, 4.0);
 ```
 
 ### Exercises
 
-**4.1** Call get_class_distribution for dataset_all:
+**4.1** Call get_class_distribution for train:
 ```sql
 -- Your answer:
 
@@ -272,7 +272,7 @@ DELETE FROM promotion_log WHERE user_id = 'lab_user';
 
 ```sql
 -- 4.1
-SELECT * FROM get_class_distribution('dataset_all');
+SELECT * FROM get_class_distribution('train');
 
 -- 4.2
 SELECT * FROM check_dataset_balance(2, 2.0);
@@ -280,7 +280,7 @@ SELECT * FROM check_dataset_balance(2, 2.0);
 -- 4.3
 SELECT * FROM promote_video_safe(
     (SELECT video_id FROM video WHERE file_path = 'videos/lab4/temp_001.mp4'),
-    'dataset_all',
+    'train',
     'happy',
     'lab_user',
     'lab4-dry-run',
@@ -290,7 +290,7 @@ SELECT * FROM promote_video_safe(
 -- 4.4
 SELECT * FROM promote_video_safe(
     (SELECT video_id FROM video WHERE file_path = 'videos/lab4/temp_001.mp4'),
-    'dataset_all',
+    'train',
     'happy',
     'lab_user',
     'lab4-actual'
@@ -385,7 +385,7 @@ async with Session() as session:
         select(Video).where(Video.file_path == "videos/lab5/001.mp4")
     )
     video = result.scalar_one()
-    video.split = "dataset_all"
+    video.split = "train"
     video.label = "happy"
     await session.commit()
 
@@ -622,7 +622,7 @@ ORDER BY duration DESC;
 Create a mini-application that:
 
 1. **Ingests videos** - Insert new video records
-2. **Labels videos** - Promote from temp to dataset_all with label
+2. **Labels videos** - Promote from temp to train/<label> with label
 3. **Creates training runs** - Sample videos for training
 4. **Generates reports** - Show class distribution and training history
 

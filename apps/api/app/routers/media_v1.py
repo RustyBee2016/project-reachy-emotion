@@ -32,7 +32,7 @@ def _get_correlation_id(request: Request) -> str:
 @router.get("/list", response_model=ListVideosResponse)
 async def list_videos(
     request: Request,
-    split: str = Query(..., pattern="^(temp|dataset_all|train|test)$", description="Video split to list"),
+    split: str = Query(..., pattern="^(temp|train|test|purged)$", description="Video split to list"),
     limit: int = Query(50, ge=1, le=1000, description="Maximum number of videos to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     config: AppConfig = Depends(get_config),
@@ -43,7 +43,7 @@ async def list_videos(
     video_id, file_path, size, and modification time.
     
     Args:
-        split: Video split (temp, dataset_all, train, test)
+        split: Video split (temp, train, test, purged)
         limit: Maximum number of videos to return (1-1000)
         offset: Pagination offset for retrieving subsequent pages
         config: Application configuration (injected)
@@ -58,12 +58,12 @@ async def list_videos(
     Raises:
         HTTPException: 400 if split is invalid, 500 if filesystem scan fails
     """
-    if split not in {"temp", "dataset_all", "train", "test"}:
+    if split not in {"temp", "train", "test", "purged"}:
         raise HTTPException(
             status_code=400,
             detail={
                 "error": "validation_error",
-                "message": f"Invalid split: {split}. Must be one of: temp, dataset_all, train, test"
+                "message": f"Invalid split: {split}. Must be one of: temp, train, test, purged"
             }
         )
 
@@ -142,7 +142,7 @@ async def get_video_metadata(
         HTTPException: 404 if video not found
     """
     # Search across all splits
-    splits = ["temp", "dataset_all", "train", "test"]
+    splits = ["temp", "train", "test", "purged"]
     
     for split in splits:
         split_path = config.videos_root / split

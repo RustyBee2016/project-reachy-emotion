@@ -43,11 +43,11 @@ class TestVideoTable:
             INSERT INTO video (video_id, file_path, split, label, sha256)
             VALUES (%s, %s, %s, %s, %s)
             RETURNING video_id, split, label
-        """, (video_id, 'videos/temp/test.mp4', 'temp', 'happy', 'a' * 64))
+        """, (video_id, 'videos/train/test.mp4', 'train', 'happy', 'a' * 64))
         
         result = db_cursor.fetchone()
         assert result['video_id'] == video_id
-        assert result['split'] == 'temp'
+        assert result['split'] == 'train'
         assert result['label'] == 'happy'
         db_conn.commit()
     
@@ -139,11 +139,11 @@ class TestStoredProcedures:
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label, size_bytes, duration_sec)
                 VALUES (%s, %s, %s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label, 1000000, 5.0))
+            """, (f'videos/train/test{i}.mp4', 'train', label, 1000000, 5.0))
         db_conn.commit()
         
         # Call function
-        db_cursor.execute("SELECT * FROM get_class_distribution('dataset_all')")
+        db_cursor.execute("SELECT * FROM get_class_distribution('train')")
         results = db_cursor.fetchall()
         
         assert len(results) == 3
@@ -172,7 +172,7 @@ class TestStoredProcedures:
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("SELECT * FROM check_dataset_balance(100, 1.5)")
@@ -190,7 +190,7 @@ class TestStoredProcedures:
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("SELECT * FROM check_dataset_balance(100, 1.5)")
@@ -208,7 +208,7 @@ class TestStoredProcedures:
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("SELECT * FROM check_dataset_balance(100, 1.5)")
@@ -229,22 +229,22 @@ class TestStoredProcedures:
         """, (video_id, 'videos/temp/test.mp4', 'temp'))
         db_conn.commit()
         
-        # Promote to dataset_all with label
+        # Promote directly to train with label
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user'))
+        """, (video_id, 'train', 'happy', 'test_user'))
         
         result = db_cursor.fetchone()
         db_conn.commit()
         
         assert result['success'] is True
         assert result['old_split'] == 'temp'
-        assert result['new_split'] == 'dataset_all'
+        assert result['new_split'] == 'train'
         
         # Verify video was updated
         db_cursor.execute("SELECT split, label FROM video WHERE video_id = %s", (video_id,))
         video = db_cursor.fetchone()
-        assert video['split'] == 'dataset_all'
+        assert video['split'] == 'train'
         assert video['label'] == 'happy'
     
     def test_promote_video_safe_idempotency(self, db_cursor, db_conn):
@@ -262,7 +262,7 @@ class TestStoredProcedures:
         # First promotion
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', idem_key))
+        """, (video_id, 'train', 'happy', 'test_user', idem_key))
         result1 = db_cursor.fetchone()
         db_conn.commit()
         
@@ -271,7 +271,7 @@ class TestStoredProcedures:
         # Second promotion with same key should be idempotent
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', idem_key))
+        """, (video_id, 'train', 'happy', 'test_user', idem_key))
         result2 = db_cursor.fetchone()
         db_conn.commit()
         
@@ -279,7 +279,7 @@ class TestStoredProcedures:
         assert 'idempotent' in result2['message'].lower()
     
     def test_promote_video_safe_label_required(self, db_cursor, db_conn):
-        """Test label requirement for dataset_all."""
+        """Test label requirement for train."""
         video_id = uuid4()
         
         db_cursor.execute("""
@@ -291,7 +291,7 @@ class TestStoredProcedures:
         # Promote without label should fail
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s)
-        """, (video_id, 'dataset_all', None, 'test_user'))
+        """, (video_id, 'train', None, 'test_user'))
         result = db_cursor.fetchone()
         db_conn.commit()
         
@@ -311,7 +311,7 @@ class TestStoredProcedures:
         # Dry run promotion
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', None, True))
+        """, (video_id, 'train', 'happy', 'test_user', None, True))
         result = db_cursor.fetchone()
         db_conn.commit()
         
@@ -331,7 +331,7 @@ class TestStoredProcedures:
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         # Create training run
@@ -376,7 +376,7 @@ class TestStoredProcedures:
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("""
@@ -415,7 +415,7 @@ class TestPromotionLog:
         # Promote video
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', idem_key))
+        """, (video_id, 'train', 'happy', 'test_user', idem_key))
         db_conn.commit()
         
         # Check log entry
@@ -426,7 +426,7 @@ class TestPromotionLog:
         
         assert log['video_id'] == video_id
         assert log['from_split'] == 'temp'
-        assert log['to_split'] == 'dataset_all'
+        assert log['to_split'] == 'train'
         assert log['label'] == 'happy'
         assert log['success'] is True
         assert log['promoted_at'] is not None

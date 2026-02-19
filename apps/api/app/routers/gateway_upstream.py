@@ -36,7 +36,7 @@ else:
 
 router = APIRouter(tags=["gateway-upstream"])
 
-_SPLITS = ("temp", "dataset_all", "train", "test")
+_SPLITS = ("temp", "train", "test", "purged")
 
 
 def _validate_pipeline_id(pipeline_id: str) -> str:
@@ -147,7 +147,7 @@ async def list_videos(
     """List videos with filtering and pagination.
     
     Query Parameters:
-        split: Filter by split (temp, dataset_all, train, test)
+        split: Filter by split (temp, train, test, purged)
         label: Filter by emotion label
         limit: Number of results (1-500, default 50)
         offset: Pagination offset (default 0)
@@ -155,7 +155,7 @@ async def list_videos(
         order: Sort direction (asc, desc)
     """
     # Validate split
-    if split and split not in ("temp", "dataset_all", "train", "test"):
+    if split and split not in ("temp", "train", "test", "purged"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "invalid_split", "message": f"Invalid split: {split}"},

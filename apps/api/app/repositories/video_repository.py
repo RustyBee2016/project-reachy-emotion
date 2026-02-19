@@ -26,7 +26,7 @@ class VideoRecord:
 
 @dataclass
 class StageMutation:
-    """Requested transition from temp to dataset_all for a video."""
+    """Requested transition from temp to a labeled target split for a video."""
 
     video_id: str  # UUID stored as string
     from_split: str
@@ -38,7 +38,7 @@ class StageMutation:
 
 @dataclass
 class SamplingMutation:
-    """Requested transition when selecting clips into train/test splits."""
+    """Requested transition for legacy train/test sampling compatibility."""
 
     video_id: str  # UUID stored as string
     from_split: str
@@ -69,14 +69,15 @@ class VideoRepository:
         *,
         exclude_ids: Collection[str] | None = None,
     ) -> list[VideoRecord]:
-        """Return candidates from dataset_all, optionally excluding specific ids."""
+        """Legacy compatibility hook retained for deprecated sample endpoint.
 
-        stmt = sa.select(models.Video).where(models.Video.split == "dataset_all")
-        if exclude_ids:
-            stmt = stmt.where(sa.not_(models.Video.video_id.in_(exclude_ids)))
-        stmt = stmt.order_by(models.Video.label.asc(), models.Video.video_id.asc())
-        rows = (await self._session.execute(stmt)).scalars().all()
-        return [self._to_record(row) for row in rows]
+        The runtime promotion flow no longer stages clips in dataset_all.
+        Sampling from dataset_all has been removed in favor of run-scoped
+        frame dataset preparation from train/<label> sources.
+        """
+
+        _ = exclude_ids
+        return []
 
     async def get_existing_selection_ids(
         self,
@@ -95,7 +96,7 @@ class VideoRepository:
         return set(existing_ids)
 
     async def persist_stage_results(self, mutations: Sequence[StageMutation]) -> None:
-        """Apply split/label updates and log promotions for staging."""
+        """Apply split/label updates and log promotion mutations."""
 
         if not mutations:
             return
@@ -135,7 +136,7 @@ class VideoRepository:
         sample_fraction: float,
         selections: Sequence[SamplingMutation],
     ) -> None:
-        """Persist selection outcomes and associated promotion logs."""
+        """Persist legacy selection outcomes and associated promotion logs."""
 
         if not selections:
             return

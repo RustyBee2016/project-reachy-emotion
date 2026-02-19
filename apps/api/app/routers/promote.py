@@ -49,9 +49,12 @@ async def stage_videos(  # noqa: D401
     response: Response,
     service: PromoteService = Depends(get_promote_service),
 ):
-    """Stage clips from temp into dataset_all."""
+    """Deprecated compatibility endpoint for legacy stage payloads."""
 
     correlation_id = _resolve_correlation_id(request_ctx)
+    response.headers["Warning"] = (
+        "299 - Deprecated endpoint: use /api/media/promote with dest_split='train'"
+    )
     service.set_correlation_id(correlation_id)
     try:
         result = await service.stage_to_dataset_all(
@@ -119,9 +122,12 @@ async def sample_split(  # noqa: D401
     response: Response,
     service: PromoteService = Depends(get_promote_service),
 ):
-    """Sample clips from dataset_all into train/test splits."""
+    """Deprecated compatibility endpoint for legacy sample payloads."""
 
     correlation_id = _resolve_correlation_id(request_ctx)
+    response.headers["Warning"] = (
+        "299 - Deprecated endpoint: use run-scoped frame dataset preparation"
+    )
     service.set_correlation_id(correlation_id)
     try:
         result = await service.sample_split(

@@ -20,7 +20,7 @@ This plan addresses the current limitation where the `GET /api/videos/{video_ide
 - ✅ SQLAlchemy models are defined (`models.py`)
 - ✅ Stored procedures exist for business logic (`002_stored_procedures.sql`)
 - ✅ Repository pattern implemented (`VideoRepository`)
-- ✅ Promotion/staging workflows use DB correctly
+- ✅ Promotion workflows use DB correctly (current UI path: `temp -> train/<label>`)
 - ✅ File-based video discovery works (`_find_video_file`)
 
 ### What's Missing
@@ -62,6 +62,7 @@ This plan addresses the current limitation where the `GET /api/videos/{video_ide
 2. **Filesystem stores actual video files** at paths recorded in DB
 3. **Endpoints accept both UUIDs and filenames** for backward compatibility
 4. **All responses include canonical UUID** from database
+5. **Training data is run-scoped** via frame extraction into `train/epoch_XX/<label>` + manifests/hash
 
 ---
 
@@ -115,7 +116,7 @@ GET /api/videos/list?split={split}&label={label}&limit={n}&offset={m}
 ```
 
 **Query Parameters**:
-- `split` (optional): Filter by split (temp, dataset_all, train, test)
+- `split` (optional): Filter by split (temp, train, test; dataset_all legacy compatibility)
 - `label` (optional): Filter by emotion label
 - `limit` (default: 50, max: 500): Number of results
 - `offset` (default: 0): Pagination offset
@@ -204,8 +205,7 @@ GET /api/videos/stats
     "total_videos": 1500,
     "by_split": {
       "temp": 50,
-      "dataset_all": 1200,
-      "train": 150,
+      "train": 1350,
       "test": 100
     },
     "by_label": {
@@ -360,26 +360,26 @@ async def test_list_videos_pagination(client, db_session):
 async def test_list_videos_filter_by_split(client, db_session):
     """Test filtering videos by split."""
     # Setup: Create videos in different splits
-    for split in ["temp", "dataset_all", "train"]:
+    for split in ["temp", "train", "test"]:
         for i in range(10):
             video = models.Video(
                 file_path=f"{split}/video_{i}.mp4",
                 split=split,
-                label="happy" if split != "temp" else None,
+                label="happy" if split == "train" else None,
                 size_bytes=1048576,
                 sha256=f"{split}_sha{i}",
             )
             db_session.add(video)
     await db_session.commit()
     
-    # Test: Filter by dataset_all
-    response = await client.get("/api/videos/list?split=dataset_all")
+    # Test: Filter by train
+    response = await client.get("/api/videos/list?split=train")
     
     # Assert
     assert response.status_code == 200
     data = response.json()
     assert len(data["videos"]) == 10
-    assert all(v["split"] == "dataset_all" for v in data["videos"])
+    assert all(v["split"] == "train" for v in data["videos"])
 ```
 
 #### Test 5: Video Not Found
@@ -568,7 +568,7 @@ Already in place:
 
 ### Metrics to Track
 - `video_metadata_requests_total{source="uuid|filename|filesystem"}`
-- `video_list_requests_total{split="temp|dataset_all|train|test"}`
+- `video_list_requests_total{split="temp|train|test|legacy_dataset_all"}`
 - `video_db_query_duration_seconds`
 - `video_not_found_total{reason="db|filesystem|both"}`
 

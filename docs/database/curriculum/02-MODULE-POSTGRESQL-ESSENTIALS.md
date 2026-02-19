@@ -513,14 +513,14 @@ CTEs make complex queries readable:
 ```sql
 -- Without CTE (hard to read):
 SELECT * FROM (
-    SELECT label, COUNT(*) as cnt FROM video WHERE split = 'dataset_all' GROUP BY label
+    SELECT label, COUNT(*) as cnt FROM video WHERE split = 'train' GROUP BY label
 ) sub WHERE cnt > 100;
 
 -- With CTE (clear):
 WITH label_counts AS (
     SELECT label, COUNT(*) as cnt
     FROM video
-    WHERE split = 'dataset_all'
+    WHERE split = 'train'
     GROUP BY label
 )
 SELECT * FROM label_counts WHERE cnt > 100;
@@ -561,7 +561,7 @@ RETURNING video_id, created_at;
 
 -- Update and see what changed
 UPDATE video
-SET split = 'dataset_all', label = 'happy'
+SET split = 'train', label = 'happy'
 WHERE file_path = 'test.mp4'
 RETURNING video_id, split, label;
 

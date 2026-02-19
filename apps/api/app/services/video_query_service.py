@@ -69,7 +69,7 @@ class VideoQueryService:
         identifier = identifier.lstrip("/")
         
         # Try with different split prefixes
-        for split in ["temp", "dataset_all", "train", "test"]:
+        for split in ["temp", "train", "test", "purged"]:
             # Try as-is
             path = f"{split}/{identifier}"
             video = await self._get_by_file_path(path)

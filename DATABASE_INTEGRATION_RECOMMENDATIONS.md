@@ -11,6 +11,10 @@
 
 This document provides actionable recommendations for implementing the database integration plan. Follow these steps in order, testing after each phase.
 
+Current workflow alignment:
+- Promote labeled videos directly from `temp` to `train/<label>`
+- Prepare run-specific training frames in `train/epoch_XX/<label>` with manifests/hash metadata
+
 ---
 
 ## Phase 1: Enhanced Video Metadata Endpoint
@@ -85,7 +89,7 @@ class VideoQueryService:
     async def _get_by_file_path_variations(self, identifier: str) -> models.Video | None:
         """Try common file path variations."""
         # Try with different split prefixes
-        for split in ["temp", "dataset_all", "train", "test"]:
+        for split in ["temp", "train", "test", "dataset_all"]:  # dataset_all = legacy compatibility
             # Try as-is
             path = f"{split}/{identifier}"
             video = await self._get_by_file_path(path)
@@ -312,7 +316,7 @@ async def list_videos(
     """List videos with filtering and pagination.
     
     Query Parameters:
-        split: Filter by split (temp, dataset_all, train, test)
+        split: Filter by split (temp, train, test; dataset_all for legacy compatibility)
         label: Filter by emotion label
         limit: Number of results (1-500, default 50)
         offset: Pagination offset (default 0)
@@ -322,7 +326,7 @@ async def list_videos(
     from sqlalchemy import func, desc, asc
     
     # Validate split
-    if split and split not in ("temp", "dataset_all", "train", "test"):
+    if split and split not in ("temp", "train", "test", "dataset_all"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "invalid_split", "message": f"Invalid split: {split}"},

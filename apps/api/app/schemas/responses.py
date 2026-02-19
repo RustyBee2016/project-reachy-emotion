@@ -95,7 +95,7 @@ class VideoMetadata(BaseModel):
     file_path: str = Field(description="Relative path from videos root")
     size_bytes: int = Field(description="File size in bytes")
     mtime: float = Field(description="Last modification time (Unix timestamp)")
-    split: str = Field(description="Video split (temp, dataset_all, train, test)")
+    split: str = Field(description="Video split (temp, train, test, purged)")
 
 
 class ListVideosData(BaseModel):

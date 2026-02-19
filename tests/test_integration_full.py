@@ -17,19 +17,19 @@ def test_videos_root(tmp_path):
     videos_root.mkdir()
     
     # Create all required subdirectories
-    for subdir in ["temp", "dataset_all", "train", "test", "thumbs", "manifests"]:
+    for subdir in ["temp", "train", "test", "purged", "thumbs", "manifests"]:
         (videos_root / subdir).mkdir()
     
     # Create test videos in different splits
     (videos_root / "temp" / "video_temp1.mp4").write_text("temp video 1")
     (videos_root / "temp" / "video_temp2.mp4").write_text("temp video 2")
-    (videos_root / "dataset_all" / "video_dataset1.mp4").write_text("dataset video 1")
+    (videos_root / "purged" / "video_purged1.mp4").write_text("purged video 1")
     (videos_root / "train" / "video_train1.mp4").write_text("train video 1")
     (videos_root / "test" / "video_test1.mp4").write_text("test video 1")
     
     # Create thumbnails
     (videos_root / "thumbs" / "video_temp1.jpg").write_text("thumbnail 1")
-    (videos_root / "thumbs" / "video_dataset1.jpg").write_text("thumbnail 2")
+    (videos_root / "thumbs" / "video_purged1.jpg").write_text("thumbnail 2")
     
     return videos_root
 
@@ -71,12 +71,12 @@ class TestEndToEndWorkflow:
     
     def test_list_videos_all_splits(self, app_client):
         """Test listing videos from all splits."""
-        splits = ["temp", "dataset_all", "train", "test"]
+        splits = ["temp", "train", "test", "purged"]
         expected_counts = {
             "temp": 2,
-            "dataset_all": 1,
             "train": 1,
             "test": 1,
+            "purged": 1,
         }
         
         for split in splits:
@@ -106,14 +106,14 @@ class TestEndToEndWorkflow:
         assert "file_path" in data
         assert "size_bytes" in data
         
-        # Get video from dataset_all
-        response = app_client.get("/api/v1/media/video_dataset1")
+        # Get video from purged
+        response = app_client.get("/api/v1/media/video_purged1")
         assert response.status_code == 200
         body = response.json()
         assert body["status"] == "success"
         data = body["data"]
-        assert data["video_id"] == "video_dataset1"
-        assert data["split"] == "dataset_all"
+        assert data["video_id"] == "video_purged1"
+        assert data["split"] == "purged"
     
     def test_thumbnail_retrieval(self, app_client):
         """Test thumbnail URL generation."""

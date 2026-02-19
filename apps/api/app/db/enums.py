@@ -8,7 +8,6 @@ SELECTION_TARGET_ENUM_NAME = "training_selection_target_enum"
 
 SplitEnum = Enum(
     "temp",
-    "dataset_all",
     "train",
     "test",
     "purged",

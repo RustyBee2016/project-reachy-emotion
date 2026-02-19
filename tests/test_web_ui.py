@@ -185,7 +185,7 @@ class TestThumbnailUrlBuilder:
         """Test thumbnail URL with deeply nested paths."""
         from src.web_ui.landing_page import thumb_url_from_path
         
-        file_path = "videos/dataset_all/2025/01/clip_nested.mp4"
+        file_path = "videos/train/2025/01/clip_nested.mp4"
         result = thumb_url_from_path(file_path)
         
         assert "clip_nested.jpg" in result

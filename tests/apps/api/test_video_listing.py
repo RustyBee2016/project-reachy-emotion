@@ -140,7 +140,7 @@ class TestVideoListingFilters:
         # Arrange - Create videos in different splits
         splits_data = {
             "temp": 10,
-            "dataset_all": 20,
+            "purged": 20,
             "train": 15,
             "test": 5,
         }
@@ -149,21 +149,21 @@ class TestVideoListingFilters:
                 video = models.Video(
                     file_path=f"{split}/video_{i}.mp4",
                     split=split,
-                    label="happy" if split in ("dataset_all", "train") else None,
+                    label="happy" if split in ("train",) else None,
                     size_bytes=1024,
                     sha256=f"{split}_sha_{i}",
                 )
                 db_session.add(video)
         await db_session.commit()
 
-        # Act - Filter by dataset_all
-        response = await client.get("/api/videos/list?split=dataset_all")
+        # Act - Filter by purged
+        response = await client.get("/api/videos/list?split=purged")
 
         # Assert
         assert response.status_code == 200
         data = response.json()
         assert len(data["videos"]) == 20
-        assert all(v["split"] == "dataset_all" for v in data["videos"])
+        assert all(v["split"] == "purged" for v in data["videos"])
         assert data["pagination"]["total"] == 20
 
     @pytest.mark.asyncio
@@ -178,8 +178,8 @@ class TestVideoListingFilters:
         for label in labels:
             for i in range(5):
                 video = models.Video(
-                    file_path=f"dataset_all/{label}_{i}.mp4",
-                    split="dataset_all",
+                    file_path=f"train/{label}_{i}.mp4",
+                    split="train",
                     label=label,
                     size_bytes=1024,
                     sha256=f"{label}_sha_{i}",
@@ -204,17 +204,16 @@ class TestVideoListingFilters:
     ):
         """Test combining split and label filters."""
         # Arrange
-        for split in ["dataset_all", "train"]:
-            for label in ["happy", "sad"]:
-                for i in range(3):
-                    video = models.Video(
-                        file_path=f"{split}/{label}_{i}.mp4",
-                        split=split,
-                        label=label,
-                        size_bytes=1024,
-                        sha256=f"{split}_{label}_sha_{i}",
-                    )
-                    db_session.add(video)
+        for label in ["happy", "sad"]:
+            for i in range(3):
+                video = models.Video(
+                    file_path=f"train/{label}_{i}.mp4",
+                    split="train",
+                    label=label,
+                    size_bytes=1024,
+                    sha256=f"train_{label}_sha_{i}",
+                )
+                db_session.add(video)
         await db_session.commit()
 
         # Act - Filter by train split AND happy label
@@ -246,7 +245,7 @@ class TestVideoListingFilters:
         await db_session.commit()
 
         # Act - Filter by non-existent split
-        response = await client.get("/api/videos/list?split=dataset_all")
+        response = await client.get("/api/videos/list?split=purged")
 
         # Assert
         assert response.status_code == 200
@@ -427,8 +426,8 @@ class TestVideoListingPerformance:
         # Arrange - Create videos with indexed columns
         for i in range(500):
             video = models.Video(
-                file_path=f"dataset_all/video_{i}.mp4",
-                split="dataset_all",
+                file_path=f"train/video_{i}.mp4",
+                split="train",
                 label="happy",
                 size_bytes=1024,
                 sha256=f"sha_{i}",
@@ -440,7 +439,7 @@ class TestVideoListingPerformance:
         import time
 
         start = time.time()
-        response = await client.get("/api/videos/list?split=dataset_all&limit=10")
+        response = await client.get("/api/videos/list?split=train&limit=10")
         duration_ms = (time.time() - start) * 1000
 
         # Assert - Should use index, be fast
@@ -513,8 +512,8 @@ class TestVideoListingResponseFormat:
         """Test that all metadata fields are included in response."""
         # Arrange
         video = models.Video(
-            file_path="dataset_all/complete.mp4",
-            split="dataset_all",
+            file_path="train/complete.mp4",
+            split="train",
             label="happy",
             size_bytes=2048,
             sha256="complete_sha",
@@ -527,7 +526,7 @@ class TestVideoListingResponseFormat:
         await db_session.commit()
 
         # Act
-        response = await client.get("/api/videos/list?split=dataset_all")
+        response = await client.get("/api/videos/list?split=train")
 
         # Assert
         assert response.status_code == 200

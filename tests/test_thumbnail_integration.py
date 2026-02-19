@@ -33,9 +33,9 @@ class TestThumbnailIntegration:
         # Create all required directories
         (root / "temp").mkdir()
         (root / "thumbs").mkdir()
-        (root / "dataset_all").mkdir()
         (root / "train").mkdir()
         (root / "test").mkdir()
+        (root / "purged").mkdir()
         
         return root
     

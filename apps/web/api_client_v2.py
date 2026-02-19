@@ -251,7 +251,7 @@ class ReachyAPIClient:
         List videos from a specific split.
         
         Args:
-            split: Video split (temp, dataset_all, train, test)
+            split: Video split (temp, train, test, purged)
             limit: Maximum number of videos
             offset: Pagination offset
             label: Filter by label

@@ -262,10 +262,10 @@ from enum import Enum
 
 class SplitType(str, Enum):
     temp = "temp"
-    dataset_all = "dataset_all"
     train = "train"
     test = "test"
     purged = "purged"
+    dataset_all = "dataset_all"  # legacy compatibility
 
 class EmotionType(str, Enum):
     neutral = "neutral"
@@ -288,7 +288,7 @@ class PromoteRequest(BaseModel):
     @classmethod
     def validate_label_for_split(cls, v, info):
         dest_split = info.data.get("dest_split")
-        if dest_split in ("dataset_all", "train") and v is None:
+        if dest_split == "train" and v is None:
             raise ValueError(f"Label required for {dest_split}")
         if dest_split in ("temp", "test", "purged") and v is not None:
             raise ValueError(f"Label not allowed for {dest_split}")
@@ -436,8 +436,8 @@ class PromoteService:
 
         Args:
             video_id: UUID of video to promote
-            dest_split: Target split (temp, dataset_all, train, test, purged)
-            label: Emotion label (required for dataset_all/train)
+            dest_split: Target split (temp, train, test, purged; dataset_all for legacy compatibility)
+            label: Emotion label (required for train; legacy compatibility for dataset_all)
             user_id: User performing the action
             idempotency_key: Key to prevent duplicate processing
             dry_run: If True, validate without executing
@@ -520,8 +520,8 @@ class PromoteService:
     ) -> Optional[str]:
         """Validate business rules for promotion."""
 
-        # Label required for dataset_all and train
-        if dest_split in ("dataset_all", "train") and not label:
+        # Label required for train (and dataset_all only for legacy compatibility)
+        if dest_split in ("train", "dataset_all") and not label:
             return f"Label required for {dest_split}"
 
         # Label not allowed for temp, test, purged
@@ -644,8 +644,8 @@ async def promote_video(
     Promote a video to a new split.
 
     - **video_id**: UUID of the video to promote
-    - **dest_split**: Target split (temp, dataset_all, train, test, purged)
-    - **label**: Emotion label (required for dataset_all/train)
+    - **dest_split**: Target split (temp, train, test, purged; dataset_all for legacy compatibility)
+    - **label**: Emotion label (required for train; legacy compatibility for dataset_all)
     - **user_id**: User performing the action (optional)
     - **idempotency_key**: Key to prevent duplicate processing (optional)
     - **dry_run**: If true, validate without executing (default: false)
@@ -699,7 +699,7 @@ async def get_video(
 
 @router.get("/stats/distribution")
 async def get_distribution(
-    split: str = Query("dataset_all", description="Split to analyze"),
+    split: str = Query("train", description="Split to analyze"),
     repo: VideoRepository = Depends(get_video_repository)
 ):
     """Get class distribution for a split."""
@@ -733,7 +733,7 @@ if not video:
     )
 
 # 400 Bad Request
-if not request.label and request.dest_split in ("dataset_all", "train"):
+if not request.label and request.dest_split in ("train", "dataset_all"):
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Label required for this split"

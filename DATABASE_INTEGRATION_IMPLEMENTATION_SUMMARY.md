@@ -10,6 +10,10 @@
 
 Successfully implemented comprehensive database integration for video metadata and URL management. The system now returns canonical UUIDs from Postgres instead of filename stems, while maintaining full backward compatibility with existing clients.
 
+Current promotion/training flow alignment:
+- Labeled clips are promoted directly from `temp` to `train/<emotion>`
+- Training dataset preparation is frame-first and run-scoped (`train/<epoch_XX>/<label>`) with manifests and dataset hashes
+
 ---
 
 ## What Was Implemented
@@ -50,7 +54,7 @@ Successfully implemented comprehensive database integration for video metadata a
 **Endpoint**: `GET /api/videos/list`
 
 **Query Parameters**:
-- `split` - Filter by split (temp, dataset_all, train, test)
+- `split` - Filter by split (temp, train, test; dataset_all remains legacy compatibility)
 - `label` - Filter by emotion label
 - `limit` - Results per page (1-500, default 50)
 - `offset` - Pagination offset (default 0)
@@ -240,7 +244,7 @@ curl -X GET "http://localhost:8081/api/videos/list?split=temp&limit=10" | jq
 curl -X GET "http://localhost:8081/api/videos/list?limit=20&offset=0" | jq
 
 # Filter by label
-curl -X GET "http://localhost:8081/api/videos/list?label=happy&split=dataset_all" | jq
+curl -X GET "http://localhost:8081/api/videos/list?label=happy&split=train" | jq
 ```
 
 #### 4. Test Video URL Generation
@@ -300,7 +304,7 @@ curl -X GET "http://localhost:8081/api/videos/${VIDEO_UUID}/thumb" --output test
 ```python
 # Prometheus metrics
 video_metadata_requests_total{source="uuid|filename|filesystem"}
-video_list_requests_total{split="temp|dataset_all|train|test"}
+video_list_requests_total{split="temp|train|test|legacy_dataset_all"}
 video_db_query_duration_seconds
 video_not_found_total{reason="db|filesystem|both"}
 ```

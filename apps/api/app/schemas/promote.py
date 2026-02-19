@@ -23,12 +23,12 @@ OptionalSeed = Annotated[Optional[int], Field(ge=0, le=2**31 - 1)]
 
 
 class StageRequest(BaseModel):
-    """Request body for staging videos from temp into dataset_all."""
+    """Deprecated compatibility request for legacy stage endpoint."""
 
     video_ids: VideoIdList = Field(
-        ..., description="Identifiers of videos to stage into dataset_all."
+        ..., description="Video identifiers (legacy payload; prefer /api/media/promote)."
     )
-    label: str = Field(..., description="Emotion label applied to staged clips.")
+    label: str = Field(..., description="3-class label (happy|sad|neutral).")
     dry_run: bool = Field(
         default=False,
         description="When true, validate and plan the operation without persisting changes.",
@@ -45,7 +45,7 @@ class StageRequest(BaseModel):
 
 
 class StageResponse(BaseModel):
-    """Response payload after staging videos."""
+    """Deprecated compatibility response for legacy stage endpoint."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,15 +75,15 @@ class StageResponse(BaseModel):
 
 
 class SampleRequest(BaseModel):
-    """Request body for sampling dataset_all clips into train/test splits."""
+    """Deprecated compatibility request for legacy sample endpoint."""
 
     run_id: UUID4
     target_split: str = Field(..., description="Destination split (train or test).")
     sample_fraction: SampleFraction = Field(
         ...,
         description=(
-            "Fraction of dataset_all clips to sample (>0). Values greater than 1 select all"
-            " available candidates."
+            "Legacy sampling fraction (>0). Endpoint is deprecated; "
+            "run-scoped frame dataset preparation should be used instead."
         ),
     )
     strategy: Literal["balanced_random"] = Field(default="balanced_random")
@@ -107,7 +107,7 @@ class SampleRequest(BaseModel):
 
 
 class SampleResponse(BaseModel):
-    """Response payload after sampling dataset_all clips."""
+    """Deprecated compatibility response for legacy sample endpoint."""
 
     model_config = ConfigDict(from_attributes=True)
 

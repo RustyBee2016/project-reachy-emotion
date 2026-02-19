@@ -38,7 +38,7 @@ class FileMover:
         return self._root
 
     def stage_to_dataset_all(self, *, video_id: str, file_path: str) -> FileTransition:
-        """Move a file from temp/ into dataset_all/ preserving subdirectories."""
+        """Legacy compatibility move from temp/ into dataset_all/."""
 
         relative, destination_relative, source, destination = self._prepare_stage(file_path)
         self._ensure_source_exists(source, video_id)
@@ -51,7 +51,7 @@ class FileMover:
         )
 
     def plan_stage_to_dataset_all(self, *, video_id: str, file_path: str) -> FileTransition:
-        """Preview a staging operation without mutating the filesystem."""
+        """Legacy compatibility preview for stage_to_dataset_all()."""
 
         relative, destination_relative, source, _ = self._prepare_stage(file_path)
         self._ensure_source_exists(source, video_id)
@@ -70,7 +70,7 @@ class FileMover:
         target_split: str,
         run_id: str,
     ) -> FileTransition:
-        """Copy a dataset_all file into train/ or test/ scoped by run_id."""
+        """Legacy compatibility copy from dataset_all into run-scoped split paths."""
 
         (
             relative,
@@ -95,7 +95,7 @@ class FileMover:
         target_split: str,
         run_id: str,
     ) -> FileTransition:
-        """Preview a sampling copy operation without mutating the filesystem."""
+        """Legacy compatibility preview for copy_to_split()."""
 
         (
             relative,

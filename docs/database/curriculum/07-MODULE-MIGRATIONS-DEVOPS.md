@@ -333,7 +333,9 @@ alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
 # psql -U reachy_app -d reachy_local -f alembic/versions/002_stored_procedures.sql
 
 # Create directories
-mkdir -p /mnt/videos/{temp,dataset_all,train,test}
+mkdir -p /mnt/videos/{temp,train,test,thumbs,manifests}
+# Optional legacy compatibility only:
+# mkdir -p /mnt/videos/dataset_all
 
 echo "Setup complete!"
 ```

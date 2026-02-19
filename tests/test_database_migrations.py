@@ -143,7 +143,7 @@ class TestStoredProcedures:
                     """, (
                         uuid.uuid4(),
                         f'test_{emotion}_{i}.mp4',
-                        'dataset_all',
+                        'train',
                         emotion,
                         f'hash_{emotion}_{i}',
                         5.0
@@ -165,7 +165,7 @@ class TestStoredProcedures:
         """Test class distribution function."""
         cur = db_connection.cursor(cursor_factory=RealDictCursor)
         
-        cur.execute("SELECT * FROM get_class_distribution('dataset_all')")
+        cur.execute("SELECT * FROM get_class_distribution('train')")
         results = cur.fetchall()
         
         # Should have 3 emotion classes
@@ -193,24 +193,31 @@ class TestStoredProcedures:
     def test_promote_video_safe(self, db_connection):
         """Test safe video promotion with idempotency."""
         cur = db_connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Get a test video
-        cur.execute("SELECT video_id FROM video WHERE split = 'dataset_all' LIMIT 1")
-        video_id = cur.fetchone()['video_id']
+
+        # Create a temp video for direct temp -> train promotion
+        video_id = uuid.uuid4()
+        cur.execute(
+            """
+            INSERT INTO video (video_id, file_path, split, label, sha256)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (video_id, 'temp/promote_target.mp4', 'temp', None, 'promote_temp_hash_1'),
+        )
+        db_connection.commit()
         
         # First promotion - should succeed
         cur.execute("""
-            SELECT * FROM promote_video_safe(%s, 'train', NULL, 'test_user', 'test_key_1', FALSE)
+            SELECT * FROM promote_video_safe(%s, 'train', 'happy', 'test_user', 'test_key_1', FALSE)
         """, (video_id,))
         result1 = cur.fetchone()
         
         assert result1['success'] is True
-        assert result1['old_split'] == 'dataset_all'
+        assert result1['old_split'] == 'temp'
         assert result1['new_split'] == 'train'
         
         # Second promotion with same idempotency key - should be idempotent
         cur.execute("""
-            SELECT * FROM promote_video_safe(%s, 'train', NULL, 'test_user', 'test_key_1', FALSE)
+            SELECT * FROM promote_video_safe(%s, 'train', 'happy', 'test_user', 'test_key_1', FALSE)
         """, (video_id,))
         result2 = cur.fetchone()
         
@@ -222,16 +229,22 @@ class TestStoredProcedures:
     def test_promote_video_dry_run(self, db_connection):
         """Test dry run promotion doesn't modify data."""
         cur = db_connection.cursor(cursor_factory=RealDictCursor)
-        
-        # Get a test video
-        cur.execute("SELECT video_id, split FROM video WHERE split = 'dataset_all' LIMIT 1")
-        video = cur.fetchone()
-        video_id = video['video_id']
-        original_split = video['split']
+
+        # Create a temp video for dry-run promotion
+        video_id = uuid.uuid4()
+        cur.execute(
+            """
+            INSERT INTO video (video_id, file_path, split, label, sha256)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (video_id, 'temp/dry_run_target.mp4', 'temp', None, 'promote_temp_hash_2'),
+        )
+        db_connection.commit()
+        original_split = 'temp'
         
         # Dry run promotion
         cur.execute("""
-            SELECT * FROM promote_video_safe(%s, 'test', NULL, 'test_user', NULL, TRUE)
+            SELECT * FROM promote_video_safe(%s, 'train', 'sad', 'test_user', NULL, TRUE)
         """, (video_id,))
         result = cur.fetchone()
         

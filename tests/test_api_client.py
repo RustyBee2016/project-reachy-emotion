@@ -103,13 +103,13 @@ class TestIdempotencyKeys:
         client = ReachyAPIClient()
         
         # Same inputs within same minute should generate same key
-        key1 = client._generate_idempotency_key('video1', 'dataset_all', 'happy')
+        key1 = client._generate_idempotency_key('video1', 'train', 'happy')
         time.sleep(0.1)
-        key2 = client._generate_idempotency_key('video1', 'dataset_all', 'happy')
+        key2 = client._generate_idempotency_key('video1', 'train', 'happy')
         assert key1 == key2
         
         # Different inputs should generate different keys
-        key3 = client._generate_idempotency_key('video2', 'dataset_all', 'happy')
+        key3 = client._generate_idempotency_key('video2', 'train', 'happy')
         assert key1 != key3
     
     @patch('requests.Session.request')
@@ -123,7 +123,7 @@ class TestIdempotencyKeys:
         )
         
         client = ReachyAPIClient()
-        client.promote_video('vid123', 'dataset_all', 'happy')
+        client.promote_video('vid123', 'train', 'happy')
         
         # Check headers included idempotency key
         call_kwargs = mock_request.call_args[1]
@@ -147,9 +147,9 @@ class TestAsyncBatchOperations:
             mock_promote.return_value = {'status': 'success'}
             
             promotions = [
-                ('vid1', 'dataset_all', 'happy'),
-                ('vid2', 'dataset_all', 'sad'),
-                ('vid3', 'dataset_all', 'neutral')
+                ('vid1', 'train', 'happy'),
+                ('vid2', 'train', 'sad'),
+                ('vid3', 'train', 'neutral')
             ]
             
             results = await client.batch_promote_async(promotions)
@@ -172,9 +172,9 @@ class TestAsyncBatchOperations:
         
         with patch.object(client, '_promote_async', side_effect=mock_promote):
             promotions = [
-                ('vid1', 'dataset_all', 'happy'),
-                ('vid2', 'dataset_all', 'sad'),
-                ('vid3', 'dataset_all', 'neutral')
+                ('vid1', 'train', 'happy'),
+                ('vid2', 'train', 'sad'),
+                ('vid3', 'train', 'neutral')
             ]
             
             results = await client.batch_promote_async(promotions)
@@ -198,7 +198,7 @@ class TestConnectionPooling:
         # Make multiple requests
         with patch.object(client.session, 'request', return_value=Mock(status_code=200, json=lambda: {})):
             client.list_videos('temp')
-            client.list_videos('dataset_all')
+            client.list_videos('train')
         
         # Session should be the same
         assert client.session is session1

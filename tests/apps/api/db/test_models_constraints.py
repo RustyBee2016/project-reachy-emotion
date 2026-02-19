@@ -30,8 +30,8 @@ def engine_fixture(tmp_path: Path):
 def test_video_split_label_policy(engine) -> None:
     with Session(engine) as session:
         valid_video = models.Video(
-            file_path="dataset_all/clip1.mp4",
-            split="dataset_all",
+            file_path="train/clip1.mp4",
+            split="train",
             label="happy",
             size_bytes=1048576,
             sha256="a" * 64,
@@ -40,8 +40,8 @@ def test_video_split_label_policy(engine) -> None:
         session.commit()
 
         invalid = models.Video(
-            file_path="dataset_all/clip2.mp4",
-            split="dataset_all",
+            file_path="train/clip2.mp4",
+            split="train",
             label=None,
             size_bytes=2048,
             sha256="b" * 64,
@@ -55,8 +55,8 @@ def test_video_split_label_policy(engine) -> None:
 def test_video_unique_hash_size(engine) -> None:
     with Session(engine) as session:
         video_a = models.Video(
-            file_path="dataset_all/clip3.mp4",
-            split="dataset_all",
+            file_path="train/clip3.mp4",
+            split="train",
             label="sad",
             size_bytes=4096,
             sha256="c" * 64,
@@ -80,8 +80,8 @@ def test_video_unique_hash_size(engine) -> None:
 def test_training_selection_cascade(engine) -> None:
     with Session(engine) as session:
         video = models.Video(
-            file_path="dataset_all/clip4.mp4",
-            split="dataset_all",
+            file_path="train/clip4.mp4",
+            split="train",
             label="neutral",
             size_bytes=1024,
             sha256="d" * 64,

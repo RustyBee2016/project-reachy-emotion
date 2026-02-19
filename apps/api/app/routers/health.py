@@ -61,9 +61,9 @@ async def health_check(
     # Check required subdirectories
     required_dirs = {
         "temp": config.temp_path,
-        "dataset_all": config.dataset_path,
         "train": config.train_path,
         "test": config.test_path,
+        "purged": config.videos_root / "purged",
         "thumbs": config.thumbs_path,
         "manifests": config.manifests_path,
     }

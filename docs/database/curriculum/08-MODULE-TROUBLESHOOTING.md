@@ -147,14 +147,14 @@ ON CONFLICT (sha256, size_bytes) DO UPDATE SET
 ERROR: new row for relation "video" violates check constraint "chk_video_split_label_policy"
 ```
 
-**Cause:** Business rule violation (e.g., dataset_all without label).
+**Cause:** Business rule violation (for example, train without label; dataset_all is legacy compatibility only).
 
 **Fix:** Follow the business rules:
 ```sql
--- dataset_all requires label
-UPDATE video SET split = 'dataset_all', label = 'happy' WHERE ...;
+-- train requires label
+UPDATE video SET split = 'train', label = 'happy' WHERE ...;
 
--- NOT: UPDATE video SET split = 'dataset_all' WHERE ...;
+-- NOT: UPDATE video SET split = 'train' WHERE ...;
 ```
 
 ---
@@ -423,7 +423,7 @@ async def get_recent_activity(db: AsyncSession = Depends(get_db)):
 1. What's the first thing to check when you get "connection refused"?
 2. How do you add a new value to an existing ENUM?
 3. What does `EXPLAIN ANALYZE` show you?
-4. What constraint prevents adding a video to dataset_all without a label?
+4. What constraint prevents adding a video to train without a label?
 
 <details>
 <summary>Click to see answers</summary>

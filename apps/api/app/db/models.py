@@ -75,7 +75,7 @@ class Video(TimestampMixin, Base):
             (
                 split IN ('temp', 'test', 'purged') AND label IS NULL
             ) OR (
-                split IN ('dataset_all', 'train') AND label IS NOT NULL
+                split = 'train' AND label IS NOT NULL
             )
             """,
             name="chk_video_split_label_policy",

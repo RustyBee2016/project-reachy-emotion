@@ -72,12 +72,12 @@ class TestVideoMetadataByUUID:
         """Test video metadata includes label when present."""
         # Arrange
         video_id = str(uuid.uuid4())
-        file_path = "dataset_all/happy_video.mp4"
+        file_path = "train/happy_video.mp4"
         
         video = models.Video(
             video_id=video_id,
             file_path=file_path,
-            split="dataset_all",
+            split="train",
             label="happy",
             size_bytes=2097152,
             sha256="happy123",
@@ -95,7 +95,7 @@ class TestVideoMetadataByUUID:
         assert response.status_code == 200
         data = response.json()
         assert data["video"]["label"] == "happy"
-        assert data["video"]["split"] == "dataset_all"
+        assert data["video"]["split"] == "train"
 
     @pytest.mark.asyncio
     async def test_get_video_metadata_uuid_not_found(self, client: AsyncClient):
@@ -392,9 +392,9 @@ class TestVideoMetadataIntegration:
         assert data1["video"]["label"] is None
 
         # Act 2 - Simulate promotion (update DB directly for test)
-        video.split = "dataset_all"
+        video.split = "train"
         video.label = "happy"
-        file_path_promoted = "dataset_all/to_promote.mp4"
+        file_path_promoted = "train/to_promote.mp4"
         video.file_path = file_path_promoted
         await db_session.commit()
         
@@ -407,9 +407,9 @@ class TestVideoMetadataIntegration:
         # Assert - Metadata should reflect promotion
         assert response2.status_code == 200
         data2 = response2.json()
-        assert data2["video"]["split"] == "dataset_all"
+        assert data2["video"]["split"] == "train"
         assert data2["video"]["label"] == "happy"
-        assert "dataset_all" in data2["video"]["file_path"]
+        assert "train" in data2["video"]["file_path"]
 
 
 # Pytest fixtures would be defined in conftest.py

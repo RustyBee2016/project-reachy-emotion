@@ -705,7 +705,7 @@ async def rebuild_manifest(
     correlation_id = request.correlation_id or str(uuid.uuid4())
     
     # Validate splits
-    valid_splits = {"train", "test", "dataset_all"}
+    valid_splits = {"train", "test"}
     invalid_splits = set(request.splits) - valid_splits
     if invalid_splits:
         raise HTTPException(

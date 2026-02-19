@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.app.db.models import PromotionLog, Video
-from apps.api.app.services import PromoteService
+from apps.api.app.services import PromoteService, PromotionValidationError
 
 
 @pytest.fixture
@@ -36,12 +36,12 @@ def test_video_file(tmp_path: Path, test_video_id: str) -> Path:
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_stage_video_with_emotion_label(
+async def test_legacy_stage_endpoint_deprecated_video_with_emotion_label(
     async_session: AsyncSession,
     test_video_id: str,
     test_video_file: Path,
 ):
-    """Test that emotion label is persisted to database when staging video."""
+    """Test deprecated stage endpoint rejects even with valid emotion label."""
     
     # Arrange: Create a video record in temp split
     video = Video(
@@ -55,44 +55,34 @@ async def test_stage_video_with_emotion_label(
     async_session.add(video)
     await async_session.commit()
     
-    # Act: Stage the video with emotion label
+    # Act: Legacy stage endpoint is deprecated
     service = PromoteService(async_session, actor="test_user")
-    result = await service.stage_to_dataset_all(
-        video_ids=[test_video_id],
-        label="happy",
-        dry_run=False,
-    )
-    await service.commit()
-    
-    # Assert: Video was promoted
-    assert len(result.promoted_ids) == 1
-    assert result.promoted_ids[0] == test_video_id
-    assert len(result.failed_ids) == 0
+    with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
+        await service.stage_to_dataset_all(
+            video_ids=[test_video_id],
+            label="happy",
+            dry_run=False,
+        )
     
     # Assert: Database record updated
     await async_session.refresh(video)
-    assert video.split == "dataset_all"
-    assert video.label == "happy"
+    assert video.split == "temp"
+    assert video.label is None
     
     # Assert: PromotionLog entry created
     stmt = select(PromotionLog).where(PromotionLog.video_id == uuid.UUID(test_video_id))
     result = await async_session.execute(stmt)
-    promotion_log = result.scalar_one()
-    
-    assert promotion_log.from_split == "temp"
-    assert promotion_log.to_split == "dataset_all"
-    assert promotion_log.intended_label == "happy"
-    assert promotion_log.actor == "test_user"
-    assert promotion_log.success is True
+    promotion_log = result.scalar_one_or_none()
+    assert promotion_log is None
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_stage_multiple_videos_different_labels(
+async def test_legacy_stage_endpoint_deprecated_multiple_videos_different_labels(
     async_session: AsyncSession,
     tmp_path: Path,
 ):
-    """Test batch promotion with different emotion labels."""
+    """Test deprecated stage endpoint rejects batch promotions for all labels."""
     
     # Arrange: Create 3 videos with different emotions
     test_data = [
@@ -120,17 +110,16 @@ async def test_stage_multiple_videos_different_labels(
     
     await async_session.commit()
     
-    # Act: Stage each video with its emotion label
+    # Act: Legacy stage endpoint is deprecated
     service = PromoteService(async_session, actor="test_user")
     
     for video_id, label in test_data:
-        result = await service.stage_to_dataset_all(
-            video_ids=[video_id],
-            label=label,
-            dry_run=False,
-        )
-        await service.commit()
-        assert len(result.promoted_ids) == 1
+        with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
+            await service.stage_to_dataset_all(
+                video_ids=[video_id],
+                label=label,
+                dry_run=False,
+            )
     
     # Assert: All videos have correct labels in database
     for video_id, expected_label in test_data:
@@ -138,8 +127,8 @@ async def test_stage_multiple_videos_different_labels(
         result = await async_session.execute(stmt)
         video = result.scalar_one()
         
-        assert video.split == "dataset_all"
-        assert video.label == expected_label
+        assert video.split == "temp"
+        assert video.label is None
 
 
 @pytest.mark.asyncio
@@ -163,10 +152,10 @@ async def test_invalid_emotion_label_rejected(
     async_session.add(video)
     await async_session.commit()
     
-    # Act & Assert: Try to stage with invalid label
+    # Act & Assert: invalid label still fails validation pre-deprecation check
     service = PromoteService(async_session, actor="test_user")
     
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(PromotionValidationError) as exc_info:
         await service.stage_to_dataset_all(
             video_ids=[test_video_id],
             label="invalid_emotion_label",
@@ -203,30 +192,22 @@ async def test_promotion_audit_log_captures_metadata(
     async_session.add(video)
     await async_session.commit()
     
-    # Act: Stage the video
+    # Act: Legacy stage endpoint is deprecated
     service = PromoteService(async_session, actor="integration_test_user")
     correlation_id = str(uuid.uuid4())
     service.set_correlation_id(correlation_id)
-    
-    await service.stage_to_dataset_all(
-        video_ids=[test_video_id],
-        label="neutral",
-        dry_run=False,
-    )
-    await service.commit()
+    with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
+        await service.stage_to_dataset_all(
+            video_ids=[test_video_id],
+            label="neutral",
+            dry_run=False,
+        )
     
     # Assert: PromotionLog has all metadata
     stmt = select(PromotionLog).where(PromotionLog.video_id == uuid.UUID(test_video_id))
     result = await async_session.execute(stmt)
-    log_entry = result.scalar_one()
-    
-    assert log_entry.video_id == uuid.UUID(test_video_id)
-    assert log_entry.from_split == "temp"
-    assert log_entry.to_split == "dataset_all"
-    assert log_entry.intended_label == "neutral"
-    assert log_entry.actor == "integration_test_user"
-    assert log_entry.success is True
-    assert log_entry.created_at is not None
+    log_entry = result.scalar_one_or_none()
+    assert log_entry is None
 
 
 @pytest.mark.asyncio
@@ -250,17 +231,14 @@ async def test_dry_run_does_not_persist_changes(
     async_session.add(video)
     await async_session.commit()
     
-    # Act: Dry run promotion
+    # Act: Legacy stage endpoint is deprecated (even in dry_run)
     service = PromoteService(async_session, actor="test_user")
-    result = await service.stage_to_dataset_all(
-        video_ids=[test_video_id],
-        label="happy",
-        dry_run=True,
-    )
-    
-    # Assert: Result indicates dry run
-    assert result.dry_run is True
-    assert len(result.promoted_ids) == 1
+    with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
+        await service.stage_to_dataset_all(
+            video_ids=[test_video_id],
+            label="happy",
+            dry_run=True,
+        )
     
     # Assert: Database NOT updated
     await async_session.refresh(video)
@@ -302,21 +280,19 @@ async def test_all_valid_emotion_labels(
         async_session.add(video)
         await async_session.commit()
         
-        # Act: Stage with emotion label
+        # Act: Legacy stage endpoint is deprecated
         service = PromoteService(async_session, actor="test_user")
-        result = await service.stage_to_dataset_all(
-            video_ids=[video_id],
-            label=emotion,
-            dry_run=False,
-        )
-        await service.commit()
+        with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
+            await service.stage_to_dataset_all(
+                video_ids=[video_id],
+                label=emotion,
+                dry_run=False,
+            )
         
-        # Assert: Promotion succeeded
-        assert len(result.promoted_ids) == 1
-        
-        # Assert: Label persisted correctly
+        # Assert: row unchanged (direct promotions should use /api/media/promote)
         await async_session.refresh(video)
-        assert video.label == emotion
+        assert video.split == "temp"
+        assert video.label is None
 
 
 # Fixtures for database session (to be implemented in conftest.py)

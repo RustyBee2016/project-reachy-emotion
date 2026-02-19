@@ -176,6 +176,8 @@ EmotionEnum = Enum(
 
 ### The Video Model
 
+> **Current workflow note:** Runtime promotion now moves labeled clips directly from `temp` to `train/<label>`. Run-specific frame datasets are then created under `train/epoch_XX/<label>` for training.
+
 **Source**: `apps/api/app/db/models.py` (lines 34-85)
 
 ```python
@@ -567,7 +569,7 @@ async def update_video_label(db: AsyncSession, video_id: str, label: str) -> Vid
     video = result.scalar_one_or_none()
     if video:
         video.label = label
-        video.split = "dataset_all"
+        video.split = "train"
         await db.commit()
         await db.refresh(video)
     return video
@@ -579,7 +581,7 @@ async def promote_all_temp_videos(db: AsyncSession, label: str):
     await db.execute(
         update(Video)
         .where(Video.split == "temp")
-        .values(split="dataset_all", label=label)
+        .values(split="train", label=label)
     )
     await db.commit()
 ```
@@ -1015,7 +1017,7 @@ async with Session() as session:
     video = result.scalar_one_or_none()
 
     if video:
-        video.split = "dataset_all"
+        video.split = "train"
         video.label = "happy"
         await session.commit()
         print(f"Updated {video.video_id}: split={video.split}, label={video.label}")

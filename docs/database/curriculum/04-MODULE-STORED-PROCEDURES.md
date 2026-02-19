@@ -170,6 +170,10 @@ PostgreSQL automatically:
 
 ## Lesson 4.3: get_class_distribution() (30 minutes)
 
+> **Current workflow note**
+>
+> For active training runs, videos are promoted directly to `train/<label>`, then frame datasets are built per run (`train/epoch_XX/<label>`). Use `split = 'train'` for current distribution checks. `dataset_all` usage in this module reflects legacy helper SQL behavior.
+
 ### Purpose
 
 Returns statistics about video distribution across emotion classes.
@@ -199,16 +203,16 @@ RETURNS TABLE (
 SELECT * FROM get_class_distribution();
 
 -- Specific split
-SELECT * FROM get_class_distribution('dataset_all');
+SELECT * FROM get_class_distribution('train');
 ```
 
 ### Example Output
 
 ```
- split       | label   | count | percentage | avg_duration | total_size_mb
--------------+---------+-------+------------+--------------+---------------
- dataset_all | happy   |   450 |      48.39 |         5.23 |       2340.12
- dataset_all | sad     |   480 |      51.61 |         5.18 |       2501.45
+ split | label   | count | percentage | avg_duration | total_size_mb
+-------+---------+-------+------------+--------------+---------------
+ train | happy   |   450 |      48.39 |         5.23 |       2340.12
+ train | sad     |   480 |      51.61 |         5.18 |       2501.45
 ```
 
 ### Code Walkthrough
@@ -439,10 +443,10 @@ RETURNS TABLE (
 ### Usage
 
 ```sql
--- Promote video to dataset_all with label
+-- Promote video directly to train with label
 SELECT * FROM promote_video_safe(
     '550e8400-e29b-41d4-a716-446655440000',  -- video_id
-    'dataset_all',                            -- destination
+    'train',                                  -- destination
     'happy',                                  -- label
     'alice@example.com',                      -- user
     'promo-2025-01-05-001'                   -- idempotency key
@@ -451,7 +455,7 @@ SELECT * FROM promote_video_safe(
 -- Dry run (preview without executing)
 SELECT * FROM promote_video_safe(
     '550e8400-e29b-41d4-a716-446655440000',
-    'dataset_all',
+    'train',
     'happy',
     'alice@example.com',
     'promo-2025-01-05-001',
@@ -470,7 +474,7 @@ SELECT * FROM promote_video_safe(
 ```
  success | video_id                             | from_split | to_split    | label | message
 ---------+--------------------------------------+------------+-------------+-------+---------
- TRUE    | 550e8400-e29b-41d4-a716-446655440000 | temp       | dataset_all | happy | Video promoted successfully
+ TRUE    | 550e8400-e29b-41d4-a716-446655440000 | temp       | train       | happy | Video promoted successfully
 ```
 
 ### Idempotency Explained
@@ -540,7 +544,7 @@ BEGIN
     END IF;
 
     -- 3. VALIDATE BUSINESS RULES
-    -- dataset_all and train require label
+    -- train (and legacy dataset_all) require label
     IF p_dest_split IN ('dataset_all', 'train') AND p_label IS NULL THEN
         v_message := 'Label required for ' || p_dest_split;
         -- Log failure
@@ -633,7 +637,7 @@ SELECT create_training_run_with_sampling('stratified', 0.75, 42);
 ```
 Input: p_strategy = 'balanced_random', p_train_fraction = 0.7, p_seed = 42
 
-Step 1: Calculate dataset hash
+Step 1: Calculate dataset hash (legacy helper SQL path)
         SHA256 of all video_ids in dataset_all
 
 Step 2: Create training_run record
@@ -648,7 +652,7 @@ Step 3: Set random seed for reproducibility
         PERFORM setseed(42 / 2147483647)
 
 Step 4: Sample videos
-        For each video in dataset_all:
+        For each video in dataset_all (legacy staging split):
           - Generate random number
           - If random < 0.7 → assign to 'train'
           - Else → assign to 'test'
@@ -734,9 +738,10 @@ $$;
 >
 > **Impact**: Potential class imbalance in train/test splits, especially with small datasets.
 >
-> **Note**: This bug exists in the **legacy SQL stored procedure** only. The application
-> runtime uses Python services for training run creation, which implement correct stratified
-> sampling. This stored procedure remains available for manual/ad-hoc use.
+> **Note**: This bug exists in the **legacy SQL stored procedure** only. The active runtime
+> path now prepares training datasets via frame extraction from `train/<label>` videos into
+> `train/epoch_XX/<label>` plus manifests/hash metadata. This stored procedure remains for
+> manual/ad-hoc compatibility only.
 >
 > **Fix** (if you want to correct the stored procedure): Modify the sampling logic to iterate per-label:
 > ```sql
@@ -859,10 +864,10 @@ SELECT debug_example('550e8400-e29b-41d4-a716-446655440000');
 ```sql
 -- Insert test videos
 INSERT INTO video (file_path, split, label, size_bytes) VALUES
-    ('videos/sp_test/happy_001.mp4', 'dataset_all', 'happy', 1000000),
-    ('videos/sp_test/happy_002.mp4', 'dataset_all', 'happy', 1100000),
-    ('videos/sp_test/sad_001.mp4', 'dataset_all', 'sad', 1200000),
-    ('videos/sp_test/sad_002.mp4', 'dataset_all', 'sad', 1300000),
+    ('videos/sp_test/happy_001.mp4', 'train', 'happy', 1000000),
+    ('videos/sp_test/happy_002.mp4', 'train', 'happy', 1100000),
+    ('videos/sp_test/sad_001.mp4', 'train', 'sad', 1200000),
+    ('videos/sp_test/sad_002.mp4', 'train', 'sad', 1300000),
     ('videos/sp_test/temp_001.mp4', 'temp', NULL, 500000);
 ```
 
@@ -870,7 +875,7 @@ INSERT INTO video (file_path, split, label, size_bytes) VALUES
 
 ```sql
 -- View distribution
-SELECT * FROM get_class_distribution('dataset_all');
+SELECT * FROM get_class_distribution('train');
 
 -- Expected: 2 happy, 2 sad
 ```
@@ -896,7 +901,7 @@ SELECT video_id FROM video WHERE file_path = 'videos/sp_test/temp_001.mp4';
 -- Dry run promotion
 SELECT * FROM promote_video_safe(
     'VIDEO_ID_HERE',  -- Replace with actual UUID
-    'dataset_all',
+    'train',
     'happy',
     'student@example.com',
     'exercise-4-001',
@@ -906,7 +911,7 @@ SELECT * FROM promote_video_safe(
 -- Actual promotion
 SELECT * FROM promote_video_safe(
     'VIDEO_ID_HERE',
-    'dataset_all',
+    'train',
     'happy',
     'student@example.com',
     'exercise-4-001'  -- Same key, no dry_run
@@ -915,7 +920,7 @@ SELECT * FROM promote_video_safe(
 -- Verify idempotency (run again)
 SELECT * FROM promote_video_safe(
     'VIDEO_ID_HERE',
-    'dataset_all',
+    'train',
     'happy',
     'student@example.com',
     'exercise-4-001'

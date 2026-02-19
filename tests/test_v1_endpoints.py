@@ -18,16 +18,16 @@ def test_videos_root(tmp_path):
     
     # Create subdirectories
     (videos_root / "temp").mkdir()
-    (videos_root / "dataset_all").mkdir()
     (videos_root / "train").mkdir()
     (videos_root / "test").mkdir()
+    (videos_root / "purged").mkdir()
     (videos_root / "thumbs").mkdir()
     (videos_root / "manifests").mkdir()
     
     # Create some test video files
     (videos_root / "temp" / "video1.mp4").write_text("fake video 1")
     (videos_root / "temp" / "video2.mp4").write_text("fake video 2")
-    (videos_root / "dataset_all" / "video3.mp4").write_text("fake video 3")
+    (videos_root / "purged" / "video3.mp4").write_text("fake video 3")
     
     # Create a test thumbnail
     (videos_root / "thumbs" / "video1.jpg").write_text("fake thumbnail")
@@ -118,16 +118,16 @@ class TestMediaV1Endpoints:
         assert "split" in video
         assert video["split"] == "temp"
     
-    def test_list_videos_dataset_all(self, client):
-        """Test listing videos from dataset_all split."""
-        response = client.get("/api/v1/media/list?split=dataset_all&limit=10&offset=0")
+    def test_list_videos_purged(self, client):
+        """Test listing videos from purged split."""
+        response = client.get("/api/v1/media/list?split=purged&limit=10&offset=0")
         assert response.status_code == 200
         
         body = response.json()
         data = body["data"]
         assert data["pagination"]["total"] == 1
         assert len(data["items"]) == 1
-        assert data["items"][0]["split"] == "dataset_all"
+        assert data["items"][0]["split"] == "purged"
     
     def test_list_videos_empty_split(self, client):
         """Test listing videos from empty split."""
@@ -272,9 +272,9 @@ class TestLegacyEndpoints:
 
 class TestPromoteV1Endpoints:
     """Test v1 promote endpoints."""
-    
-    def test_promote_stage_endpoint_exists(self, client):
-        """Test that promote stage endpoint is registered at v1 path."""
+
+    def test_legacy_stage_endpoint_deprecated_exists(self, client):
+        """Test deprecated v1 stage endpoint remains registered."""
         # This will fail with 422 (validation error) but proves endpoint exists
         response = client.post("/api/v1/promote/stage", json={})
         assert response.status_code in [422, 400]  # Validation error, not 404

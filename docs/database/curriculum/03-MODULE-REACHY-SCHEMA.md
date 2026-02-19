@@ -244,8 +244,10 @@ Index("ix_video_label", "label")
 
 The `chk_video_split_label_policy` constraint is a critical business rule. It ensures
 that videos in `temp`, `test`, or `purged` splits **cannot** have a label, while videos
-in `dataset_all` or `train` **must** have one. This prevents accidental data leakage
-(e.g., a labeled video sneaking into the test set) and enforces the promotion workflow.
+in `dataset_all` or `train` **must** have one. In the current runtime workflow, labeled
+videos are promoted directly from `temp` into `train/<label>` and frame datasets are
+constructed per run (`train/<run_id>/<label>`), while `dataset_all` remains legacy
+compatibility for older APIs/procedures.
 
 **Common Queries:**
 
@@ -269,7 +271,7 @@ ORDER BY created_at DESC;
 SELECT label, COUNT(*) as count,
        ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
 FROM video
-WHERE split = 'dataset_all' AND deleted_at IS NULL
+WHERE split = 'train' AND deleted_at IS NULL
 GROUP BY label;
 ```
 
@@ -872,10 +874,10 @@ Tables connected by arrows have foreign key relationships. Tables in the
 ```sql
 -- Insert test videos (note: sha256 and size_bytes are required NOT NULL columns)
 INSERT INTO video (video_id, file_path, split, label, size_bytes, sha256, duration_sec) VALUES
-    ('aaaaaaaa-0001-0001-0001-000000000001', 'videos/dataset/happy_001.mp4', 'dataset_all', 'happy', 1024000, 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 5.0),
-    ('aaaaaaaa-0001-0001-0001-000000000002', 'videos/dataset/happy_002.mp4', 'dataset_all', 'happy', 1048576, 'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3', 6.2),
-    ('aaaaaaaa-0001-0001-0001-000000000003', 'videos/dataset/sad_001.mp4', 'dataset_all', 'sad', 2097152, 'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 4.5),
-    ('aaaaaaaa-0001-0001-0001-000000000004', 'videos/dataset/sad_002.mp4', 'dataset_all', 'sad', 1500000, 'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5', 5.8),
+    ('aaaaaaaa-0001-0001-0001-000000000001', 'videos/train/happy/happy_001.mp4', 'train', 'happy', 1024000, 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 5.0),
+    ('aaaaaaaa-0001-0001-0001-000000000002', 'videos/train/happy/happy_002.mp4', 'train', 'happy', 1048576, 'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3', 6.2),
+    ('aaaaaaaa-0001-0001-0001-000000000003', 'videos/train/sad/sad_001.mp4', 'train', 'sad', 2097152, 'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 4.5),
+    ('aaaaaaaa-0001-0001-0001-000000000004', 'videos/train/sad/sad_002.mp4', 'train', 'sad', 1500000, 'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5', 5.8),
     ('aaaaaaaa-0001-0001-0001-000000000005', 'videos/temp/unlabeled_001.mp4', 'temp', NULL, 500000, 'e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6', 3.0);
 
 -- Create a training run (seed is nullable in the current schema)
@@ -887,7 +889,7 @@ INSERT INTO training_selection (run_id, video_id, target_split)
 SELECT 'bbbbbbbb-0001-0001-0001-000000000001', video_id,
        CASE WHEN random() < 0.7 THEN 'train' ELSE 'test' END
 FROM video
-WHERE split = 'dataset_all';
+WHERE split = 'train';
 ```
 
 ### Tasks
@@ -919,7 +921,7 @@ WHERE split = 'dataset_all';
     SUM(size_bytes) as total_bytes,
     pg_size_pretty(SUM(size_bytes)::BIGINT) as total_size
    FROM video
-   WHERE split = 'dataset_all';
+   WHERE split = 'train';
    ```
 
 4. **List videos in your training run with their labels:**
@@ -949,7 +951,7 @@ In this module, you learned:
 
 - ✅ The purpose of all 9 ORM-managed tables in the Reachy database
 - ✅ How the three source-of-truth files (`models.py`, `enums.py`, Alembic migration) work together
-- ✅ The video lifecycle: temp → dataset_all → train/test → purged
+- ✅ The current video lifecycle: temp → train/<label> → run-specific frame datasets → purged
 - ✅ How tables relate through foreign keys (CASCADE vs SET NULL)
 - ✅ Which table to query for different use cases
 - ✅ Why 3 legacy tables exist but are not part of the active schema

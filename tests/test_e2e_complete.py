@@ -17,13 +17,13 @@ def complete_test_env(tmp_path):
     videos_root.mkdir()
     
     # Create full directory structure
-    for subdir in ["temp", "dataset_all", "train", "test", "thumbs", "manifests"]:
+    for subdir in ["temp", "train", "test", "purged", "thumbs", "manifests"]:
         (videos_root / subdir).mkdir()
     
     # Create test videos across all splits
     test_videos = {
         "temp": ["temp_vid1.mp4", "temp_vid2.mp4", "temp_vid3.mp4"],
-        "dataset_all": ["dataset_vid1.mp4", "dataset_vid2.mp4"],
+        "purged": ["purged_vid1.mp4", "purged_vid2.mp4"],
         "train": ["train_vid1.mp4"],
         "test": ["test_vid1.mp4"],
     }
@@ -121,7 +121,7 @@ class TestCompleteE2EWorkflow:
     
     def test_cross_split_video_search(self, e2e_client):
         """Test finding videos across different splits."""
-        splits = ["temp", "dataset_all", "train", "test"]
+        splits = ["temp", "train", "test", "purged"]
         total_videos = 0
         
         for split in splits:

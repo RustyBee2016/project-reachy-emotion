@@ -1,7 +1,7 @@
 # API Endpoint Reference - Complete Guide
 
-**Version**: 0.08.4.3  
-**Last Updated**: 2025-11-14  
+**Version**: 0.09.0  
+**Last Updated**: 2026-02-18  
 **Base URL**: `http://localhost:8083`
 
 ---
@@ -232,10 +232,45 @@ GET /api/v1/media/video_temp1/thumb
 
 ### Video Promotion
 
+#### POST `/api/media/promote` (Current)
+**Purpose**: Promote clips from `temp` to `train/<label>` or `test` (current runtime flow)  
+**Authentication**: Optional/Environment-dependent  
+**Response Format**: JSON status payload
+
+**Headers**:
+- `Content-Type`: `application/json`
+- `Idempotency-Key` (recommended from gateway clients)
+
+**Request Body**:
+```json
+{
+  "video_id": "<video-uuid>",
+  "dest_split": "train",
+  "label": "happy",
+  "dry_run": false,
+  "correlation_id": "<uuid>"
+}
+```
+
+**Parameters**:
+- `video_id` (required): UUID for the clip record.
+- `dest_split` (required): `train` or `test`.
+- `label` (required when `dest_split=train`): must be one of `happy`, `sad`, `neutral`.
+- `dry_run` (optional): validate path + payload without mutating files/DB.
+- `correlation_id` (optional): trace ID for logs and troubleshooting.
+
+**Behavior Notes**:
+- Train promotion writes files to `train/<label>/...`.
+- Test promotion clears label (`label = null`) in DB policy flow.
+- Endpoint supports adapter input from gateway payload shape.
+
+---
+
 #### POST `/api/v1/promote/stage`
-**Purpose**: Stage videos from temp to dataset_all with emotion labels  
+**Purpose**: Deprecated compatibility endpoint (legacy stage flow)  
+**Status**: Deprecated compatibility only ⚠️  
 **Authentication**: Optional  
-**Response Format**: Standardized envelope
+**Response Format**: Legacy compatibility model (or validation error)
 
 **Headers**:
 - `X-Correlation-ID` (optional): Request tracking ID
@@ -252,10 +287,14 @@ GET /api/v1/media/video_temp1/thumb
 
 **Parameters**:
 - `video_ids` (required): List of video IDs to stage
-- `label` (required): Emotion label - `happy`, `sad`, `angry`, `surprise`, `fear`, `neutral`
+- `label` (required): Emotion label - `happy`, `sad`, `neutral`
 - `dry_run` (optional): If true, validate without executing (default: false)
 
-**Response**:
+**Current Runtime Behavior**:
+- Returns deprecation warning header.
+- Service rejects this operation and instructs clients to use `/api/media/promote` with `dest_split='train'`.
+
+**Legacy Response Shape** (for older clients):
 ```json
 {
   "promoted_ids": ["video1", "video2"],
@@ -267,9 +306,7 @@ GET /api/v1/media/video_temp1/thumb
 ```
 
 **Use Cases**:
-- Dataset curation
-- Emotion labeling
-- Training data preparation
+- Backward compatibility for old integrations only
 
 **Related Services**:
 - PostgreSQL (metadata persistence)
@@ -278,40 +315,48 @@ GET /api/v1/media/video_temp1/thumb
 ---
 
 #### POST `/api/v1/promote/sample`
-**Purpose**: Sample videos from dataset_all to train/test splits  
+**Purpose**: Deprecated compatibility endpoint (legacy sampling flow)  
+**Status**: Deprecated compatibility only ⚠️  
 **Authentication**: Optional  
-**Response Format**: Standardized envelope
+**Response Format**: Legacy compatibility model (or validation error)
 
 **Request Body**:
 ```json
 {
-  "train_fraction": 0.8,
-  "test_fraction": 0.2,
-  "stratify_by_label": true,
+  "run_id": "<run-uuid>",
+  "target_split": "train",
+  "sample_fraction": 0.8,
+  "strategy": "balanced_random",
   "dry_run": false
 }
 ```
 
 **Parameters**:
-- `train_fraction` (required): Fraction for training set (0.0-1.0)
-- `test_fraction` (required): Fraction for test set (0.0-1.0)
-- `stratify_by_label` (optional): Balance by emotion label (default: true)
+- `run_id` (required): Training run UUID
+- `target_split` (required): `train` or `test`
+- `sample_fraction` (required): Fraction > 0
+- `strategy` (optional): `balanced_random`
+- `seed` (optional): deterministic integer seed
 - `dry_run` (optional): Validate without executing (default: false)
 
-**Response**:
+**Current Runtime Behavior**:
+- Returns deprecation warning header.
+- Service rejects this operation and instructs clients to use run-scoped frame dataset preparation.
+
+**Legacy Response Shape** (for older clients):
 ```json
 {
-  "train_ids": ["video1", "video2"],
-  "test_ids": ["video3"],
+  "run_id": "<run-uuid>",
+  "target_split": "train",
+  "copied_ids": ["video1", "video2"],
   "skipped_ids": [],
+  "failed_ids": [],
   "dry_run": false
 }
 ```
 
 **Use Cases**:
-- Training set creation
-- Dataset splitting
-- Model preparation
+- Backward compatibility for old integrations only
 
 **Related Services**:
 - PostgreSQL (metadata and sampling logic)
@@ -525,13 +570,18 @@ meta[emotion]: "happy"
 **Request Body**:
 ```json
 {
-  "video_id": "video1",
-  "dest_split": "dataset_all",
+  "video_id": "<video-uuid>",
+  "dest_split": "train",
   "label": "happy",
   "dry_run": false,
   "correlation_id": "uuid-here"
 }
 ```
+
+**Validation Notes**:
+- `Idempotency-Key` is required.
+- `dest_split` supports `train` or `test`.
+- For `train`, `label` must be `happy`, `sad`, or `neutral`.
 
 **Use Cases**:
 - External promotion requests
@@ -671,12 +721,13 @@ curl http://localhost:8083/api/v1/media/video1
 # Get thumbnail URL
 curl http://localhost:8083/api/v1/media/video1/thumb
 
-# Stage videos
-curl -X POST http://localhost:8083/api/v1/promote/stage \
+# Promote a labeled clip directly to train
+curl -X POST http://localhost:8083/api/media/promote \
   -H "Content-Type: application/json" \
   -H "X-Correlation-ID: test-123" \
   -d '{
-    "video_ids": ["video1", "video2"],
+    "video_id": "11111111-1111-4111-8111-111111111111",
+    "dest_split": "train",
     "label": "happy",
     "dry_run": false
   }'
@@ -698,9 +749,9 @@ const response = await fetch(
 const body = await response.json();
 const videos = body.data.items;
 
-// Stage videos
-const stageResponse = await fetch(
-  'http://localhost:8083/api/v1/promote/stage',
+// Promote directly to train
+const promoteResponse = await fetch(
+  'http://localhost:8083/api/media/promote',
   {
     method: 'POST',
     headers: {
@@ -708,7 +759,8 @@ const stageResponse = await fetch(
       'X-Correlation-ID': crypto.randomUUID()
     },
     body: JSON.stringify({
-      video_ids: ['video1', 'video2'],
+      video_id: '11111111-1111-4111-8111-111111111111',
+      dest_split: 'train',
       label: 'happy',
       dry_run: false
     })
@@ -813,7 +865,7 @@ has_more = data["pagination"]["has_more"]
 
 ---
 
-**Last Updated**: 2025-11-14  
+**Last Updated**: 2026-02-18  
 **API Version**: v1  
-**Service Version**: 0.08.4.3  
+**Service Version**: 0.09.0  
 **Status**: Production Ready ✅

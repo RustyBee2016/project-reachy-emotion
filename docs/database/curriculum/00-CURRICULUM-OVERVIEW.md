@@ -58,7 +58,7 @@ Week 1                    Week 2                    Week 3
 
 ### By End of Week 2
 - Know all 9 tables in the Alembic-managed schema (plus 3 legacy-only tables)
-- Understand the video lifecycle (temp → dataset_all → train/test → purged)
+- Understand the current video lifecycle (temp → train/<label> → run-specific frame datasets → purged)
 - Use stored procedures for business operations
 - Write Python code using SQLAlchemy ORM
 

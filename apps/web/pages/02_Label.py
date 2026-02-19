@@ -20,7 +20,7 @@ st.title("02 — Label & Promote")
 
 st.caption("Browse clips and apply labels with split-label policy enforcement.")
 
-split = st.selectbox("Split", ["temp", "dataset_all", "train", "test"], index=0)
+split = st.selectbox("Split", ["temp", "train", "test", "purged"], index=0)
 execute_mode = st.toggle("Execute promotions (otherwise dry-run)", value=False)
 
 result = None

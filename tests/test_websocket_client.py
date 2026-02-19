@@ -146,7 +146,7 @@ class TestEventHandling:
             event_data = {
                 'video_id': 'abc123',
                 'from_split': 'temp',
-                'to_split': 'dataset_all',
+                'to_split': 'train',
                 'label': 'happy',
                 'success': True,
                 'timestamp': '2025-11-03T21:30:00Z'

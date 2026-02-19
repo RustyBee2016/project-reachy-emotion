@@ -72,7 +72,7 @@ def test_config(tmp_path: Path) -> AppConfig:
     videos_root.mkdir(parents=True, exist_ok=True)
     
     # Create required subdirectories
-    for subdir in ["temp", "train", "test", "dataset_all", "thumbs", "manifests"]:
+    for subdir in ["temp", "train", "test", "purged", "thumbs", "manifests"]:
         (videos_root / subdir).mkdir(exist_ok=True)
     
     # Use file-based database URL

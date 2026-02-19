@@ -37,7 +37,7 @@ async def api_client():
 
 
 @pytest.mark.asyncio
-async def test_stage_videos_success(api_client):
+async def test_legacy_stage_endpoint_deprecated_videos_success(api_client):
     client, app = api_client
 
     class StubService(StubServiceBase):
@@ -70,7 +70,7 @@ async def test_stage_videos_success(api_client):
 
 
 @pytest.mark.asyncio
-async def test_stage_videos_service_validation_error(api_client):
+async def test_legacy_stage_endpoint_deprecated_videos_service_validation_error(api_client):
     client, app = api_client
 
     class StubService(StubServiceBase):
@@ -98,7 +98,7 @@ async def test_stage_videos_service_validation_error(api_client):
 
 
 @pytest.mark.asyncio
-async def test_stage_videos_request_validation(api_client):
+async def test_legacy_stage_endpoint_deprecated_videos_request_validation(api_client):
     client, app = api_client
 
     class StubService(StubServiceBase):

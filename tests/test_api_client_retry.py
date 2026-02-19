@@ -158,8 +158,8 @@ class TestV1EndpointUsage:
         assert "/api/v1/media/list" in call_args[0][0]
     
     @patch('requests.post')
-    def test_stage_uses_v1_endpoint(self, mock_post):
-        """Test that stage_to_dataset_all calls /api/v1/promote/stage."""
+    def test_legacy_stage_endpoint_deprecated_routes_to_direct_promote(self, mock_post):
+        """Test deprecated stage shim routes to /api/media/promote."""
         mock_post.return_value = Mock(
             status_code=200,
             json=lambda: {"status": "success", "promoted_ids": ["test1"]}
@@ -167,9 +167,9 @@ class TestV1EndpointUsage:
         
         api_client.stage_to_dataset_all(["test1"], "happy")
         
-        # Verify v1 endpoint was called
+        # Verify direct promotion endpoint was called
         call_args = mock_post.call_args
-        assert "/api/v1/promote/stage" in call_args[0][0]
+        assert "/api/media/promote" in call_args[0][0]
 
 
 class TestResponseParsing:

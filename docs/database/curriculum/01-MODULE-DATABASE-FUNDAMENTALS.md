@@ -103,7 +103,7 @@ Think of a table like a spreadsheet:
 ├──────────────────┬──────────────────┬─────────────┬─────────────────┤
 │ video_id (PK)    │ file_path        │ split       │ label           │
 ├──────────────────┼──────────────────┼─────────────┼─────────────────┤
-│ abc-123-def      │ videos/001.mp4   │ dataset_all │ happy           │  ← Row 1
+│ abc-123-def      │ train/happy/001.mp4 │ train    │ happy           │  ← Row 1
 │ xyz-789-ghi      │ videos/002.mp4   │ train       │ sad             │  ← Row 2
 │ mno-456-pqr      │ videos/003.mp4   │ temp        │ NULL            │  ← Row 3
 └──────────────────┴──────────────────┴─────────────┴─────────────────┘
@@ -171,7 +171,8 @@ label = NULL        -- No value at all (unknown)
 In Reachy:
 
 - Videos in `temp` split have `label = NULL` (not yet labeled)
-- Videos in `dataset_all` must have a label (NOT NULL)
+- Videos in `train` split have labels (`happy|sad|neutral`)
+- `dataset_all` remains a legacy compatibility split in some APIs/procedures
 
 ---
 
@@ -335,7 +336,7 @@ SELECT * FROM video WHERE split = 'train';
 
 -- Multiple conditions
 SELECT * FROM video
-WHERE split = 'dataset_all'
+WHERE split = 'train'
   AND label = 'happy';
 
 -- Sort results
@@ -350,7 +351,7 @@ SELECT COUNT(*) FROM video WHERE label = 'happy';
 -- Group and count
 SELECT label, COUNT(*) as count
 FROM video
-WHERE split = 'dataset_all'
+WHERE split = 'train'
 GROUP BY label;
 ```
 
@@ -377,13 +378,13 @@ INSERT INTO video (file_path, split) VALUES
 ```sql
 -- Update one row
 UPDATE video
-SET label = 'happy', split = 'dataset_all'
+SET label = 'happy', split = 'train'
 WHERE video_id = '550e8400-e29b-41d4-a716-446655440000';
 
 -- Update multiple rows
 UPDATE video
 SET split = 'train'
-WHERE split = 'dataset_all' AND label = 'happy';
+WHERE split = 'temp' AND label = 'happy';
 
 -- DANGER: Without WHERE, updates ALL rows!
 UPDATE video SET label = 'happy';  -- Don't do this!
@@ -481,28 +482,34 @@ CHECK (
 **In plain English:**
 
 - `temp` videos: NOT labeled (waiting for human review)
-- `dataset_all` videos: MUST be labeled
 - `train` videos: MUST be labeled
 - `test` videos: NOT labeled (to avoid test data leakage)
 - `purged` videos: NOT labeled (deleted for privacy)
+
+**Current workflow note:** The web app now promotes labeled clips directly from `temp` to `train/<label>`. Run-specific frame extraction then builds `train/<run_id>/<label>` datasets (for example, `epoch_01`) before training.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                       VIDEO LIFECYCLE                                 │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                       │
-│   ┌─────────┐    label     ┌─────────────┐   sample    ┌─────────┐  │
-│   │  temp   │ ──────────▶  │ dataset_all │ ─────────▶  │  train  │  │
-│   │ (NULL)  │              │  (labeled)  │             │(labeled)│  │
-│   └────┬────┘              └──────┬──────┘             └─────────┘  │
-│        │                          │                                  │
-│        │ discard                  │ sample             ┌─────────┐  │
-│        │                          └─────────────────▶  │  test   │  │
-│        ▼                                               │ (NULL)  │  │
+│   ┌─────────┐   classify   ┌──────────────────┐  extract(10f/video) │
+│   │  temp   │ ──────────▶  │  train/<label>   │ ───────────────────▶│
+│   │ (NULL)  │              │   (labeled mp4)  │                     │
+│   └────┬────┘              └────────┬─────────┘                     │
+│        │                            │                               │
+│        │ discard                    │ build run dataset             │
+│        │                            ▼                               │
+│        ▼                  ┌──────────────────────┐                  │
+│   ┌─────────┐             │ train/epoch_XX/<lbl> │                  │
+│   │ purged  │ ◀────────── │ + manifests + hash   │                  │
+│   │ (NULL)  │ GDPR request└──────────┬───────────┘                  │
+│   └─────────┘                        │ optional eval                 │
+│                                      ▼                               │
+│                                 ┌─────────┐                          │
+│                                 │  test   │                          │
+│                                 │ (NULL)  │                          │
 │   ┌─────────┐                                          └─────────┘  │
-│   │ purged  │ ◀──────── GDPR deletion request                       │
-│   │ (NULL)  │                                                        │
-│   └─────────┘                                                        │
 │                                                                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -521,12 +528,12 @@ A **transaction** is a group of operations that must all succeed or all fail tog
 BEGIN;  -- Start transaction
 
 -- Step 1: Update video
-UPDATE video SET split = 'dataset_all', label = 'happy'
+UPDATE video SET split = 'train', label = 'happy'
 WHERE video_id = 'abc-123';
 
 -- Step 2: Log the promotion
 INSERT INTO promotion_log (video_id, from_split, to_split, intended_label, actor)
-VALUES ('abc-123', 'temp', 'dataset_all', 'happy', 'alice@example.com');
+VALUES ('abc-123', 'temp', 'train', 'happy', 'alice@example.com');
 
 COMMIT;  -- All or nothing!
 ```
@@ -634,11 +641,11 @@ psql -U reachy_app -d reachy_local
     ('33333333-3333-3333-3333-333333333333', 'videos/exercise/003.mp4', 'temp', 512000, 'ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333ccc333cc');
    ```
 
-2. **Promote one video to dataset_all:**
+2. **Promote one video to train/happy:**
    
    ```sql
    UPDATE video
-   SET split = 'dataset_all', label = 'happy'
+   SET split = 'train', label = 'happy'
    WHERE file_path = 'videos/exercise/001.mp4';
    ```
 
@@ -653,9 +660,9 @@ psql -U reachy_app -d reachy_local
 4. **Try to violate a constraint:**
    
    ```sql
-   -- This should fail! (dataset_all requires label)
+   -- This should fail! (train requires label)
    UPDATE video
-   SET split = 'dataset_all', label = NULL
+   SET split = 'train', label = NULL
    WHERE file_path = 'videos/exercise/002.mp4';
    ```
 
