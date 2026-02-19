@@ -207,16 +207,36 @@ async def promote(
                 sha256=digest.hexdigest(),
             )
             db.add(video)
-            await db.flush()
-            video_id = str(video.video_id)
-            logger.info(
-                "media_mover_promote_registered_missing_video",
-                extra={
-                    "video_id": video_id,
-                    "file_path": video.file_path,
-                    "correlation_id": payload.get("correlation_id", ""),
-                },
-            )
+            try:
+                await db.flush()
+                video_id = str(video.video_id)
+                logger.info(
+                    "media_mover_promote_registered_missing_video",
+                    extra={
+                        "video_id": video_id,
+                        "file_path": video.file_path,
+                        "correlation_id": payload.get("correlation_id", ""),
+                    },
+                )
+            except SQLAlchemyError:
+                await db.rollback()
+                existing_stmt = select(Video).where(
+                    Video.sha256 == digest.hexdigest(),
+                    Video.size_bytes == stat.st_size,
+                )
+                video = (await db.execute(existing_stmt)).scalar_one_or_none()
+                if video is not None:
+                    video_id = str(video.video_id)
+                    logger.info(
+                        "media_mover_promote_reused_existing_video",
+                        extra={
+                            "video_id": video_id,
+                            "file_path": video.file_path,
+                            "correlation_id": payload.get("correlation_id", ""),
+                        },
+                    )
+                else:
+                    raise
     if video is None:
         raise HTTPException(
             status_code=404,
