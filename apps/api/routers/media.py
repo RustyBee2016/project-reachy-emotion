@@ -6,7 +6,7 @@ import logging
 import shutil
 import subprocess
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -199,7 +199,7 @@ async def promote(
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
             video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
-            now = datetime.now(timezone.utc)
+            now = datetime.utcnow()
             new_video_id = str(uuid.uuid4())
             insert_values = {
                 "video_id": new_video_id,
