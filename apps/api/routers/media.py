@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import logging
-import os
 import shutil
 import subprocess
 import uuid
@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 from fastapi import Depends, APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..app.config import AppConfig, get_config
@@ -134,11 +134,53 @@ async def promote(
             if stem and not suffix:
                 candidate_file_names.append(f"{stem}.mp4")
         for file_name in candidate_file_names:
-            stmt = select(Video).where(Video.file_path.endswith(f"/{file_name}"))
+            stmt = select(Video).where(
+                or_(
+                    Video.file_path.endswith(f"/{file_name}"),
+                    Video.file_path.endswith(file_name),
+                )
+            )
             video = (await db.execute(stmt)).scalar_one_or_none()
             if video is not None:
                 video_id = str(video.video_id)
                 break
+    if video is None:
+        candidate_paths: List[Path] = []
+        for candidate in (raw_video_id, clip):
+            if candidate is None:
+                continue
+            candidate_path = Path(str(candidate))
+            names = [candidate_path.name]
+            if candidate_path.stem and not candidate_path.suffix:
+                names.append(f"{candidate_path.stem}.mp4")
+            for name in names:
+                candidate_paths.append(config.videos_root / "temp" / name)
+        existing_path = next((path for path in candidate_paths if path.exists() and path.is_file()), None)
+        if existing_path is not None:
+            stat = existing_path.stat()
+            digest = hashlib.sha256()
+            with existing_path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            video = Video(
+                video_id=str(uuid.uuid4()),
+                file_path=str(existing_path.relative_to(config.videos_root)),
+                split="temp",
+                label=None,
+                size_bytes=stat.st_size,
+                sha256=digest.hexdigest(),
+            )
+            db.add(video)
+            await db.flush()
+            video_id = str(video.video_id)
+            logger.info(
+                "media_mover_promote_registered_missing_video",
+                extra={
+                    "video_id": video_id,
+                    "file_path": video.file_path,
+                    "correlation_id": payload.get("correlation_id", ""),
+                },
+            )
     if video is None:
         raise HTTPException(
             status_code=404,
@@ -152,6 +194,15 @@ async def promote(
     src = config.videos_root / str(video.file_path)
     dst_name = Path(str(video.file_path)).name
     if target_split == "train":
+        if train_label is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "validation_error",
+                    "message": "Train promotion requires label in {happy, sad, neutral}",
+                    "correlation_id": payload.get("correlation_id", ""),
+                },
+            )
         dst = config.videos_root / target_split / train_label / dst_name
     else:
         dst = config.videos_root / target_split / dst_name
@@ -196,7 +247,7 @@ async def promote(
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(src), str(dst))
 
-    from_split = video.split.value if hasattr(video.split, "value") else str(video.split)
+    from_split = str(getattr(video.split, "value", video.split))
     video.split = target_split
     video.label = train_label if target_split == "train" else None
     video.file_path = str(dst.relative_to(config.videos_root))
