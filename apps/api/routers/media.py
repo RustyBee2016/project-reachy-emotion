@@ -119,6 +119,16 @@ async def promote(
             },
         )
 
+    logger.info(
+        "media_mover_promote_roots",
+        extra={
+            "config_videos_root": str(config.videos_root),
+            "media_videos_root": str(VIDEOS_ROOT),
+            "clip": str(clip),
+            "correlation_id": payload.get("correlation_id", ""),
+        },
+    )
+
     video = await db.get(Video, video_id)
     if video is None:
         candidate_file_names = []
@@ -146,25 +156,51 @@ async def promote(
                 break
     if video is None:
         candidate_paths: List[Path] = []
+        candidate_stems = set()
+        roots_to_try = (config.videos_root, VIDEOS_ROOT)
         for candidate in (raw_video_id, clip):
             if candidate is None:
                 continue
             candidate_path = Path(str(candidate))
-            names = [candidate_path.name]
-            if candidate_path.stem and not candidate_path.suffix:
-                names.append(f"{candidate_path.stem}.mp4")
-            for name in names:
-                candidate_paths.append(config.videos_root / "temp" / name)
+            if candidate_path.name:
+                for root in roots_to_try:
+                    candidate_paths.append(root / "temp" / candidate_path.name)
+            if candidate_path.stem:
+                candidate_stems.add(candidate_path.stem)
+                if not candidate_path.suffix:
+                    for root in roots_to_try:
+                        candidate_paths.append(root / "temp" / f"{candidate_path.stem}.mp4")
+
         existing_path = next((path for path in candidate_paths if path.exists() and path.is_file()), None)
+        if existing_path is None and candidate_stems:
+            for root in roots_to_try:
+                temp_root = root / "temp"
+                if not temp_root.exists() or not temp_root.is_dir():
+                    continue
+                for stem in candidate_stems:
+                    wildcard_matches = sorted(
+                        [p for p in temp_root.glob(f"{stem}.*") if p.is_file()],
+                        key=lambda p: str(p),
+                    )
+                    if wildcard_matches:
+                        existing_path = wildcard_matches[0]
+                        break
+                    bare_match = temp_root / stem
+                    if bare_match.exists() and bare_match.is_file():
+                        existing_path = bare_match
+                        break
+                if existing_path is not None:
+                    break
         if existing_path is not None:
             stat = existing_path.stat()
             digest = hashlib.sha256()
             with existing_path.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
+            video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
             video = Video(
                 video_id=str(uuid.uuid4()),
-                file_path=str(existing_path.relative_to(config.videos_root)),
+                file_path=str(existing_path.relative_to(video_root)),
                 split="temp",
                 label=None,
                 size_bytes=stat.st_size,
