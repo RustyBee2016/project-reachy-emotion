@@ -125,11 +125,16 @@ async def promote(
         for candidate in (raw_video_id, clip):
             if candidate is None:
                 continue
-            name = Path(str(candidate)).name
+            candidate_path = Path(str(candidate))
+            name = candidate_path.name
+            stem = candidate_path.stem
+            suffix = candidate_path.suffix
             if name:
                 candidate_file_names.append(name)
+            if stem and not suffix:
+                candidate_file_names.append(f"{stem}.mp4")
         for file_name in candidate_file_names:
-            stmt = select(Video).where(Video.file_path.endswith(file_name))
+            stmt = select(Video).where(Video.file_path.endswith(f"/{file_name}"))
             video = (await db.execute(stmt)).scalar_one_or_none()
             if video is not None:
                 video_id = str(video.video_id)
