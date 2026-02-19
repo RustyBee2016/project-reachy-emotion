@@ -403,17 +403,13 @@ def reject_video(video_id: str, correlation_id: str, reason: Optional[str] = Non
 
 
 @retry_on_failure()
-def stage_to_dataset_all(
+def stage_to_train(
     video_ids: list[str],
     label: str,
     dry_run: bool = False,
     correlation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Deprecated compatibility shim for legacy stage API callers.
-
-    Routes each video_id through direct promotion semantics:
-      temp -> train/<label> via /api/media/promote
-    """
+    """Batch helper to promote videos from temp -> train/<label>."""
     promoted_ids: list[str] = []
     skipped_ids: list[str] = []
     failed_ids: list[str] = []
@@ -438,6 +434,5 @@ def stage_to_dataset_all(
         "skipped_ids": skipped_ids,
         "failed_ids": failed_ids,
         "dry_run": dry_run,
-        "deprecated": True,
-        "message": "stage_to_dataset_all() is deprecated; use promote(..., dest_split='train').",
+        "message": "batch promotion completed via /api/media/promote",
     }

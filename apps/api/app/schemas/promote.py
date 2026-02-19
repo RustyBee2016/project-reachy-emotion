@@ -20,6 +20,7 @@ _ALLOWED_TARGET_SPLITS = frozenset(str(split) for split in SelectionTargetEnum.e
 VideoIdList = Annotated[List[UUID4], Field(min_length=1, max_length=200)]
 SampleFraction = Annotated[float, Field(gt=0)]
 OptionalSeed = Annotated[Optional[int], Field(ge=0, le=2**31 - 1)]
+RunId = Annotated[str, Field(pattern=r"^run_\d{4}$")]
 
 
 class StageRequest(BaseModel):
@@ -77,7 +78,7 @@ class StageResponse(BaseModel):
 class SampleRequest(BaseModel):
     """Deprecated compatibility request for legacy sample endpoint."""
 
-    run_id: UUID4
+    run_id: RunId
     target_split: str = Field(..., description="Destination split (train or test).")
     sample_fraction: SampleFraction = Field(
         ...,
@@ -147,7 +148,7 @@ class ResetManifestRequest(BaseModel):
         ...,
         description="Human-readable reason for triggering a manifest reset.",
     )
-    run_id: Optional[UUID4] = Field(
+    run_id: Optional[RunId] = Field(
         default=None,
         description="Optional training run identifier scoped to the reset.",
     )

@@ -58,7 +58,7 @@ async def test_legacy_stage_endpoint_deprecated_video_with_emotion_label(
     # Act: Legacy stage endpoint is deprecated
     service = PromoteService(async_session, actor="test_user")
     with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-        await service.stage_to_dataset_all(
+        await service.stage_to_train(
             video_ids=[test_video_id],
             label="happy",
             dry_run=False,
@@ -115,7 +115,7 @@ async def test_legacy_stage_endpoint_deprecated_multiple_videos_different_labels
     
     for video_id, label in test_data:
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all(
+            await service.stage_to_train(
                 video_ids=[video_id],
                 label=label,
                 dry_run=False,
@@ -156,7 +156,7 @@ async def test_invalid_emotion_label_rejected(
     service = PromoteService(async_session, actor="test_user")
     
     with pytest.raises(PromotionValidationError) as exc_info:
-        await service.stage_to_dataset_all(
+        await service.stage_to_train(
             video_ids=[test_video_id],
             label="invalid_emotion_label",
             dry_run=False,
@@ -197,7 +197,7 @@ async def test_promotion_audit_log_captures_metadata(
     correlation_id = str(uuid.uuid4())
     service.set_correlation_id(correlation_id)
     with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-        await service.stage_to_dataset_all(
+        await service.stage_to_train(
             video_ids=[test_video_id],
             label="neutral",
             dry_run=False,
@@ -234,7 +234,7 @@ async def test_dry_run_does_not_persist_changes(
     # Act: Legacy stage endpoint is deprecated (even in dry_run)
     service = PromoteService(async_session, actor="test_user")
     with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-        await service.stage_to_dataset_all(
+        await service.stage_to_train(
             video_ids=[test_video_id],
             label="happy",
             dry_run=True,
@@ -283,7 +283,7 @@ async def test_all_valid_emotion_labels(
         # Act: Legacy stage endpoint is deprecated
         service = PromoteService(async_session, actor="test_user")
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all(
+            await service.stage_to_train(
                 video_ids=[video_id],
                 label=emotion,
                 dry_run=False,

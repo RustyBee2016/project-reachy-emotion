@@ -5,7 +5,7 @@ Reviewer: Codex (for Rusty)
 
 ## Scope
 
-This review focuses on recent web-app and API changes affecting ingest, labeling, and promotion behavior across `temp → dataset_all/train/test`.
+This review focuses on recent web-app and API changes affecting ingest, labeling, and promotion behavior across `temp → train/{emotion_label}` with run-scoped extraction under `train/{emotion_label}/run_xxxx` and consolidated datasets under `train/run/run_xxxx` and `test/run_xxxx`.
 
 Recent commit series inspected:
 - `d6f6539` (web app permissions + promotion fallback updates)
@@ -15,7 +15,7 @@ Recent commit series inspected:
 ## Key Findings (Recent Changes)
 
 1. **Web UI now has a safer promotion fallback path** in `apps/web/landing_page.py`:
-   - Preferred path: `stage_to_dataset_all(video_id=UUID)`
+   - Preferred path: `stage_to_train(video_id=UUID)`
    - Fallback path: legacy gateway promotion using filename clip identifier when UUID staging fails.
 
 2. **Luma-generated videos are explicitly registered** via `register_local_video(...)` when ingest metadata is missing, reducing "unknown ID" promotion failures.
@@ -23,7 +23,7 @@ Recent commit series inspected:
 3. **Web API client resiliency improved**:
    - Retry decorator for transient failures.
    - TLS verification controls for local/self-signed setups.
-   - Migration toward v1 endpoints (`/api/v1/media/list`, `/api/v1/ingest/register-local`, `/api/v1/promote/stage`).
+   - Migration toward v1 endpoints (`/api/v1/media/list`, `/api/v1/ingest/register-local`) with direct promotions via `/api/media/promote`.
 
 4. **Policy/logic mismatch remains in orchestrator docs/workflow**:
    - Some n8n docs/workflows historically described 2-class logic (`happy/sad`) and older labels, while current DB + web flow uses 3-class (`happy/sad/neutral`) with strict split-label policy.
@@ -32,7 +32,7 @@ Recent commit series inspected:
 
 ### A) Web UI scripts
 - `apps/web/landing_page.py` — upload/generate/classify UI and promotion calls.
-- `apps/web/api_client.py` — HTTP client for ingest/list/promote/stage/reject.
+- `apps/web/api_client.py` — HTTP client for ingest/list/promote/stage_to_train/reject.
 - `apps/web/pages/02_Label.py` — operator page for list + promote actions.
 
 ### B) API (FastAPI) scripts
@@ -63,16 +63,18 @@ Recent commit series inspected:
 1. **Ingest**
    - Upload or generation creates a video in temp storage.
    - API stores metadata and hash; DB row uses `split='temp'`, `label=NULL`.
+   - Clip remains in `temp/` until operator classification.
 
 2. **Labeling / Classification**
    - Web UI gets/ensures `video_id`.
-   - On submit, UI tries **staging to `dataset_all`** with explicit label.
+   - Operator (via UI) assigns `happy/sad/neutral`; Labeling Agent updates DB.
+   - On submit, UI tries staging to `train/{emotion_label}` including explicit label.
    - If staging endpoint cannot be used, UI falls back to legacy promote path.
 
 3. **Promotion / Sampling**
-   - `stage_to_dataset_all` moves `temp/*` to `dataset_all/*`, writes label + promotion log.
-   - `sample_split` copies from `dataset_all` to `train/{run_id}` or `test/{run_id}`.
-   - Test samples are forced unlabeled (`label=NULL`), train remains labeled.
+   - Promotion moves `temp/*` to `train/{emotion_label}` and writes promotion metadata/audit log.
+   - Dataset preparation extracts frames into `train/{emotion_label}/run_xxxx`.
+   - Consolidation builds `train/run/run_xxxx/{emotion_label}` (training set) and `test/run_xxxx/{emotion_label}` when test runs are generated.
 
 4. **Reconciliation / Training readiness**
    - Reconciler checks filesystem-vs-DB drift.
@@ -81,8 +83,8 @@ Recent commit series inspected:
 ## Risks and Recommendations
 
 1. **Legacy and v1 paths diverge**
-   - Risk: behavior differences between `stage_to_dataset_all` and legacy `/api/media/promote`.
-   - Recommendation: phase out legacy flow after hardening `register_local_video + stage` path.
+   - Risk: behavior differences between compatibility staging paths and direct `/api/media/promote`.
+   - Recommendation: phase out deprecated stage/sample compatibility calls after hardening `register_local_video + promote` path.
 
 2. **n8n docs/workflow label sets are stale in places**
    - Risk: operator confusion and incorrect assumptions if legacy docs are not kept aligned to 3-class policy.

@@ -22,7 +22,7 @@ class DatasetPreparer:
 
     EMOTIONS = ("happy", "sad", "neutral")
     FRAMES_PER_VIDEO = 10
-    RUN_ID_PATTERN = re.compile(r"^epoch_\d{2}$")
+    RUN_ID_PATTERN = re.compile(r"^run_\d{4}$")
     
     def __init__(self, base_path: str):
         """
@@ -34,11 +34,13 @@ class DatasetPreparer:
         self.base_path = Path(base_path)
         self.manifests_path = self.base_path / 'manifests'
         self.train_path = self.base_path / 'train'
+        self.train_runs_path = self.train_path / 'run'
         self.test_path = self.base_path / 'test'
         
         # Create directories
         self.manifests_path.mkdir(exist_ok=True)
         self.train_path.mkdir(exist_ok=True)
+        self.train_runs_path.mkdir(parents=True, exist_ok=True)
         self.test_path.mkdir(exist_ok=True)
     
     def prepare_training_dataset(
@@ -51,7 +53,7 @@ class DatasetPreparer:
         Prepare frame-based training dataset for a run.
         
         Args:
-            run_id: Run identifier (epoch_XX). Auto-generated if omitted.
+            run_id: Run identifier (run_xxxx). Auto-generated if omitted.
             train_fraction: Deprecated compatibility argument (ignored)
             seed: Random seed for reproducibility
         
@@ -95,20 +97,20 @@ class DatasetPreparer:
         }
 
     def resolve_run_id(self, run_id: Optional[str] = None) -> str:
-        """Validate run ID or generate the next epoch_XX identifier."""
+        """Validate run ID or generate the next run_xxxx identifier."""
         if run_id is None:
-            return self._next_epoch_run_id()
+            return self._next_run_id()
 
         normalized = run_id.strip()
         if not normalized:
             raise ValueError("run_id must not be empty")
         if not self.RUN_ID_PATTERN.fullmatch(normalized):
-            raise ValueError("run_id must match pattern epoch_XX (e.g., epoch_01)")
+            raise ValueError("run_id must match pattern run_xxxx (e.g., run_0001)")
         return normalized
 
-    def _next_epoch_run_id(self) -> str:
-        """Generate next epoch run identifier from existing train/manifests artifacts."""
-        pattern = re.compile(r"^epoch_(\d{2})$")
+    def _next_run_id(self) -> str:
+        """Generate next run identifier from existing train/manifests artifacts."""
+        pattern = re.compile(r"^run_(\d{4})$")
         max_idx = 0
 
         if self.train_path.exists():
@@ -118,18 +120,35 @@ class DatasetPreparer:
                 match = pattern.fullmatch(entry.name)
                 if match:
                     max_idx = max(max_idx, int(match.group(1)))
+                for nested in entry.iterdir():
+                    if not nested.is_dir():
+                        continue
+                    nested_match = pattern.fullmatch(nested.name)
+                    if nested_match:
+                        max_idx = max(max_idx, int(nested_match.group(1)))
+
+        if self.base_path.exists():
+            for entry in self.base_path.iterdir():
+                if not entry.is_dir():
+                    continue
+                for prefix in ("train_", "test_"):
+                    if not entry.name.startswith(prefix):
+                        continue
+                    match = pattern.fullmatch(entry.name[len(prefix) :])
+                    if match:
+                        max_idx = max(max_idx, int(match.group(1)))
 
         if self.manifests_path.exists():
-            for manifest in self.manifests_path.glob("epoch_*_train.jsonl"):
+            for manifest in self.manifests_path.glob("run_*_train.jsonl"):
                 name = manifest.name.removesuffix("_train.jsonl")
                 match = pattern.fullmatch(name)
                 if match:
                     max_idx = max(max_idx, int(match.group(1)))
 
         next_idx = max_idx + 1
-        if next_idx > 99:
-            raise ValueError("Maximum epoch run_id exceeded (epoch_99)")
-        return f"epoch_{next_idx:02d}"
+        if next_idx > 9999:
+            raise ValueError("Maximum run_id exceeded (run_9999)")
+        return f"run_{next_idx:04d}"
 
     def _collect_source_videos(self) -> Dict[str, List[Path]]:
         """Collect source videos from train/<label> roots (excluding run directories)."""
@@ -240,8 +259,8 @@ class DatasetPreparer:
         run_id: str,
         extracted_frames: List[Dict[str, str]],
     ) -> List[Dict[str, str]]:
-        """Create consolidated train/<run_id>/<label>/ frame dataset for training."""
-        run_root = self.train_path / run_id
+        """Create consolidated train/run/run_xxxx/<label>/ frame dataset for training."""
+        run_root = self.train_runs_path / run_id
         if run_root.exists():
             shutil.rmtree(run_root)
         run_root.mkdir(parents=True, exist_ok=True)
@@ -318,7 +337,10 @@ class DatasetPreparer:
         hasher = hashlib.sha256()
         
         if run_id:
-            dataset_root = self.train_path / run_id
+            dataset_root = self.train_runs_path / run_id
+            if not dataset_root.exists():
+                # Backward-compat for older consolidated layout.
+                dataset_root = self.base_path / f"train_{run_id}"
             all_files = sorted(dataset_root.rglob('*.jpg'))
         else:
             dataset_root = self.train_path
@@ -339,9 +361,19 @@ class DatasetPreparer:
         """Remove frame extraction artifacts for a completed run."""
         normalized_run_id = self.resolve_run_id(run_id)
 
-        consolidated_dir = self.train_path / normalized_run_id
-        if consolidated_dir.exists():
-            shutil.rmtree(consolidated_dir)
+        train_consolidated_dir = self.train_runs_path / normalized_run_id
+        if train_consolidated_dir.exists():
+            shutil.rmtree(train_consolidated_dir)
+        legacy_train_consolidated_dir = self.base_path / f"train_{normalized_run_id}"
+        if legacy_train_consolidated_dir.exists():
+            shutil.rmtree(legacy_train_consolidated_dir)
+
+        test_consolidated_dir = self.test_path / normalized_run_id
+        if test_consolidated_dir.exists():
+            shutil.rmtree(test_consolidated_dir)
+        legacy_test_consolidated_dir = self.base_path / f"test_{normalized_run_id}"
+        if legacy_test_consolidated_dir.exists():
+            shutil.rmtree(legacy_test_consolidated_dir)
 
         for label in self.EMOTIONS:
             label_run_dir = self.train_path / label / normalized_run_id

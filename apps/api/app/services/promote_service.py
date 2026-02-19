@@ -1,6 +1,6 @@
 """Promotion service for promotion/manifest orchestration.
 
-Legacy dataset_all stage/sample operations are intentionally deprecated.
+Legacy stage/sample compatibility endpoints are intentionally deprecated.
 Current runtime flow promotes clips directly temp -> train/<label> via
 /api/media/promote and builds run-scoped frame datasets during training prep.
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import random
+import re
 import uuid
 from collections import deque
 from contextlib import asynccontextmanager
@@ -45,7 +46,7 @@ class PromotionConflictError(PromotionError):
 
 @dataclass
 class StageResult:
-    """Outcome summary for legacy staging compatibility operations."""
+    """Outcome summary for stage compatibility operations."""
 
     promoted_ids: Sequence[str]
     skipped_ids: Sequence[str]
@@ -55,7 +56,7 @@ class StageResult:
 
 @dataclass
 class SampleResult:
-    """Outcome summary for legacy sampling compatibility operations."""
+    """Outcome summary for sample compatibility operations."""
 
     run_id: str
     target_split: str
@@ -67,6 +68,7 @@ class SampleResult:
 
 _VALID_LABELS = frozenset(str(label) for label in EmotionEnum.enums)
 _VALID_TARGET_SPLITS = frozenset(str(split) for split in SelectionTargetEnum.enums)
+_RUN_ID_PATTERN = re.compile(r"^run_\d{4}$")
 
 
 class PromoteService:
@@ -128,28 +130,29 @@ class PromoteService:
 
         self._manifest.reset(reason=reason, run_id=run_id)
 
-    async def stage_to_dataset_all(
+    async def stage_to_train(
         self,
         video_ids: Iterable[str],
         *,
         label: str | None,
         dry_run: bool = False,
     ) -> StageResult:
-        """Deprecated compatibility shim for old stage endpoint.
+        """Compatibility shim for deprecated /api/v1/promote/stage endpoint.
 
         Current runtime policy uses direct promotion via `/api/media/promote` with:
         - dest_split='train'
         - label in {'happy','sad','neutral'}
         """
 
-        # Touch validators for consistent error messaging if payload is malformed.
-        self._parse_video_ids(video_ids)
-        self._normalize_label(label)
-        _ = dry_run
-        raise PromotionValidationError(
-            "Deprecated endpoint: /api/v1/promote/stage is no longer supported. "
-            "Use /api/media/promote with dest_split='train' and a 3-class label."
-        )
+        async with self._track_operation("stage"):
+            # Touch validators for consistent error messaging if payload is malformed.
+            self._parse_video_ids(video_ids)
+            self._normalize_label(label)
+            _ = dry_run
+            raise PromotionValidationError(
+                "Deprecated endpoint: /api/v1/promote/stage is no longer supported. "
+                "Use /api/media/promote with dest_split='train' and a 3-class label."
+            )
 
     async def sample_split(
         self,
@@ -161,23 +164,24 @@ class PromoteService:
         seed: int | None = None,
         dry_run: bool = False,
     ) -> SampleResult:
-        """Deprecated compatibility shim for old sample endpoint.
+        """Compatibility shim for deprecated /api/v1/promote/sample endpoint.
 
         Run-scoped frame datasets are now created by training dataset preparation
-        from train/<label> sources (e.g., train/epoch_XX/<label>). This endpoint
-        no longer orchestrates sampling from legacy dataset_all.
+        from train/<label> sources (e.g., train/<label>/run_xxxx) and consolidated
+        train/run/run_xxxx and test/run_xxxx outputs.
         """
 
-        self._parse_uuid(run_id, "run_id")
-        self._normalize_target_split(target_split)
-        self._normalize_fraction(sample_fraction)
-        self._validate_strategy(strategy)
-        _ = seed
-        _ = dry_run
-        raise PromotionValidationError(
-            "Deprecated endpoint: /api/v1/promote/sample is no longer supported. "
-            "Use run-scoped frame dataset preparation for training runs."
-        )
+        async with self._track_operation("sample"):
+            self._normalize_run_id(run_id)
+            self._normalize_target_split(target_split)
+            self._normalize_fraction(sample_fraction)
+            self._validate_strategy(strategy)
+            _ = seed
+            _ = dry_run
+            raise PromotionValidationError(
+                "Deprecated endpoint: /api/v1/promote/sample is no longer supported. "
+                "Use run-scoped frame dataset preparation for training runs."
+            )
 
     def _parse_video_ids(self, video_ids: Iterable[str]) -> list[str]:
         ids = [self._parse_uuid(raw_id, "video_id") for raw_id in video_ids]
@@ -214,6 +218,13 @@ class PromoteService:
         normalized = target_split.strip().lower()
         if normalized not in _VALID_TARGET_SPLITS:
             raise PromotionValidationError(f"Unsupported target_split '{target_split}'.")
+        return normalized
+
+    @staticmethod
+    def _normalize_run_id(run_id: str) -> str:
+        normalized = run_id.strip().lower()
+        if not _RUN_ID_PATTERN.fullmatch(normalized):
+            raise PromotionValidationError("run_id must match run_xxxx (e.g., run_0001)")
         return normalized
 
     @staticmethod

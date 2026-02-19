@@ -64,16 +64,15 @@ class VideoRepository:
         rows = (await self._session.execute(stmt)).scalars().all()
         return [self._to_record(row) for row in rows]
 
-    async def fetch_dataset_all_for_sampling(
+    async def fetch_train_pool_for_sampling(
         self,
         *,
         exclude_ids: Collection[str] | None = None,
     ) -> list[VideoRecord]:
-        """Legacy compatibility hook retained for deprecated sample endpoint.
+        """Compatibility hook retained for deprecated sample endpoint.
 
-        The runtime promotion flow no longer stages clips in dataset_all.
-        Sampling from dataset_all has been removed in favor of run-scoped
-        frame dataset preparation from train/<label> sources.
+        Runtime sampling now relies on run-scoped frame dataset preparation
+        from train/<label> sources.
         """
 
         _ = exclude_ids

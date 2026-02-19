@@ -11,7 +11,6 @@ depends_on = None
 
 split_enum = sa.Enum(
     "temp",
-    "dataset_all",
     "train",
     "test",
     "purged",
@@ -71,7 +70,7 @@ def upgrade() -> None:
             (
                 split IN ('temp', 'test', 'purged') AND label IS NULL
             ) OR (
-                split IN ('dataset_all', 'train') AND label IS NOT NULL
+                split IN ('train') AND label IS NOT NULL
             )
             """,
             name="chk_video_split_label_policy",

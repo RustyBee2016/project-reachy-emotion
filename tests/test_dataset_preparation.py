@@ -52,12 +52,12 @@ class TestDatasetPreparation:
         
         # Prepare with 70/30 split
         result = preparer.prepare_training_dataset(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
         
-        assert result['run_id'] == 'epoch_01'
+        assert result['run_id'] == 'run_0001'
         assert result['train_count'] == 300  # 30 videos * 10 frames
         assert result['test_count'] == 0
     
@@ -69,13 +69,13 @@ class TestDatasetPreparation:
         
         # Prepare dataset
         result = preparer.prepare_training_dataset(
-            run_id='epoch_02',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=123
         )
         
         # Check stratification in manifests
-        train_manifest_path = Path(temp_dataset_dir) / 'manifests' / 'epoch_02_train.jsonl'
+        train_manifest_path = Path(temp_dataset_dir) / 'manifests' / 'run_0002_train.jsonl'
         assert train_manifest_path.exists()
         
         # Count labels in training set
@@ -98,14 +98,14 @@ class TestDatasetPreparation:
         preparer = DatasetPreparer(temp_dataset_dir)
         
         result = preparer.prepare_training_dataset(
-            run_id='epoch_03',
+            run_id='run_0003',
             train_fraction=0.8
         )
         
         # Check manifest files exist
         manifests_dir = Path(temp_dataset_dir) / 'manifests'
-        train_manifest = manifests_dir / 'epoch_03_train.jsonl'
-        test_manifest = manifests_dir / 'epoch_03_test.jsonl'
+        train_manifest = manifests_dir / 'run_0003_train.jsonl'
+        test_manifest = manifests_dir / 'run_0003_test.jsonl'
         
         assert train_manifest.exists()
         assert test_manifest.exists()
@@ -140,13 +140,13 @@ class TestDatasetPreparation:
         
         # Prepare twice with same seed
         result1 = preparer.prepare_training_dataset(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=999
         )
         
         result2 = preparer.prepare_training_dataset(
-            run_id='epoch_02',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=999
         )
@@ -159,9 +159,10 @@ class TestDatasetPreparation:
 def _write_test_video(path: Path, frame_count: int = 20) -> None:
     """Create a tiny synthetic MP4 video for frame extraction tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    fourcc_fn = getattr(cv2, "VideoWriter_fourcc")
     writer = cv2.VideoWriter(
         str(path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
+        fourcc_fn(*"mp4v"),
         10.0,
         (32, 32),
     )

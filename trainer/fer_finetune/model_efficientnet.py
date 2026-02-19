@@ -459,7 +459,7 @@ def get_hsemotion_class_mapping(target_classes: List[str]) -> Dict[int, int]:
     Useful when using full HSEmotion weights for binary classification.
     
     Args:
-        target_classes: List of target class names (e.g., ["happy", "sad"])
+        target_classes: List of target class names (e.g., ["happy", "sad", "neutral"])
     
     Returns:
         Dict mapping HSEmotion index to target index

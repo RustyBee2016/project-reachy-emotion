@@ -57,7 +57,7 @@ async def stage_videos(  # noqa: D401
     )
     service.set_correlation_id(correlation_id)
     try:
-        result = await service.stage_to_dataset_all(
+        result = await service.stage_to_train(
             [str(video_id) for video_id in payload.video_ids],
             label=payload.label,
             dry_run=payload.dry_run,

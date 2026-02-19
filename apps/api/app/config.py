@@ -104,10 +104,6 @@ class AppConfig:
         default_factory=lambda: os.getenv("REACHY_TEMP_DIR", "temp")
     )
     
-    dataset_dir: str = field(
-        default_factory=lambda: os.getenv("REACHY_DATASET_DIR", "dataset_all")
-    )
-    
     train_dir: str = field(
         default_factory=lambda: os.getenv("REACHY_TRAIN_DIR", "train")
     )
@@ -222,11 +218,6 @@ class AppConfig:
     def temp_path(self) -> Path:
         """Full path to temp directory."""
         return self.videos_root / self.temp_dir
-    
-    @property
-    def dataset_path(self) -> Path:
-        """Full path to legacy dataset_all directory (compatibility only)."""
-        return self.videos_root / self.dataset_dir
     
     @property
     def train_path(self) -> Path:
@@ -345,7 +336,6 @@ class AppConfig:
             "storage": {
                 "videos_root": str(self.videos_root),
                 "temp_path": str(self.temp_path),
-                "legacy_dataset_path": str(self.dataset_path),
                 "train_path": str(self.train_path),
                 "test_path": str(self.test_path),
                 "thumbs_path": str(self.thumbs_path),

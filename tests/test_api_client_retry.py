@@ -158,14 +158,14 @@ class TestV1EndpointUsage:
         assert "/api/v1/media/list" in call_args[0][0]
     
     @patch('requests.post')
-    def test_legacy_stage_endpoint_deprecated_routes_to_direct_promote(self, mock_post):
-        """Test deprecated stage shim routes to /api/media/promote."""
+    def test_stage_to_train_routes_to_direct_promote(self, mock_post):
+        """Test stage_to_train helper routes to /api/media/promote."""
         mock_post.return_value = Mock(
             status_code=200,
             json=lambda: {"status": "success", "promoted_ids": ["test1"]}
         )
         
-        api_client.stage_to_dataset_all(["test1"], "happy")
+        api_client.stage_to_train(["test1"], "happy")
         
         # Verify direct promotion endpoint was called
         call_args = mock_post.call_args

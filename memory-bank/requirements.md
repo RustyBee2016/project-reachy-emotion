@@ -91,7 +91,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 ## 4. Architecture & Data Flow
 
-**Hot Path (low‑latency):** Jetson/ingest → `/videos/temp` → human labeling in web UI → `POST /api/media/promote` (direct promote into `/videos/train/<label>`) → per-run frame extractor selects 10 random frames/video into `train/<label>/<run_id>` and consolidated `train/<run_id>/<label>` → run manifests → training/eval → gated deploy.
+**Hot Path (low‑latency):** Jetson/ingest → `/videos/temp` → human labeling in web UI → `POST /api/media/promote` (direct promote into `/videos/train/<label>`) → per-run frame extractor selects 10 random frames/video into `train/<label>/<run_id>` and consolidated `train/run/<run_id>/<label>` (with optional test mirrors under `test/<run_id>/<label>`) → run manifests → training/eval → gated deploy.
 
 **Serving:** Nginx serves `/thumbs/`; the Ubuntu 2 FastAPI gateway exposes `/api/videos/*`, `/api/v1/promote/*`, `/health`, `/metrics`, and WebSockets for cues, while the Ubuntu 1 Media Mover (`https://10.0.4.130/api/media`) handles filesystem mutations.
 
@@ -123,7 +123,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - **FR‑STOR‑002 — Promote labeled clip to train**  
   `POST /api/media/promote {video_id, dest_split="train", label, dry_run?}` atomically moves accepted clips from `/videos/temp` into `/videos/train/<label>/` while updating Postgres metadata and promotion logs.
 - **FR‑STOR‑003 — Run-specific frame extraction dataset**  
-  Fine-tuning prep extracts **10 random frames per source video** from `/videos/train/<label>/*.mp4` into `/videos/train/<label>/<run_id>/`, then consolidates into `/videos/train/<run_id>/<label>/`. Run manifests enumerate the consolidated frame paths for training.
+  Fine-tuning prep extracts **10 random frames per source video** from `/videos/train/<label>/*.mp4` into `/videos/train/<label>/<run_id>/`, then consolidates into `/videos/train/run/<run_id>/<label>/`. Test-ready mirrors follow `/videos/test/<run_id>/<label>/` when test datasets are generated. Run manifests enumerate the consolidated frame paths for training.
 - **FR‑STOR‑004 — Thumbnails**  
   `GET /api/videos/{id}/thumb` returns file/redirect; thumbnails pre‑generated at `/videos/thumbs/{video_id}.jpg`.
 - **FR‑STOR‑005 — Manifest rebuild**  
@@ -330,7 +330,7 @@ The project is organized into three sequential phases, each building on the prev
 4. Ubuntu 2 enqueues cue; Jetson receives via WebSocket and acknowledges.
 5. Browser shows emotion, confidence, LLM text, video URL, thumbnail.
 6. User curates → DB updated; clip promoted `temp → train/<label>` via Media Mover (label enforcement occurs here).
-7. Training orchestrator prepares run-specific frame datasets by extracting 10 random frames/video into `train/<label>/<run_id>` and consolidated `train/<run_id>/<label>`.
+7. Training orchestrator prepares run-specific frame datasets by extracting 10 random frames/video into `train/<label>/<run_id>` and consolidated `train/run/<run_id>/<label>` (plus `test/<run_id>/<label>` for test-ready outputs).
 8. TAO retraining; new TRT engine versioned/signed; packaged for DeepStream `nvinfer`.
 
 ---
@@ -394,7 +394,7 @@ Server → client: `{ type: "tts|gesture", text, gesture_id, correlation_id, exp
 - **Path convention**: DB keeps **relative** `storage_path` (e.g., `videos/train/happy/abc123.mp4`); `split` includes `temp`, `train`, `test`.
 - **On‑ingest**: compute `sha256`, `size_bytes`; `ffprobe` metadata; generate `thumbs/{stem}.jpg`.
 - **Promotion**: accepted clips move `temp → train/<label>`; labels validated and promotion log appended during the move.
-- **Run frame extraction**: per training run, dataset prep extracts 10 random frames per source video into `train/<label>/<run_id>/` and builds consolidated training frames in `train/<run_id>/<label>/`.
+- **Run frame extraction**: per training run, dataset prep extracts 10 random frames per source video into `train/<label>/<run_id>/` and builds consolidated training frames in `train/run/<run_id>/<label>/`.
 - **Run manifests**: each run writes `manifests/<run_id>_train.jsonl` with frame paths and source-video metadata.
 - **Dedup**: unique index on `(sha256, size_bytes)` applies across all splits.
 - **Dry‑run**: supported for both staging and sampling operations to preview counts and collisions.
@@ -523,6 +523,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 - [2025-10-28 21:37:00] - Added staged dataset preparation workflows, randomized train/test selection requirements, API/schema updates, and monitoring expectations.
 - [2025-11-26 03:55:00] - Documented `/api/v1/promote/*` gateway endpoints, refreshed DB credentials (`reachy_dev`), noted full gateway test pass, and aligned observability/networking details.
 - [2026-02-18 11:50:00] - Updated architecture to direct `temp -> train/<label>` promotion and run-specific frame extraction (10 frames/video) into `train/<label>/<run_id>` with consolidated `train/<run_id>/<label>` datasets and frame-based manifests.
+- [2026-02-19 10:58:00] - Updated consolidated run dataset conventions to `train/run/<run_id>/<label>` and `test/<run_id>/<label>` while preserving run-scoped extraction under `train/<label>/<run_id>`.
 
 ---
 
@@ -542,7 +543,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 
 ## 24. Acceptance Criteria
 - **Gateway+Media Mover expose** `list`, `thumb`, direct `promote` (`temp -> train/<label>`), `relabel`, and manifest rebuild endpoints with auth and atomic moves
-- **Training prep outputs run-specific frame datasets** in `train/<label>/<run_id>` and consolidated `train/<run_id>/<label>` with exactly 10 sampled frames per source video when sufficient frames exist
+- **Training prep outputs run-specific frame datasets** in `train/<label>/<run_id>` and consolidated `train/run/<run_id>/<label>` (and optional `test/<run_id>/<label>`) with exactly 10 sampled frames per source video when sufficient frames exist
 - MLflow runs contain **dataset_hash** and (if ZFS) **snapshot_ref** with artifacts visible in UI
 - NAS sync passes nightly; quarterly restore verified
 - Nginx thumbnail latency and manifest rebuild times meet targets in §6.3

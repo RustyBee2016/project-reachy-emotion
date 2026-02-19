@@ -91,7 +91,7 @@ class TestTrainingOrchestrator:
         )
         
         dataset_info = orchestrator.prepare_dataset(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
@@ -314,7 +314,7 @@ Training completed
         
         # Run pipeline (will skip actual training due to mock)
         results = orchestrator.run_training_pipeline(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
@@ -410,9 +410,10 @@ class TestErrorHandling:
 def _write_test_video(path: Path, frame_count: int = 20) -> None:
     """Create a tiny synthetic MP4 video for frame extraction tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    fourcc_fn = getattr(cv2, "VideoWriter_fourcc")
     writer = cv2.VideoWriter(
         str(path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
+        fourcc_fn(*"mp4v"),
         10.0,
         (32, 32),
     )

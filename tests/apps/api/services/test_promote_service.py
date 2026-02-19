@@ -72,7 +72,7 @@ async def test_legacy_stage_endpoint_deprecated_promotes_and_logs(tmp_path: Path
 
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all([str(video.video_id)], label="happy")
+            await service.stage_to_train([str(video.video_id)], label="happy")
 
         refreshed = await session.get(models.Video, video.video_id)
         assert refreshed is not None
@@ -109,7 +109,7 @@ async def test_legacy_stage_endpoint_deprecated_filesystem_failure_increments_me
 
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all([str(video.video_id)], label="happy")
+            await service.stage_to_train([str(video.video_id)], label="happy")
 
         assert backend.schedule_calls == []
 
@@ -149,7 +149,7 @@ async def test_legacy_stage_endpoint_deprecated_skips_non_temp_and_duplicates(tm
 
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all(
+            await service.stage_to_train(
                 [str(temp_video.video_id), str(dataset_video.video_id), str(temp_video.video_id)],
                 label="sad",
             )
@@ -183,7 +183,7 @@ async def test_legacy_stage_endpoint_deprecated_rejects_invalid_uuid(tmp_path: P
     async with sessionmaker() as session:
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError):
-            await service.stage_to_dataset_all(["not-a-uuid"], label="happy")
+            await service.stage_to_train(["not-a-uuid"], label="happy")
 
     async_engine = get_async_engine(async_url)
     await async_engine.dispose()
@@ -214,7 +214,7 @@ async def test_legacy_stage_endpoint_deprecated_skips_when_no_eligible_videos(tm
 
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all([str(video.video_id)], label="happy")
+            await service.stage_to_train([str(video.video_id)], label="happy")
         assert backend.schedule_calls == []
 
     async_engine = get_async_engine(async_url)
@@ -236,7 +236,7 @@ async def test_legacy_stage_endpoint_deprecated_returns_skipped_for_missing_ids(
     async with sessionmaker() as session:
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
-            await service.stage_to_dataset_all([str(uuid.uuid4())], label="happy")
+            await service.stage_to_train([str(uuid.uuid4())], label="happy")
         assert backend.schedule_calls == []
 
     async_engine = get_async_engine(async_url)
@@ -256,11 +256,11 @@ async def test_sample_fraction_greater_than_one_selects_all(tmp_path: Path) -> N
 
     videos_root = tmp_path / "videos"
     async with sessionmaker() as session:
-        run_id = uuid.uuid4()
+        run_id = "run_0001"
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
             await service.sample_split(
-                run_id=str(run_id),
+                run_id=run_id,
                 target_split="train",
                 sample_fraction=2.0,
                 strategy="balanced_random",
@@ -284,11 +284,11 @@ async def test_sample_into_test_clears_labels(tmp_path: Path) -> None:
 
     videos_root = tmp_path / "videos"
     async with sessionmaker() as session:
-        run_id = uuid.uuid4()
+        run_id = "run_0001"
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
             await service.sample_split(
-                run_id=str(run_id),
+                run_id=run_id,
                 target_split="test",
                 sample_fraction=1.0,
                 strategy="balanced_random",
@@ -304,8 +304,8 @@ def test_reset_manifest_invokes_backend() -> None:
     backend = _StubManifestBackend()
     service = PromoteService(cast(AsyncSession, object()), manifest_backend=backend)
 
-    service.reset_manifest(reason="manual_reset", run_id="abc123")
-    assert backend.reset_calls == [("manual_reset", "abc123")]
+    service.reset_manifest(reason="manual_reset", run_id="run_0001")
+    assert backend.reset_calls == [("manual_reset", "run_0001")]
 
 
 @pytest.mark.asyncio
@@ -332,7 +332,7 @@ async def test_legacy_stage_endpoint_deprecated_requires_label(tmp_path: Path) -
         backend = _StubManifestBackend()
         service = PromoteService(session, manifest_backend=backend)
         with pytest.raises(PromotionValidationError):
-            await service.stage_to_dataset_all([str(video.video_id)], label=None)
+            await service.stage_to_train([str(video.video_id)], label=None)
 
         assert get_metric_sample(
             "promotion_operations_total",
@@ -358,11 +358,11 @@ async def test_sample_split_creates_training_selection(tmp_path: Path) -> None:
 
     videos_root = tmp_path / "videos"
     async with sessionmaker() as session:
-        run_id = uuid.uuid4()
+        run_id = "run_0001"
         service, backend = _make_service(session, videos_root)
         with pytest.raises(PromotionValidationError, match="Deprecated endpoint"):
             await service.sample_split(
-                run_id=str(run_id),
+                run_id=run_id,
                 target_split="train",
                 sample_fraction=0.5,
                 strategy="balanced_random",

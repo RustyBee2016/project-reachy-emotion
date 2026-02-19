@@ -116,7 +116,6 @@ class TestAppConfig:
         config = AppConfig()
         
         assert config.temp_path == config.videos_root / config.temp_dir
-        assert config.dataset_path == config.videos_root / config.dataset_dir
         assert config.train_path == config.videos_root / config.train_dir
         assert config.test_path == config.videos_root / config.test_dir
         assert config.thumbs_path == config.videos_root / config.thumbs_dir
@@ -146,7 +145,6 @@ class TestConfigValidation:
             
             # Check that subdirectories were created
             assert config.temp_path.exists()
-            assert config.dataset_path.exists()
             assert config.train_path.exists()
             assert config.test_path.exists()
             assert config.thumbs_path.exists()

@@ -56,7 +56,7 @@ class TestDatasetPreparer:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         result = preparer.prepare_training_dataset(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
@@ -81,7 +81,7 @@ class TestDatasetPreparer:
         # train_fraction is compatibility-only in frame extraction mode
         for fraction in [0.6, 0.7, 0.8]:
             result = preparer.prepare_training_dataset(
-                run_id=f'epoch_{int(fraction * 10):02d}',
+                run_id=f'run_{int(fraction * 10):04d}',
                 train_fraction=fraction,
                 seed=42
             )
@@ -93,21 +93,14 @@ class TestDatasetPreparer:
         """Test same seed produces same split."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        # Run twice with same seed
         result1 = preparer.prepare_training_dataset(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
         
-        # Clear splits
-        shutil.rmtree(preparer.train_path)
-        shutil.rmtree(preparer.test_path)
-        preparer.train_path.mkdir()
-        preparer.test_path.mkdir()
-        
         result2 = preparer.prepare_training_dataset(
-            run_id='epoch_02',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=42
         )
@@ -121,19 +114,13 @@ class TestDatasetPreparer:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         result1 = preparer.prepare_training_dataset(
-            run_id='epoch_01',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
         
-        # Clear splits
-        shutil.rmtree(preparer.train_path)
-        shutil.rmtree(preparer.test_path)
-        preparer.train_path.mkdir()
-        preparer.test_path.mkdir()
-        
         result2 = preparer.prepare_training_dataset(
-            run_id='epoch_02',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=99
         )
@@ -146,7 +133,7 @@ class TestDatasetPreparer:
         """Test JSONL manifest files are generated correctly."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        run_id = 'epoch_01'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(
             run_id=run_id,
             train_fraction=0.7,
@@ -207,7 +194,7 @@ class TestDatasetPreparer:
     def test_frames_extracted_to_run_dirs(self, temp_dataset_dir):
         """Test frames are extracted to label/run and consolidated run directories."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
-        run_id = 'epoch_01'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(
             run_id=run_id,
             train_fraction=0.7,
@@ -220,9 +207,9 @@ class TestDatasetPreparer:
             assert label_run_dir.exists()
             assert len(list(label_run_dir.glob('*.jpg'))) == 100
 
-        # Consolidated run directory: /train/<run_id>/<label>
+        # Consolidated run directory: /train/run/<run_id>/<label>
         for label in ['happy', 'sad', 'neutral']:
-            consolidated_label_dir = preparer.train_path / run_id / label
+            consolidated_label_dir = preparer.train_runs_path / run_id / label
             assert consolidated_label_dir.exists()
             assert len(list(consolidated_label_dir.glob('*.jpg'))) == 100
     
@@ -239,7 +226,7 @@ class TestDatasetPreparer:
         
         with pytest.raises(ValueError, match='missing source videos'):
             preparer.prepare_training_dataset(
-                run_id='epoch_01',
+                run_id='run_0001',
                 train_fraction=0.7,
                 seed=42
             )
@@ -266,7 +253,7 @@ class TestDatasetPreparer:
         
         with pytest.raises(ValueError, match='missing source videos'):
             preparer.prepare_training_dataset(
-                run_id='epoch_01',
+                run_id='run_0001',
                 train_fraction=0.7,
                 seed=42
             )
@@ -281,7 +268,7 @@ class TestManifestFormat:
         """Test manifests are valid JSONL."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        run_id = 'epoch_01'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
         
         manifest_file = preparer.manifests_path / f'{run_id}_train.jsonl'
@@ -298,7 +285,7 @@ class TestManifestFormat:
         """Test manifest entries have required fields."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        run_id = 'epoch_01'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
         
         manifest_file = preparer.manifests_path / f'{run_id}_train.jsonl'
@@ -321,9 +308,10 @@ class TestManifestFormat:
 def _write_test_video(path: Path, frame_count: int = 20) -> None:
     """Create a tiny synthetic MP4 video for frame extraction tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    fourcc_fn = getattr(cv2, "VideoWriter_fourcc")
     writer = cv2.VideoWriter(
         str(path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
+        fourcc_fn(*"mp4v"),
         10.0,
         (32, 32),
     )
@@ -336,21 +324,21 @@ def _write_test_video(path: Path, frame_count: int = 20) -> None:
 
 
 class TestRunIdPolicy:
-    """Test strict epoch run ID behavior."""
+    """Test strict run ID behavior."""
 
-    def test_auto_generates_next_epoch_run_id(self, temp_dataset_dir):
+    def test_auto_generates_next_run_id(self, temp_dataset_dir):
         preparer = DatasetPreparer(str(temp_dataset_dir))
 
         result1 = preparer.prepare_training_dataset(seed=42)
         result2 = preparer.prepare_training_dataset(seed=42)
 
-        assert result1['run_id'] == 'epoch_01'
-        assert result2['run_id'] == 'epoch_02'
+        assert result1['run_id'] == 'run_0001'
+        assert result2['run_id'] == 'run_0002'
 
     def test_rejects_invalid_run_id(self, temp_dataset_dir):
         preparer = DatasetPreparer(str(temp_dataset_dir))
 
-        with pytest.raises(ValueError, match='epoch_XX'):
+        with pytest.raises(ValueError, match='run_xxxx'):
             preparer.prepare_training_dataset(run_id='run_1', seed=42)
 
 

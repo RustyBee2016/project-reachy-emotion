@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 import pytest
@@ -97,7 +96,7 @@ async def _insert_video(
     label: str | None,
     size_bytes: int,
     sha256: str,
-) -> uuid.UUID:
+) -> str:
     async with sessionmaker() as session:
         video = models.Video(
             file_path=file_path,
@@ -216,7 +215,7 @@ async def test_sample_endpoint_is_deprecated(promote_app):
         sha256="c" * 64,
     )
 
-    run_id = str(uuid.uuid4())
+    run_id = "run_0001"
     response = await client.post(
         "/api/v1/promote/sample",
         json={
@@ -239,7 +238,7 @@ async def test_sample_endpoint_is_deprecated(promote_app):
 
         selections = (
             await session.execute(
-                select(models.TrainingSelection).where(models.TrainingSelection.run_id == run_id)
+                select(models.TrainingSelection)
             )
         ).scalars().all()
         assert len(selections) == 0
@@ -271,7 +270,7 @@ async def test_sample_endpoint_dry_run_is_deprecated(promote_app):
         sha256="d" * 64,
     )
 
-    run_id = str(uuid.uuid4())
+    run_id = "run_0001"
     response = await client.post(
         "/api/v1/promote/sample",
         json={
@@ -295,7 +294,7 @@ async def test_sample_endpoint_dry_run_is_deprecated(promote_app):
 
         selections = (
             await session.execute(
-                select(models.TrainingSelection).where(models.TrainingSelection.run_id == uuid.UUID(run_id))
+                select(models.TrainingSelection)
             )
         ).scalars().all()
         assert selections == []
@@ -312,15 +311,15 @@ async def test_reset_manifest_endpoint_records_reason(promote_app):
     client: AsyncClient = env["client"]
     backend: _ManifestRecorder = env["manifest_backend"]
 
-    run_id = uuid.uuid4()
+    run_id = "run_0001"
     response = await client.post(
         "/api/v1/promote/reset-manifest",
-        json={"reason": "manual_reset", "run_id": str(run_id)},
+        json={"reason": "manual_reset", "run_id": run_id},
     )
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
     assert body["reason"] == "manual_reset"
-    assert body["run_id"] == str(run_id)
+    assert body["run_id"] == run_id
 
-    assert backend.reset_calls == [("manual_reset", str(run_id))]
+    assert backend.reset_calls == [("manual_reset", run_id)]

@@ -78,7 +78,7 @@ class TrainingOrchestrator:
         Prepare training dataset with balanced sampling.
         
         Args:
-            run_id: Training run ID (epoch_XX). Auto-generated if omitted.
+            run_id: Training run ID (run_xxxx). Auto-generated if omitted.
             train_fraction: Fraction of data for training
             seed: Random seed for reproducibility
         
