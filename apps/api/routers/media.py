@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 from fastapi import Depends, APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pythonjsonlogger.jsonlogger import JsonFormatter    # type: ignore[import]
-from sqlalchemy import or_, select
+from sqlalchemy import insert, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..app.config import AppConfig, get_config
@@ -200,25 +200,28 @@ async def promote(
                     digest.update(chunk)
             video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
             now = datetime.now(timezone.utc)
-            video = Video(
-                video_id=str(uuid.uuid4()),
-                file_path=str(existing_path.relative_to(video_root)),
-                split="temp",
-                label=None,
-                size_bytes=stat.st_size,
-                sha256=digest.hexdigest(),
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(video)
+            new_video_id = str(uuid.uuid4())
+            insert_values = {
+                "video_id": new_video_id,
+                "file_path": str(existing_path.relative_to(video_root)),
+                "split": "temp",
+                "label": None,
+                "size_bytes": stat.st_size,
+                "sha256": digest.hexdigest(),
+                "created_at": now,
+                "updated_at": now,
+            }
             try:
-                await db.flush()
-                video_id = str(video.video_id)
+                result = await db.execute(
+                    insert(Video).values(**insert_values).returning(Video.video_id)
+                )
+                video_id = str(result.scalar_one())
+                video = await db.get(Video, video_id)
                 logger.info(
                     "media_mover_promote_registered_missing_video",
                     extra={
                         "video_id": video_id,
-                        "file_path": video.file_path,
+                        "file_path": insert_values["file_path"],
                         "correlation_id": payload.get("correlation_id", ""),
                     },
                 )
