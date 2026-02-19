@@ -14,6 +14,14 @@ This paper presents a comprehensive overview of Project Reachy, a multi-phase em
 
 ## 1. Introduction
 
+
+
+### 1.0 Capstone Focus
+
+The capstone project focuses on Phase 1, defined in section 2.1 (Phase 1: Offline ML Classification).  Phase 1 of Project Reachy, focuses on the offline machine learning (ML) classification system. Phase 1 establishes the foundational infrastructure comprising a Streamlit-based web application for video generation and labeling, a FastAPI gateway for API orchestration, and an EfficientNet-B0 fine-tuning pipeline for 3-class emotion classification (happy, sad, neutral). The model leverages HSEmotion's `enet_b0_8_best_vgaf` weights pretrained on VGGFace2 + AffectNet, providing 3× latency improvement over prior ResNet-50 baselines while maintaining accuracy targets. Through annotated code examples from the codebase, we explain key functionalities including the retry-enabled API client, JSON schema validation, transfer learning with frozen backbone strategies, and data augmentation techniques. This paper serves as both a technical reference and an educational resource for graduate students seeking to understand production ML systems.
+
+**Keywords:** Streamlit, FastAPI, EfficientNet-B0, HSEmotion, transfer learning, data augmentation, emotion classification, API design
+
 ### 1.1 Motivation
 
 Human-robot interaction (HRI) systems increasingly require the ability to perceive and respond to human emotional states. Emotion recognition enables robots to provide contextually appropriate responses, fostering more natural and empathetic interactions (Picard, 1997). However, deploying such systems raises significant privacy concerns, as continuous video capture of human faces constitutes sensitive biometric data.
@@ -52,7 +60,7 @@ Phase 1 establishes the foundational infrastructure for emotion classification:
 
 - **Video Generation**: Integration with Luma AI's Ray-2 model generates 5-second emotion videos at 720p resolution based on text prompts (e.g., "a happy girl eating lunch").
 
-- **Data Curation Pipeline**: Videos flow through a structured directory hierarchy (`/videos/temp/` → `/videos/dataset_all/` → `/videos/train/` and `/videos/test/`) with human-in-the-loop labeling.
+- **Data Curation Pipeline**: Videos flow through a structured directory hierarchy (`/videos/temp/` ` → `/videos/train/` and `/videos/test/`) with human-in-the-loop labeling.
 
 - **3-Class Classification**: The initial model targets three emotion classes—happy, sad, and neutral—using an EfficientNet-B0 backbone (HSEmotion `enet_b0_8_best_vgaf`) fine-tuned with transfer learning. This architecture provides 3× latency improvement over ResNet-50 baselines.
 
@@ -184,10 +192,10 @@ The end-to-end data flow follows this sequence:
 │     ↓                                                               │
 │  4. PROMOTION (Agent 3)                                            │
 │     Dry-run preview → Human approval → Atomic move                 │
-│     temp/ → dataset_all/ (staging corpus)                          │
+│     temp/ → train/ (staging corpus)                                │
 │     ↓                                                               │
 │  5. SAMPLING (Training Orchestrator)                               │
-│     Randomized selection: dataset_all/ → train/ + test/            │
+│     Randomized selection: train → train/<emotion> + test/          │
 │     Enforce 50/50 class balance, test set remains unlabeled        │
 │     ↓                                                               │
 │  6. TRAINING (Agent 5)                                             │
@@ -209,17 +217,19 @@ The end-to-end data flow follows this sequence:
 The storage system uses a hybrid approach combining filesystem storage with database metadata:
 
 **Filesystem Layout (Ubuntu 1)**:
+
 ```
 /media/project_data/reachy_emotion/videos/
 ├── temp/           # Newly ingested, unclassified videos
-├── dataset_all/    # Accepted, labeled videos (canonical corpus)
-├── train/          # Per-run training subset (labeled)
+├── train/emotion   # Accepted, labeled videos (canonical corpus)
+├── train/run_#     # Per-run training subset (labeled)
 ├── test/           # Per-run test subset (unlabeled in DB)
 ├── thumbs/         # Generated thumbnails (JPG)
 └── manifests/      # JSONL manifests per training run
 ```
 
 **Database Schema (PostgreSQL)**:
+
 - `video` table: Stores `video_id`, `file_path`, `split`, `label`, `duration_sec`, `fps`, `sha256`, `created_at`
 - `training_run` table: Tracks run parameters, sampling strategy, train/test fractions
 - `training_selection` table: Links videos to specific training runs
@@ -238,6 +248,7 @@ The classification model uses an EfficientNet-B0 backbone with transfer learning
   - Phase 2 (epochs 6+): Selective unfreezing for domain adaptation
 
 **Training Configuration Highlights**:
+
 - Learning rate: 1e-4 with cosine annealing and 3-epoch warmup
 - Regularization: Label smoothing (0.1), dropout (0.3), mixup augmentation
 - Mixed precision: FP16 for faster training
@@ -260,17 +271,17 @@ MLflow tracks all training experiments with:
 
 Project Reachy employs nine cooperating agents orchestrated via n8n workflows:
 
-| Agent | Purpose | Key Responsibility |
-|-------|---------|-------------------|
-| **1. Ingest** | Video registration | Hash computation, metadata extraction, thumbnail generation |
-| **2. Labeling** | Classification management | User label updates, class balance enforcement |
-| **3. Promotion** | Dataset curation | Atomic moves with dry-run, manifest rebuilding |
-| **4. Reconciler** | Consistency auditing | Filesystem ↔ database drift detection |
-| **5. Training** | Model fine-tuning | TAO/PyTorch training, MLflow logging, Gate A validation |
-| **6. Evaluation** | Test validation | Confusion matrix, calibration metrics, Gate B validation |
-| **7. Deployment** | Model rollout | Shadow → canary → rollout with approval gates |
-| **8. Privacy** | Data retention | TTL enforcement, GDPR deletion, audit logging |
-| **9. Observability** | System monitoring | Metrics aggregation, SLA breach alerting |
+| Agent                | Purpose                   | Key Responsibility                                          |
+| -------------------- | ------------------------- | ----------------------------------------------------------- |
+| **1. Ingest**        | Video registration        | Hash computation, metadata extraction, thumbnail generation |
+| **2. Labeling**      | Classification management | User label updates, class balance enforcement               |
+| **3. Promotion**     | Dataset curation          | Atomic moves with dry-run, manifest rebuilding              |
+| **4. Reconciler**    | Consistency auditing      | Filesystem ↔ database drift detection                       |
+| **5. Training**      | Model fine-tuning         | TAO/PyTorch training, MLflow logging, Gate A validation     |
+| **6. Evaluation**    | Test validation           | Confusion matrix, calibration metrics, Gate B validation    |
+| **7. Deployment**    | Model rollout             | Shadow → canary → rollout with approval gates               |
+| **8. Privacy**       | Data retention            | TTL enforcement, GDPR deletion, audit logging               |
+| **9. Observability** | System monitoring         | Metrics aggregation, SLA breach alerting                    |
 
 ### 5.2 Event-Driven Communication
 
@@ -301,34 +312,34 @@ All mutating operations enforce idempotency:
 
 Before any model leaves the training environment:
 
-| Metric | Threshold | Rationale |
-|--------|-----------|-----------|
-| Macro F1 | ≥ 0.84 | Overall classification quality |
-| Per-class F1 | ≥ 0.75 (floor) | Prevent class collapse |
-| Balanced Accuracy | ≥ 0.85 | Handle class imbalance |
-| ECE | ≤ 0.08 | Confidence calibration |
-| Brier Score | ≤ 0.16 | Probabilistic accuracy |
+| Metric            | Threshold      | Rationale                      |
+| ----------------- | -------------- | ------------------------------ |
+| Macro F1          | ≥ 0.84         | Overall classification quality |
+| Per-class F1      | ≥ 0.75 (floor) | Prevent class collapse         |
+| Balanced Accuracy | ≥ 0.85         | Handle class imbalance         |
+| ECE               | ≤ 0.08         | Confidence calibration         |
+| Brier Score       | ≤ 0.16         | Probabilistic accuracy         |
 
 ### 6.2 Gate B — Robot Shadow Mode
 
 On-device validation before user exposure:
 
-| Metric | Threshold | Rationale |
-|--------|-----------|-----------|
-| Latency p50 | ≤ 120 ms | Responsive interaction |
-| Latency p95 | ≤ 250 ms | Tail latency control |
-| GPU Memory | ≤ 2.5 GB | Leave headroom for other tasks |
-| Macro F1 | ≥ 0.80 | On-device accuracy |
+| Metric      | Threshold | Rationale                      |
+| ----------- | --------- | ------------------------------ |
+| Latency p50 | ≤ 120 ms  | Responsive interaction         |
+| Latency p95 | ≤ 250 ms  | Tail latency control           |
+| GPU Memory  | ≤ 2.5 GB  | Leave headroom for other tasks |
+| Macro F1    | ≥ 0.80    | On-device accuracy             |
 
 ### 6.3 Gate C — Limited User Rollout
 
 Production validation with real users:
 
-| Metric | Threshold | Rationale |
-|--------|-----------|-----------|
-| End-to-end Latency | ≤ 300 ms | User-perceived responsiveness |
-| Abstention Rate | ≤ 20% | Model confidence |
-| User Complaints | < 1% of sessions | User satisfaction |
+| Metric             | Threshold        | Rationale                     |
+| ------------------ | ---------------- | ----------------------------- |
+| End-to-end Latency | ≤ 300 ms         | User-perceived responsiveness |
+| Abstention Rate    | ≤ 20%            | Model confidence              |
+| User Complaints    | < 1% of sessions | User satisfaction             |
 
 ### 6.4 Staged Deployment
 
@@ -377,11 +388,11 @@ The `EmotionLLMGesturePipeline` class orchestrates the complete interaction loop
 
 Emotions map to appropriate gesture types:
 
-| Emotion | Default Gestures |
-|---------|-----------------|
-| Happy | CELEBRATE, EXCITED, THUMBS_UP, WAVE, NOD |
-| Sad | EMPATHY, COMFORT, HUG, SAD_ACK, LISTEN |
-| Neutral | NOD, LISTEN, WAVE, THINK |
+| Emotion | Default Gestures                         |
+| ------- | ---------------------------------------- |
+| Happy   | CELEBRATE, EXCITED, THUMBS_UP, WAVE, NOD |
+| Sad     | EMPATHY, COMFORT, HUG, SAD_ACK, LISTEN   |
+| Neutral | NOD, LISTEN, WAVE, THINK                 |
 
 The LLM can override defaults by embedding gesture keywords in responses (e.g., `[WAVE]`, `[HUG]`).
 
@@ -461,14 +472,14 @@ Russakovsky, O., Deng, J., Su, H., Krause, J., Satheesh, S., Ma, S., ... & Fei-F
 
 **Document Information**
 
-| Field | Value |
-|-------|-------|
-| Paper Number | 1 of 7 |
-| Title | Comprehensive Overview: Project Reachy |
-| Version | 1.1 |
-| Date | January 31, 2026 |
-| Author | Russell Bray |
-| Project | Reachy_Local_08.4.2 |
+| Field        | Value                                  |
+| ------------ | -------------------------------------- |
+| Paper Number | 1 of 7                                 |
+| Title        | Comprehensive Overview: Project Reachy |
+| Version      | 1.1                                    |
+| Date         | January 31, 2026                       |
+| Author       | Russell Bray                           |
+| Project      | Reachy_Local_08.4.2                    |
 
 ---
 
