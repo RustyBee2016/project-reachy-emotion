@@ -10,6 +10,14 @@ from apps.web import api_client
 st.set_page_config(page_title="Training", layout="wide")
 st.title("03 - Training")
 
+# ============================================================================
+# Thresholds
+# ============================================================================
+
+TOTAL_VIDEO_THRESHOLD = 9001
+PER_EMOTION_THRESHOLD = 3000
+EMOTION_CLASSES = ("happy", "sad", "neutral")
+
 
 def _items_for_split(split: str) -> list[dict]:
     data = api_client.list_videos(split=split, limit=1000, offset=0)
@@ -57,29 +65,89 @@ def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
 
 
 # ============================================================================
-# Train/Test Split Overview
+# Train/Test Split Overview + Readiness Check
 # ============================================================================
+
+train_counts: Counter = Counter()
+train_total = 0
+try:
+    train_items = _items_for_split("train")
+    train_counts = Counter((it.get("label") or "unlabeled") for it in train_items)
+    train_total = len(train_items)
+except Exception as exc:  # noqa: BLE001
+    st.error(f"Failed to load train split: {exc}")
+    train_items = []
+
+test_total = 0
+try:
+    test_items = _items_for_split("test")
+    test_counts = Counter((it.get("label") or "no_label") for it in test_items)
+    test_total = len(test_items)
+except Exception as exc:  # noqa: BLE001
+    st.error(f"Failed to load test split: {exc}")
+    test_items = []
 
 col1, col2 = st.columns(2)
 with col1:
-    try:
-        train_items = _items_for_split("train")
-        train_counts = Counter((it.get("label") or "unlabeled") for it in train_items)
-        st.subheader("Train Split")
-        st.metric("Total", len(train_items))
-        st.json(dict(train_counts))
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"Failed to load train split: {exc}")
+    st.subheader("Train Split")
+    st.metric("Total", train_total)
+    st.json(dict(train_counts))
 
 with col2:
-    try:
-        test_items = _items_for_split("test")
-        test_counts = Counter((it.get("label") or "no_label") for it in test_items)
-        st.subheader("Test Split")
-        st.metric("Total", len(test_items))
-        st.json(dict(test_counts))
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"Failed to load test split: {exc}")
+    st.subheader("Test Split")
+    st.metric("Total", test_total)
+    st.json(dict(test_counts))
+
+# ============================================================================
+# Per-Emotion Readiness Gauges
+# ============================================================================
+
+st.divider()
+st.subheader("Extraction Readiness")
+
+emotion_met = {}
+gauge_cols = st.columns(len(EMOTION_CLASSES) + 1)
+
+for idx, emotion in enumerate(EMOTION_CLASSES):
+    count = train_counts.get(emotion, 0)
+    met = count >= PER_EMOTION_THRESHOLD
+    emotion_met[emotion] = met
+    delta_val = count - PER_EMOTION_THRESHOLD
+    with gauge_cols[idx]:
+        st.metric(
+            label=f"{emotion.capitalize()}",
+            value=f"{count:,}",
+            delta=f"{delta_val:+,} vs {PER_EMOTION_THRESHOLD:,}",
+            delta_color="normal" if met else "inverse",
+        )
+
+all_emotions_met = all(emotion_met.values())
+total_met = train_total >= TOTAL_VIDEO_THRESHOLD
+extraction_enabled = all_emotions_met and total_met
+
+with gauge_cols[-1]:
+    delta_total = train_total - TOTAL_VIDEO_THRESHOLD
+    st.metric(
+        label="Total",
+        value=f"{train_total:,}",
+        delta=f"{delta_total:+,} vs {TOTAL_VIDEO_THRESHOLD:,}",
+        delta_color="normal" if total_met else "inverse",
+    )
+
+if extraction_enabled:
+    st.success("All thresholds met. Frame extraction is enabled.")
+else:
+    shortfalls = []
+    for emotion in EMOTION_CLASSES:
+        count = train_counts.get(emotion, 0)
+        if count < PER_EMOTION_THRESHOLD:
+            shortfalls.append(f"{emotion}: need {PER_EMOTION_THRESHOLD - count:,} more")
+    if not total_met:
+        shortfalls.append(f"total: need {TOTAL_VIDEO_THRESHOLD - train_total:,} more")
+    st.warning(
+        "Frame extraction is disabled until all thresholds are met. "
+        f"Shortfalls: {'; '.join(shortfalls)}"
+    )
 
 
 # ============================================================================
@@ -125,7 +193,12 @@ with extract_col2:
 
 btn_col1, btn_col2 = st.columns(2)
 with btn_col1:
-    if st.button("Extract Frames", type="primary", use_container_width=True):
+    if st.button(
+        "Extract Frames",
+        type="primary",
+        use_container_width=True,
+        disabled=not extraction_enabled,
+    ):
         resolved_run_id = extract_run_id.strip() if extract_run_id.strip() else None
         resolved_seed = extract_seed if extract_seed > 0 else None
         try:

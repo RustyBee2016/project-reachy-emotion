@@ -323,6 +323,36 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 # Section 2: Generate Synthetic Video
 st.markdown('<div class="section-container">', unsafe_allow_html=True)
+
+# --- Per-emotion video counters (readiness dashboard) ---
+_EMOTION_CLASSES = ("happy", "sad", "neutral")
+_PER_EMOTION_THRESHOLD = 3000
+
+_train_emotion_counts: dict[str, int] = {}
+try:
+    _train_listing = list_videos_api(split="train", limit=1000, offset=0)
+    _train_items = _train_listing.get("items", []) if isinstance(_train_listing, dict) else []
+    for _item in _train_items:
+        if isinstance(_item, dict):
+            _lbl = (_item.get("label") or "unlabeled").lower()
+            _train_emotion_counts[_lbl] = _train_emotion_counts.get(_lbl, 0) + 1
+except Exception:  # noqa: BLE001
+    pass  # counters will show 0 if API is unreachable
+
+_counter_cols = st.columns(len(_EMOTION_CLASSES))
+for _ci, _emotion in enumerate(_EMOTION_CLASSES):
+    _cnt = _train_emotion_counts.get(_emotion, 0)
+    _delta = _cnt - _PER_EMOTION_THRESHOLD
+    _met = _cnt >= _PER_EMOTION_THRESHOLD
+    with _counter_cols[_ci]:
+        st.metric(
+            label=f"{_emotion.capitalize()} videos",
+            value=f"{_cnt:,} / {_PER_EMOTION_THRESHOLD:,}",
+            delta=f"{_delta:+,}" if _delta != 0 else "threshold met",
+            delta_color="normal" if _met else "inverse",
+        )
+
+# --- Video generation form ---
 col4, col5 = st.columns([5, 2])
 
 with col4:
