@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 import pytest
@@ -97,7 +96,7 @@ async def _insert_video(
     label: str | None,
     size_bytes: int,
     sha256: str,
-) -> uuid.UUID:
+) -> str:
     async with sessionmaker() as session:
         video = models.Video(
             file_path=file_path,
@@ -112,7 +111,7 @@ async def _insert_video(
 
 
 @pytest.mark.asyncio
-async def test_stage_endpoint_moves_files(promote_app):
+async def test_stage_endpoint_is_deprecated(promote_app):
     env = promote_app
     client: AsyncClient = env["client"]
     sessionmaker = env["sessionmaker"]
@@ -133,30 +132,28 @@ async def test_stage_endpoint_moves_files(promote_app):
     )
 
     response = await client.post(
-        "/promote/stage",
+        "/api/v1/promote/stage",
         json={"video_ids": [str(video_id)], "label": "happy"},
     )
-    assert response.status_code == 202
+    assert response.status_code == 422
     body = response.json()
-    assert body["status"] == "accepted"
-    assert body["promoted_ids"] == [str(video_id)]
-    assert body["dry_run"] is False
+    assert "Deprecated endpoint" in body["detail"]["error"]
 
     async with sessionmaker() as session:
         refreshed = await session.get(models.Video, video_id)
         assert refreshed is not None
-        assert refreshed.split == "dataset_all"
-        assert refreshed.label == "happy"
-        assert refreshed.file_path.startswith("dataset_all/")
+        assert refreshed.split == "temp"
+        assert refreshed.label is None
+        assert refreshed.file_path == relative_path
 
-    assert (videos_root / "dataset_all" / file_name).exists()
-    assert not (videos_root / "temp" / file_name).exists()
+    assert (videos_root / "temp" / file_name).exists()
+    assert not (videos_root / "train" / file_name).exists()
 
-    assert backend.schedule_calls == [("stage_to_dataset_all", None)]
+    assert backend.schedule_calls == []
 
 
 @pytest.mark.asyncio
-async def test_stage_endpoint_dry_run_preserves_state(promote_app):
+async def test_stage_endpoint_dry_run_is_deprecated(promote_app):
     env = promote_app
     client: AsyncClient = env["client"]
     sessionmaker = env["sessionmaker"]
@@ -177,14 +174,12 @@ async def test_stage_endpoint_dry_run_preserves_state(promote_app):
     )
 
     response = await client.post(
-        "/promote/stage",
+        "/api/v1/promote/stage",
         json={"video_ids": [str(video_id)], "label": "sad", "dry_run": True},
     )
-    assert response.status_code == 202
+    assert response.status_code == 422
     body = response.json()
-    assert body["status"] == "accepted"
-    assert body["promoted_ids"] == [str(video_id)]
-    assert body["dry_run"] is True
+    assert "Deprecated endpoint" in body["detail"]["error"]
 
     async with sessionmaker() as session:
         refreshed = await session.get(models.Video, video_id)
@@ -194,13 +189,13 @@ async def test_stage_endpoint_dry_run_preserves_state(promote_app):
         assert refreshed.file_path == relative_path
 
     assert (videos_root / "temp" / file_name).exists()
-    assert not (videos_root / "dataset_all" / file_name).exists()
+    assert not (videos_root / "train" / file_name).exists()
 
     assert backend.schedule_calls == []
 
 
 @pytest.mark.asyncio
-async def test_sample_endpoint_creates_training_selection(promote_app):
+async def test_sample_endpoint_is_deprecated(promote_app):
     env = promote_app
     client: AsyncClient = env["client"]
     sessionmaker = env["sessionmaker"]
@@ -208,21 +203,21 @@ async def test_sample_endpoint_creates_training_selection(promote_app):
     backend: _ManifestRecorder = env["manifest_backend"]
 
     file_name = "clip_sample.mp4"
-    relative_path = f"dataset_all/{file_name}"
+    relative_path = f"train/{file_name}"
     _write_file(videos_root, relative_path)
 
     video_id = await _insert_video(
         sessionmaker,
         file_path=relative_path,
-        split="dataset_all",
+        split="train",
         label="happy",
         size_bytes=4096,
         sha256="c" * 64,
     )
 
-    run_id = str(uuid.uuid4())
+    run_id = "run_0001"
     response = await client.post(
-        "/promote/sample",
+        "/api/v1/promote/sample",
         json={
             "run_id": run_id,
             "target_split": "train",
@@ -230,35 +225,32 @@ async def test_sample_endpoint_creates_training_selection(promote_app):
             "strategy": "balanced_random",
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 422
     body = response.json()
-    assert body["status"] == "accepted"
-    assert body["run_id"] == run_id
-    assert body["copied_ids"] == [str(video_id)]
-    assert body["dry_run"] is False
+    assert "Deprecated endpoint" in body["detail"]["error"]
 
     async with sessionmaker() as session:
         refreshed = await session.get(models.Video, video_id)
         assert refreshed is not None
         assert refreshed.split == "train"
         assert refreshed.label == "happy"
-        assert refreshed.file_path.startswith("train/")
+        assert refreshed.file_path == relative_path
 
         selections = (
             await session.execute(
-                select(models.TrainingSelection).where(models.TrainingSelection.run_id == uuid.UUID(run_id))
+                select(models.TrainingSelection)
             )
         ).scalars().all()
-        assert len(selections) == 1
+        assert len(selections) == 0
 
-    assert (videos_root / "dataset_all" / file_name).exists()
-    assert (videos_root / "train" / run_id / file_name).exists()
+    assert (videos_root / "train" / file_name).exists()
+    assert not (videos_root / "train" / run_id / file_name).exists()
 
-    assert backend.schedule_calls == [("sample_split", run_id)]
+    assert backend.schedule_calls == []
 
 
 @pytest.mark.asyncio
-async def test_sample_endpoint_dry_run_skips_mutations(promote_app):
+async def test_sample_endpoint_dry_run_is_deprecated(promote_app):
     env = promote_app
     client: AsyncClient = env["client"]
     sessionmaker = env["sessionmaker"]
@@ -266,21 +258,21 @@ async def test_sample_endpoint_dry_run_skips_mutations(promote_app):
     backend: _ManifestRecorder = env["manifest_backend"]
 
     file_name = "clip_sample_dry.mp4"
-    relative_path = f"dataset_all/{file_name}"
+    relative_path = f"train/{file_name}"
     _write_file(videos_root, relative_path)
 
     video_id = await _insert_video(
         sessionmaker,
         file_path=relative_path,
-        split="dataset_all",
+        split="train",
         label="sad",
         size_bytes=8192,
         sha256="d" * 64,
     )
 
-    run_id = str(uuid.uuid4())
+    run_id = "run_0001"
     response = await client.post(
-        "/promote/sample",
+        "/api/v1/promote/sample",
         json={
             "run_id": run_id,
             "target_split": "test",
@@ -289,27 +281,25 @@ async def test_sample_endpoint_dry_run_skips_mutations(promote_app):
             "dry_run": True,
         },
     )
-    assert response.status_code == 202
+    assert response.status_code == 422
     body = response.json()
-    assert body["status"] == "accepted"
-    assert body["copied_ids"] == [str(video_id)]
-    assert body["dry_run"] is True
+    assert "Deprecated endpoint" in body["detail"]["error"]
 
     async with sessionmaker() as session:
         refreshed = await session.get(models.Video, video_id)
         assert refreshed is not None
-        assert refreshed.split == "dataset_all"
+        assert refreshed.split == "train"
         assert refreshed.label == "sad"
         assert refreshed.file_path == relative_path
 
         selections = (
             await session.execute(
-                select(models.TrainingSelection).where(models.TrainingSelection.run_id == uuid.UUID(run_id))
+                select(models.TrainingSelection)
             )
         ).scalars().all()
         assert selections == []
 
-    assert (videos_root / "dataset_all" / file_name).exists()
+    assert (videos_root / "train" / file_name).exists()
     assert not (videos_root / "test" / run_id / file_name).exists()
 
     assert backend.schedule_calls == []
@@ -321,15 +311,15 @@ async def test_reset_manifest_endpoint_records_reason(promote_app):
     client: AsyncClient = env["client"]
     backend: _ManifestRecorder = env["manifest_backend"]
 
-    run_id = uuid.uuid4()
+    run_id = "run_0001"
     response = await client.post(
-        "/promote/reset-manifest",
-        json={"reason": "manual_reset", "run_id": str(run_id)},
+        "/api/v1/promote/reset-manifest",
+        json={"reason": "manual_reset", "run_id": run_id},
     )
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "accepted"
     assert body["reason"] == "manual_reset"
-    assert body["run_id"] == str(run_id)
+    assert body["run_id"] == run_id
 
-    assert backend.reset_calls == [("manual_reset", str(run_id))]
+    assert backend.reset_calls == [("manual_reset", run_id)]

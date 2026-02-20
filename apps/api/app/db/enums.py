@@ -8,9 +8,9 @@ SELECTION_TARGET_ENUM_NAME = "training_selection_target_enum"
 
 SplitEnum = Enum(
     "temp",
-    "dataset_all",
     "train",
     "test",
+    "purged",
     name=VIDEO_SPLIT_ENUM_NAME,
     create_constraint=True,
     native_enum=False,
@@ -21,8 +21,6 @@ EmotionEnum = Enum(
     "neutral",
     "happy",
     "sad",
-    "angry",
-    "surprise",
     name=EMOTION_ENUM_NAME,
     create_constraint=True,
     native_enum=False,

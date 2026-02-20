@@ -26,10 +26,10 @@ Reachy Emotion Detection is a complete ML pipeline for real-time emotion classif
 
 ### Components Implemented
 - **Database Schema** (PostgreSQL)
-  - 8 tables: video, training_run, training_selection, promotion_log, user_session, generation_request, emotion_event
-  - Stored procedures for business logic
+  - 9 ORM/Alembic tables: video, training_run, training_selection, promotion_log, label_event, deployment_log, audit_log, obs_samples, reconcile_report
+  - Stored procedures are legacy/optional helpers (runtime path is SQLAlchemy + FastAPI services)
   - Idempotency keys for safe operations
-  - Location: `/alembic/versions/`
+  - Source of truth: `apps/api/app/db/models.py` + `apps/api/app/db/alembic/versions/202510280000_initial_schema.py`
 
 - **API Client** (`apps/web/api_client_v2.py`)
   - Exponential backoff retry logic
@@ -71,9 +71,9 @@ tests/
 
 ### Database Connection
 - **Host**: localhost (or configured via env)
-- **Database**: reachy_local
-- **User**: reachy_app / reachy_app
-- **Connection String**: `postgresql+psycopg2://reachy_app:reachy_app@localhost:5432/reachy_local`
+- **Database**: reachy_emotion
+- **User**: reachy_dev / reachy_dev
+- **Connection String (API runtime)**: `postgresql+asyncpg://reachy_dev:tweetwd4959@localhost:5432/reachy_emotion`
 
 ---
 
@@ -304,9 +304,9 @@ REACHY_API_TOKEN=<optional>
 ```bash
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=reachy_local
-DB_USER=reachy_app
-DB_PASSWORD=reachy_app
+DB_NAME=reachy_emotion
+DB_USER=reachy_dev
+DB_PASSWORD=tweetwd4959
 ```
 
 **MLflow**:
@@ -333,11 +333,11 @@ TAO_API_KEY=tlt_encode
 ### 1. Database Setup
 ```bash
 # Create database
-createdb reachy_local
+createdb reachy_emotion
 
 # Run migrations
-psql reachy_local < alembic/versions/001_phase1_schema.sql
-psql reachy_local < alembic/versions/002_stored_procedures.sql
+psql reachreachy_emotion < alembic/versions/001_phase1_schema.sql
+psql reachy_emotion < alembic/versions/002_stored_procedures.sql
 ```
 
 ### 2. Web UI
@@ -442,4 +442,3 @@ cd /home/reachy/reachy_emotion
 
 ---
 
-**Status**: Ready for Phase 4 in new session with full 200k token budget! 🚀

@@ -144,8 +144,8 @@ class TestIdempotency:
     
     def test_idempotency_key_generation(self, api_client):
         """Test idempotency key is deterministic within time window."""
-        key1 = api_client._generate_idempotency_key('video1', 'dataset_all', 'happy')
-        key2 = api_client._generate_idempotency_key('video1', 'dataset_all', 'happy')
+        key1 = api_client._generate_idempotency_key('video1', 'train', 'happy')
+        key2 = api_client._generate_idempotency_key('video1', 'train', 'happy')
         
         # Should be same within same minute
         assert key1 == key2
@@ -153,8 +153,8 @@ class TestIdempotency:
     
     def test_idempotency_key_different_args(self, api_client):
         """Test different arguments produce different keys."""
-        key1 = api_client._generate_idempotency_key('video1', 'dataset_all', 'happy')
-        key2 = api_client._generate_idempotency_key('video2', 'dataset_all', 'happy')
+        key1 = api_client._generate_idempotency_key('video1', 'train', 'happy')
+        key2 = api_client._generate_idempotency_key('video2', 'train', 'happy')
         
         assert key1 != key2
     
@@ -163,7 +163,7 @@ class TestIdempotency:
         mock_response = Mock(status_code=200, json=lambda: {'status': 'success'}, text='{}')
         
         with patch.object(api_client.session, 'request', return_value=mock_response) as mock_request:
-            api_client.promote_video('video123', 'dataset_all', 'happy')
+            api_client.promote_video('video123', 'train', 'happy')
             
             # Check idempotency key was included
             call_args = mock_request.call_args
@@ -219,7 +219,7 @@ class TestVideoManagement:
         
         with patch.object(api_client.session, 'request', return_value=mock_response) as mock_request:
             api_client.list_videos(
-                split='dataset_all',
+                split='train',
                 limit=50,
                 offset=10,
                 label='happy',
@@ -229,7 +229,7 @@ class TestVideoManagement:
             # Check query parameters
             call_args = mock_request.call_args
             params = call_args[1]['params']
-            assert params['split'] == 'dataset_all'
+            assert params['split'] == 'train'
             assert params['limit'] == 50
             assert params['offset'] == 10
             assert params['label'] == 'happy'
@@ -244,15 +244,15 @@ class TestVideoManagement:
         )
         
         with patch.object(api_client.session, 'request', return_value=mock_response):
-            result = api_client.promote_video('vid1', 'dataset_all', 'happy')
+            result = api_client.promote_video('vid1', 'train', 'happy')
             
             assert result['status'] == 'success'
             assert result['video_id'] == 'vid1'
     
-    def test_promote_video_requires_label_for_dataset_all(self, api_client):
-        """Test label requirement for dataset_all promotion."""
+    def test_promote_video_requires_label_for_train(self, api_client):
+        """Test label requirement for train promotion."""
         with pytest.raises(ValueError) as exc_info:
-            api_client.promote_video('vid1', 'dataset_all', label=None)
+            api_client.promote_video('vid1', 'train', label=None)
         
         assert 'label required' in str(exc_info.value).lower()
     
@@ -265,7 +265,7 @@ class TestVideoManagement:
         )
         
         with patch.object(api_client.session, 'request', return_value=mock_response) as mock_request:
-            result = api_client.promote_video('vid1', 'dataset_all', 'happy', dry_run=True)
+            result = api_client.promote_video('vid1', 'train', 'happy', dry_run=True)
             
             # Check dry_run flag in payload
             call_args = mock_request.call_args
@@ -277,9 +277,9 @@ class TestVideoManagement:
     async def test_batch_promote_async(self, api_client):
         """Test async batch promotion."""
         promotions = [
-            ('vid1', 'dataset_all', 'happy'),
-            ('vid2', 'dataset_all', 'sad'),
-            ('vid3', 'dataset_all', 'happy')
+            ('vid1', 'train', 'happy'),
+            ('vid2', 'train', 'sad'),
+            ('vid3', 'train', 'happy')
         ]
         
         results = await api_client.batch_promote_async(promotions)

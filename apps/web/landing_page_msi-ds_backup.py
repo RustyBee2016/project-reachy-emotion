@@ -186,14 +186,14 @@ with col8:
 
 with col9:
     st.markdown("**Enter the emotion type:**")
-    emotion_options = ["neutral", "happy", "sad", "angry", "surprise", "fearful"]
+    emotion_options = ["neutral", "happy", "sad"]
     selected_emotion = st.selectbox(
         "Emotion",
         options=emotion_options,
         label_visibility="collapsed",
         key="emotion_select",
     )
-    st.caption("(happy, sad, angry, surprised, neutral)")
+    st.caption("(happy, sad, neutral)")
 
     if st.button("❌ Incorrect", key="delete_video", use_container_width=True):
         if st.session_state.current_video:

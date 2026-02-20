@@ -15,11 +15,11 @@ class FileMoverError(RuntimeError):
     """Raised when a filesystem transition fails."""
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True)
 class FileTransition:
     """Represents a filesystem transition for a video."""
 
-    video_id: uuid.UUID
+    video_id: str  # UUID stored as string
     source: Path  # relative to root, pre-operation
     destination: Path  # relative to root, post-operation
     operation: Literal["move", "copy"]
@@ -37,10 +37,10 @@ class FileMover:
 
         return self._root
 
-    def stage_to_dataset_all(self, *, video_id: uuid.UUID, file_path: str) -> FileTransition:
-        """Move a file from temp/ into dataset_all/ preserving subdirectories."""
+    def stage_to_train(self, *, video_id: str, file_path: str, label: str) -> FileTransition:
+        """Move a clip from temp/ into train/<label>/ atomically."""
 
-        relative, destination_relative, source, destination = self._prepare_stage(file_path)
+        relative, destination_relative, source, destination = self._prepare_stage(file_path, label)
         self._ensure_source_exists(source, video_id)
         self._atomic_move(video_id, source, destination)
         return FileTransition(
@@ -50,10 +50,10 @@ class FileMover:
             operation="move",
         )
 
-    def plan_stage_to_dataset_all(self, *, video_id: uuid.UUID, file_path: str) -> FileTransition:
-        """Preview a staging operation without mutating the filesystem."""
+    def plan_stage_to_train(self, *, video_id: str, file_path: str, label: str) -> FileTransition:
+        """Preview temp -> train/<label> move without mutating state."""
 
-        relative, destination_relative, source, _ = self._prepare_stage(file_path)
+        relative, destination_relative, source, _ = self._prepare_stage(file_path, label)
         self._ensure_source_exists(source, video_id)
         return FileTransition(
             video_id=video_id,
@@ -65,12 +65,12 @@ class FileMover:
     def copy_to_split(
         self,
         *,
-        video_id: uuid.UUID,
+        video_id: str,
         file_path: str,
         target_split: str,
-        run_id: uuid.UUID,
+        run_id: str,
     ) -> FileTransition:
-        """Copy a dataset_all file into train/ or test/ scoped by run_id."""
+        """Copy run-scoped media into consolidated train/run and test/run directories."""
 
         (
             relative,
@@ -90,12 +90,12 @@ class FileMover:
     def plan_copy_to_split(
         self,
         *,
-        video_id: uuid.UUID,
+        video_id: str,
         file_path: str,
         target_split: str,
-        run_id: uuid.UUID,
+        run_id: str,
     ) -> FileTransition:
-        """Preview a sampling copy operation without mutating the filesystem."""
+        """Preview copy_to_split() without mutating state."""
 
         (
             relative,
@@ -140,6 +140,7 @@ class FileMover:
     def _prepare_stage(
         self,
         file_path: str,
+        label: str,
     ) -> tuple[Path, Path, Path, Path]:
         relative = self._to_relative_path(file_path)
         if not relative.parts:
@@ -148,7 +149,11 @@ class FileMover:
         if relative.parts[0] != "temp":
             raise FileMoverError(f"File path {file_path} does not start with 'temp'.")
 
-        destination_relative = Path("dataset_all").joinpath(*relative.parts[1:])
+        normalized_label = label.strip().lower()
+        if normalized_label not in {"happy", "sad", "neutral"}:
+            raise FileMoverError(f"Unsupported label '{label}'.")
+
+        destination_relative = Path("train") / normalized_label / relative.name
         source = self._root / relative
         destination = self._root / destination_relative
         return relative, destination_relative, source, destination
@@ -157,25 +162,41 @@ class FileMover:
         self,
         file_path: str,
         target_split: str,
-        run_id: uuid.UUID,
+        run_id: str,
     ) -> tuple[Path, Path, Path, Path]:
         relative = self._to_relative_path(file_path)
-        if relative.parts and relative.parts[0] != "dataset_all":
+        normalized_split = target_split.strip().lower()
+        if normalized_split not in {"train", "test"}:
+            raise FileMoverError(f"Unsupported target_split '{target_split}'.")
+
+        normalized_run_id = run_id.strip().lower()
+        if not normalized_run_id.startswith("run_"):
+            raise FileMoverError("run_id must follow run_xxxx naming.")
+
+        if not relative.parts:
+            raise FileMoverError("Video file_path is empty.")
+        if relative.parts[0] not in {"train", "test"}:
             raise FileMoverError(
-                f"File path {file_path} does not originate in 'dataset_all'."
+                f"File path {file_path} must originate in 'train' or 'test'."
             )
 
-        suffix_parts = relative.parts[1:] if len(relative.parts) > 1 else (relative.name,)
-        destination_relative = Path(target_split) / str(run_id) / Path(*suffix_parts)
+        suffix_parts = list(relative.parts[1:] if len(relative.parts) > 1 else (relative.name,))
+        if normalized_run_id in suffix_parts:
+            suffix_parts.remove(normalized_run_id)
+
+        if normalized_split == "train":
+            destination_relative = Path("train") / "run" / normalized_run_id / Path(*suffix_parts)
+        else:
+            destination_relative = Path("test") / normalized_run_id / Path(*suffix_parts)
         source = self._root / relative
         destination = self._root / destination_relative
         return relative, destination_relative, source, destination
 
-    def _ensure_source_exists(self, source: Path, video_id: uuid.UUID) -> None:
+    def _ensure_source_exists(self, source: Path, video_id: str) -> None:
         if not source.exists():
             raise FileMoverError(f"Source file missing for video {video_id}: {source}")
 
-    def _atomic_move(self, video_id: uuid.UUID, source: Path, destination: Path) -> None:
+    def _atomic_move(self, video_id: str, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         tmp_destination = destination.with_suffix(destination.suffix + f".tmp-{uuid.uuid4().hex}")
         try:
@@ -190,7 +211,7 @@ class FileMover:
                 f"Failed to move {source} -> {destination}: {exc}"
             ) from exc
 
-    def _atomic_copy(self, video_id: uuid.UUID, source: Path, destination: Path) -> None:
+    def _atomic_copy(self, video_id: str, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         tmp_destination = destination.with_suffix(destination.suffix + f".tmp-{uuid.uuid4().hex}")
         temp_file_path: Path | None = None

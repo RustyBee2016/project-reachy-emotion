@@ -1,0 +1,138 @@
+{
+  "test_name": "Per-Class Paired t-Tests",
+  "description": "Paired t-tests for each emotion class with Benjamini-Hochberg correction",
+  "hypothesis": {
+    "null": "No difference in F1 score between base and fine-tuned models for this class",
+    "alternative": "F1 score differs between base and fine-tuned models for this class"
+  },
+  "results": {
+    "class_results": [
+      {
+        "emotion_class": "anger",
+        "mean_base": 0.814861043156745,
+        "mean_finetuned": 0.8433932632054395,
+        "mean_difference": 0.028532220048694455,
+        "std_difference": 0.010040489402566216,
+        "t_statistic": 8.986295232972813,
+        "p_value_raw": 8.64514223319901e-06,
+        "p_value_adjusted": 3.261503705154212e-05,
+        "significant": true,
+        "direction": "improved"
+      },
+      {
+        "emotion_class": "contempt",
+        "mean_base": 0.6415560674190862,
+        "mean_finetuned": 0.7283400214260868,
+        "mean_difference": 0.08678395400700054,
+        "std_difference": 0.02128275469463263,
+        "t_statistic": 12.89471043363708,
+        "p_value_raw": 4.1636832071034746e-07,
+        "p_value_adjusted": 3.3309465656827797e-06,
+        "significant": true,
+        "direction": "improved"
+      },
+      {
+        "emotion_class": "disgust",
+        "mean_base": 0.7190581032806913,
+        "mean_finetuned": 0.7812958566082437,
+        "mean_difference": 0.062237753327552506,
+        "std_difference": 0.022854415558158755,
+        "t_statistic": 8.61159877249758,
+        "p_value_raw": 1.2230638894328294e-05,
+        "p_value_adjusted": 3.261503705154212e-05,
+        "significant": true,
+        "direction": "improved"
+      },
+      {
+        "emotion_class": "fear",
+        "mean_base": 0.7770205673313549,
+        "mean_finetuned": 0.8098302385796415,
+        "mean_difference": 0.03280967124828636,
+        "std_difference": 0.0211282651121224,
+        "t_statistic": 4.910639367469695,
+        "p_value_raw": 0.0008353055305669876,
+        "p_value_adjusted": 0.0013364888489071803,
+        "significant": true,
+        "direction": "improved"
+      },
+      {
+        "emotion_class": "happiness",
+        "mean_base": 0.8966044179601003,
+        "mean_finetuned": 0.8801713300150172,
+        "mean_difference": -0.016433087945083136,
+        "std_difference": 0.015901095270467756,
+        "t_statistic": -3.268075941462493,
+        "p_value_raw": 0.00971253708091191,
+        "p_value_adjusted": 0.01295004944121588,
+        "significant": true,
+        "direction": "degraded"
+      },
+      {
+        "emotion_class": "neutral",
+        "mean_base": 0.8871684261202377,
+        "mean_finetuned": 0.927676094803625,
+        "mean_difference": 0.04050766868338723,
+        "std_difference": 0.021797125348624137,
+        "t_statistic": 5.876760980826463,
+        "p_value_raw": 0.00023577461613499828,
+        "p_value_adjusted": 0.00047154923226999657,
+        "significant": true,
+        "direction": "improved"
+      },
+      {
+        "emotion_class": "sadness",
+        "mean_base": 0.8337468575851108,
+        "mean_finetuned": 0.8557688895333933,
+        "mean_difference": 0.022022031948282526,
+        "std_difference": 0.028178834326651605,
+        "t_statistic": 2.471350619202254,
+        "p_value_raw": 0.03549153878097777,
+        "p_value_adjusted": 0.03549153878097777,
+        "significant": true,
+        "direction": "improved"
+      },
+      {
+        "emotion_class": "surprise",
+        "mean_base": 0.8021468024256363,
+        "mean_finetuned": 0.8235284516076268,
+        "mean_difference": 0.021381649181990637,
+        "std_difference": 0.026414933562230115,
+        "t_statistic": 2.5597153741263488,
+        "p_value_raw": 0.030701460348221188,
+        "p_value_adjusted": 0.035087383255109926,
+        "significant": true,
+        "direction": "improved"
+      }
+    ],
+    "n_folds": 10,
+    "n_classes": 8,
+    "alpha": 0.05,
+    "correction_method": "Benjamini-Hochberg",
+    "n_significant": 8,
+    "n_improved": 7,
+    "n_degraded": 1,
+    "n_unchanged": 0,
+    "improved_classes": [
+      "anger",
+      "contempt",
+      "disgust",
+      "fear",
+      "neutral",
+      "sadness",
+      "surprise"
+    ],
+    "degraded_classes": [
+      "happiness"
+    ]
+  },
+  "emotion_classes": [
+    "anger",
+    "contempt",
+    "disgust",
+    "fear",
+    "happiness",
+    "neutral",
+    "sadness",
+    "surprise"
+  ]
+}

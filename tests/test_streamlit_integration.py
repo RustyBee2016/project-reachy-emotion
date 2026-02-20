@@ -165,7 +165,7 @@ class TestAPIIntegration:
             
             results = []
             for vid in video_ids:
-                result = client.promote_video(vid, 'dataset_all', 'happy')
+                result = client.promote_video(vid, 'train', 'happy')
                 results.append(result)
             
             assert len(results) == 3
@@ -230,7 +230,7 @@ class TestWebSocketIntegration:
         event = PromotionEvent(
             video_id='vid123',
             from_split='temp',
-            to_split='dataset_all',
+            to_split='train',
             label='happy',
             success=True,
             timestamp=datetime.now()
@@ -344,8 +344,8 @@ class TestDataFlow:
             # Step 2: User labels video
             label = 'happy'
             
-            # Step 3: Promote to dataset_all
-            result = client.promote_video(video_id, 'dataset_all', label)
+            # Step 3: Promote to train
+            result = client.promote_video(video_id, 'train', label)
             
             assert result['status'] == 'success'
     
@@ -372,7 +372,7 @@ class TestDataFlow:
                 # Batch promote
                 results = []
                 for video in selected:
-                    result = client.promote_video(video.video_id, 'dataset_all', 'happy')
+                    result = client.promote_video(video.video_id, 'train', 'happy')
                     results.append(result)
                 
                 assert len(results) == 5

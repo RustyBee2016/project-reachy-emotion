@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+pytest.importorskip("alembic.command")
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect

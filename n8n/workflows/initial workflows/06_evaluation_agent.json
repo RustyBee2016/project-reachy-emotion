@@ -1,0 +1,114 @@
+{
+  "name": "Agent 6 — Evaluation Agent (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/evaluation/start",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook_eval",
+      "name": "Webhook: evaluation.start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-400, 300],
+      "webhookId": "eval-start"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test, COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test FROM video;"
+      },
+      "id": "db_check_balance",
+      "name": "Postgres: check.test_balance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-200, 300],
+      "credentials": {"postgres": {"id": "2", "name": "PostgreSQL - reachy_local"}}
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {"value1": "={{Math.min($json.happy_test, $json.sad_test)}}", "operation": "largerEqual", "value2": 20}
+          ]
+        }
+      },
+      "id": "if_balanced",
+      "name": "IF: test_set.balanced?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "command": "deepstream-app -c /opt/reachy/config/emotion_inference.txt",
+        "authentication": "password"
+      },
+      "id": "ssh_run_inference",
+      "name": "SSH: run.inference",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "credentials": {"sshPassword": {"id": "4", "name": "SSH Jetson"}}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse DeepStream output and compute metrics\nconst output = $json.stdout || '';\nconst predictions = [];\n// Simple parser - in production use structured JSON from DeepStream\nconst lines = output.split('\\n');\nfor (const line of lines) {\n  if (line.includes('emotion:')) {\n    const match = line.match(/emotion:(\\w+) conf:(\\d\\.\\d+)/);\n    if (match) predictions.push({emotion: match[1], conf: parseFloat(match[2])});\n  }\n}\nreturn [{json: {predictions, total: predictions.length}}];"
+      },
+      "id": "parse_results",
+      "name": "Code: parse.results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MLFLOW_URL}}/api/2.0/mlflow/runs/log-metric",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "key", "value": "=test_accuracy"},
+            {"name": "value", "value": "={{$json.accuracy}}"}
+          ]
+        }
+      },
+      "id": "mlflow_log",
+      "name": "HTTP: mlflow.log_metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/evaluation",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=evaluation.completed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"}
+          ]
+        }
+      },
+      "id": "emit_completed",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [800, 200]
+    }
+  ],
+  "connections": {
+    "webhook_eval": {"main": [[{"node": "db_check_balance", "type": "main", "index": 0}]]},
+    "db_check_balance": {"main": [[{"node": "if_balanced", "type": "main", "index": 0}]]},
+    "if_balanced": {"main": [[{"node": "ssh_run_inference", "type": "main", "index": 0}]]},
+    "ssh_run_inference": {"main": [[{"node": "parse_results", "type": "main", "index": 0}]]},
+    "parse_results": {"main": [[{"node": "mlflow_log", "type": "main", "index": 0}]]},
+    "mlflow_log": {"main": [[{"node": "emit_completed", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "agent"}, {"name": "evaluation"}],
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}

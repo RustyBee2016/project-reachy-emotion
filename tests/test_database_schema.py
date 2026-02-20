@@ -43,11 +43,11 @@ class TestVideoTable:
             INSERT INTO video (video_id, file_path, split, label, sha256)
             VALUES (%s, %s, %s, %s, %s)
             RETURNING video_id, split, label
-        """, (video_id, 'videos/temp/test.mp4', 'temp', 'happy', 'a' * 64))
+        """, (video_id, 'videos/train/test.mp4', 'train', 'happy', 'a' * 64))
         
         result = db_cursor.fetchone()
         assert result['video_id'] == video_id
-        assert result['split'] == 'temp'
+        assert result['split'] == 'train'
         assert result['label'] == 'happy'
         db_conn.commit()
     
@@ -133,26 +133,27 @@ class TestStoredProcedures:
     
     def test_get_class_distribution(self, db_cursor, db_conn):
         """Test class distribution calculation."""
-        # Insert test videos
-        for i in range(10):
-            label = 'happy' if i < 5 else 'sad'
+        # Insert test videos (3-class: happy, sad, neutral)
+        labels = ['happy', 'happy', 'happy', 'sad', 'sad', 'sad', 'neutral', 'neutral', 'neutral']
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label, size_bytes, duration_sec)
                 VALUES (%s, %s, %s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label, 1000000, 5.0))
+            """, (f'videos/train/test{i}.mp4', 'train', label, 1000000, 5.0))
         db_conn.commit()
         
         # Call function
-        db_cursor.execute("SELECT * FROM get_class_distribution('dataset_all')")
+        db_cursor.execute("SELECT * FROM get_class_distribution('train')")
         results = db_cursor.fetchall()
         
-        assert len(results) == 2
+        assert len(results) == 3
         happy_row = [r for r in results if r['label'] == 'happy'][0]
         sad_row = [r for r in results if r['label'] == 'sad'][0]
+        neutral_row = [r for r in results if r['label'] == 'neutral'][0]
         
-        assert happy_row['count'] == 5
-        assert sad_row['count'] == 5
-        assert happy_row['percentage'] == 50.0
+        assert happy_row['count'] == 3
+        assert sad_row['count'] == 3
+        assert neutral_row['count'] == 3
     
     def test_check_dataset_balance_empty(self, db_cursor):
         """Test balance check with empty dataset."""
@@ -165,13 +166,13 @@ class TestStoredProcedures:
     
     def test_check_dataset_balance_insufficient(self, db_cursor, db_conn):
         """Test balance check with insufficient samples."""
-        # Insert 50 samples (below minimum of 100)
-        for i in range(50):
-            label = 'happy' if i < 25 else 'sad'
+        # Insert 60 samples (below minimum of 100) - 3-class balanced
+        labels = ['happy'] * 20 + ['sad'] * 20 + ['neutral'] * 20
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("SELECT * FROM check_dataset_balance(100, 1.5)")
@@ -183,13 +184,13 @@ class TestStoredProcedures:
     
     def test_check_dataset_balance_imbalanced(self, db_cursor, db_conn):
         """Test balance check with class imbalance."""
-        # Insert 150 happy, 50 sad (ratio = 3.0, exceeds max of 1.5)
-        for i in range(200):
-            label = 'happy' if i < 150 else 'sad'
+        # Insert 150 happy, 30 sad, 20 neutral (ratio = 7.5, exceeds max of 1.5)
+        labels = ['happy'] * 150 + ['sad'] * 30 + ['neutral'] * 20
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("SELECT * FROM check_dataset_balance(100, 1.5)")
@@ -201,13 +202,13 @@ class TestStoredProcedures:
     
     def test_check_dataset_balance_good(self, db_cursor, db_conn):
         """Test balance check with balanced dataset."""
-        # Insert 120 happy, 110 sad (ratio = 1.09, within 1.5)
-        for i in range(230):
-            label = 'happy' if i < 120 else 'sad'
+        # Insert 80 happy, 75 sad, 75 neutral (ratio = 1.07, within 1.5)
+        labels = ['happy'] * 80 + ['sad'] * 75 + ['neutral'] * 75
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("SELECT * FROM check_dataset_balance(100, 1.5)")
@@ -228,22 +229,22 @@ class TestStoredProcedures:
         """, (video_id, 'videos/temp/test.mp4', 'temp'))
         db_conn.commit()
         
-        # Promote to dataset_all with label
+        # Promote directly to train with label
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user'))
+        """, (video_id, 'train', 'happy', 'test_user'))
         
         result = db_cursor.fetchone()
         db_conn.commit()
         
         assert result['success'] is True
         assert result['old_split'] == 'temp'
-        assert result['new_split'] == 'dataset_all'
+        assert result['new_split'] == 'train'
         
         # Verify video was updated
         db_cursor.execute("SELECT split, label FROM video WHERE video_id = %s", (video_id,))
         video = db_cursor.fetchone()
-        assert video['split'] == 'dataset_all'
+        assert video['split'] == 'train'
         assert video['label'] == 'happy'
     
     def test_promote_video_safe_idempotency(self, db_cursor, db_conn):
@@ -261,7 +262,7 @@ class TestStoredProcedures:
         # First promotion
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', idem_key))
+        """, (video_id, 'train', 'happy', 'test_user', idem_key))
         result1 = db_cursor.fetchone()
         db_conn.commit()
         
@@ -270,7 +271,7 @@ class TestStoredProcedures:
         # Second promotion with same key should be idempotent
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', idem_key))
+        """, (video_id, 'train', 'happy', 'test_user', idem_key))
         result2 = db_cursor.fetchone()
         db_conn.commit()
         
@@ -278,7 +279,7 @@ class TestStoredProcedures:
         assert 'idempotent' in result2['message'].lower()
     
     def test_promote_video_safe_label_required(self, db_cursor, db_conn):
-        """Test label requirement for dataset_all."""
+        """Test label requirement for train."""
         video_id = uuid4()
         
         db_cursor.execute("""
@@ -290,7 +291,7 @@ class TestStoredProcedures:
         # Promote without label should fail
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s)
-        """, (video_id, 'dataset_all', None, 'test_user'))
+        """, (video_id, 'train', None, 'test_user'))
         result = db_cursor.fetchone()
         db_conn.commit()
         
@@ -310,7 +311,7 @@ class TestStoredProcedures:
         # Dry run promotion
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', None, True))
+        """, (video_id, 'train', 'happy', 'test_user', None, True))
         result = db_cursor.fetchone()
         db_conn.commit()
         
@@ -324,13 +325,13 @@ class TestStoredProcedures:
     
     def test_create_training_run_with_sampling(self, db_cursor, db_conn):
         """Test training run creation with automatic sampling."""
-        # Insert balanced dataset
-        for i in range(200):
-            label = 'happy' if i < 100 else 'sad'
+        # Insert balanced dataset (3-class: happy, sad, neutral)
+        labels = ['happy'] * 70 + ['sad'] * 70 + ['neutral'] * 70
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         # Create training run
@@ -362,19 +363,20 @@ class TestStoredProcedures:
         selections = {row['target_split']: row['cnt'] for row in db_cursor.fetchall()}
         
         # Should have roughly 70/30 split (allow some variance due to randomness)
-        assert 130 <= selections['train'] <= 150
-        assert 50 <= selections['test'] <= 70
-        assert selections['train'] + selections['test'] == 200
+        # Total is 210 samples (70 each class)
+        assert 130 <= selections['train'] <= 160
+        assert 50 <= selections['test'] <= 80
+        assert selections['train'] + selections['test'] == 210
     
     def test_get_training_run_details(self, db_cursor, db_conn):
         """Test training run details retrieval."""
-        # Create run with sampling
-        for i in range(100):
-            label = 'happy' if i < 50 else 'sad'
+        # Create run with sampling (3-class: happy, sad, neutral)
+        labels = ['happy'] * 34 + ['sad'] * 33 + ['neutral'] * 33
+        for i, label in enumerate(labels):
             db_cursor.execute("""
                 INSERT INTO video (file_path, split, label)
                 VALUES (%s, %s, %s)
-            """, (f'videos/dataset_all/test{i}.mp4', 'dataset_all', label))
+            """, (f'videos/train/test{i}.mp4', 'train', label))
         db_conn.commit()
         
         db_cursor.execute("""
@@ -413,7 +415,7 @@ class TestPromotionLog:
         # Promote video
         db_cursor.execute("""
             SELECT * FROM promote_video_safe(%s, %s, %s, %s, %s)
-        """, (video_id, 'dataset_all', 'happy', 'test_user', idem_key))
+        """, (video_id, 'train', 'happy', 'test_user', idem_key))
         db_conn.commit()
         
         # Check log entry
@@ -424,7 +426,7 @@ class TestPromotionLog:
         
         assert log['video_id'] == video_id
         assert log['from_split'] == 'temp'
-        assert log['to_split'] == 'dataset_all'
+        assert log['to_split'] == 'train'
         assert log['label'] == 'happy'
         assert log['success'] is True
         assert log['promoted_at'] is not None

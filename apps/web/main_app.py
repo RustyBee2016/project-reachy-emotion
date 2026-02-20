@@ -39,10 +39,11 @@ def main():
         """
         Pages:
         - 00_Home: Upload, generate, classify, and promote videos end-to-end.
-        - 01_Generate: Prototype inputs for generating synthetic clips (legacy placeholder).
+        - 01_Generate: Queue synthetic generation requests.
         - 02_Label: Browse temp clips and preview promote dry-runs.
-        - 03_Train: Rebuild manifests and view dataset readiness (placeholder).
-        - 04_Deploy: View deployment status and actions (placeholder).
+        - 03_Train: Rebuild manifests, sample splits, and inspect training state.
+        - 04_Deploy: Track deployment state and submit deployment intents.
+        - 05_Video_Management: Batch selection and promotion operations.
         """
     )
 

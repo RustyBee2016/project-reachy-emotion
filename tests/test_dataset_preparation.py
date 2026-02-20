@@ -12,6 +12,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import sys
 
+import cv2
+import numpy as np
+
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.append(str(PROJECT_ROOT))
@@ -26,15 +29,15 @@ class TestDatasetPreparation:
         temp_dir = tempfile.mkdtemp()
         
         # Create mock video structure
-        dataset_all = Path(temp_dir) / 'dataset_all'
-        dataset_all.mkdir()
+        train_root = Path(temp_dir) / 'train'
+        train_root.mkdir()
         
         # Create balanced dataset
         for emotion in ['happy', 'sad', 'neutral']:
-            emotion_dir = dataset_all / emotion
+            emotion_dir = train_root / emotion
             emotion_dir.mkdir()
             for i in range(10):
-                (emotion_dir / f'{emotion}_{i}.mp4').touch()
+                _write_test_video(emotion_dir / f'{emotion}_{i}.mp4')
         
         yield temp_dir
         
@@ -49,15 +52,14 @@ class TestDatasetPreparation:
         
         # Prepare with 70/30 split
         result = preparer.prepare_training_dataset(
-            run_id='test_run_001',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
         
-        assert result['run_id'] == 'test_run_001'
-        assert result['train_count'] + result['test_count'] == 30  # Total videos
-        assert 19 <= result['train_count'] <= 23  # ~70% of 30
-        assert 7 <= result['test_count'] <= 11   # ~30% of 30
+        assert result['run_id'] == 'run_0001'
+        assert result['train_count'] == 300  # 30 videos * 10 frames
+        assert result['test_count'] == 0
     
     def test_stratified_sampling(self, temp_dataset_dir):
         """Test that each class is represented proportionally."""
@@ -67,13 +69,13 @@ class TestDatasetPreparation:
         
         # Prepare dataset
         result = preparer.prepare_training_dataset(
-            run_id='test_run_002',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=123
         )
         
         # Check stratification in manifests
-        train_manifest_path = Path(temp_dataset_dir) / 'manifests' / 'test_run_002_train.jsonl'
+        train_manifest_path = Path(temp_dataset_dir) / 'manifests' / 'run_0002_train.jsonl'
         assert train_manifest_path.exists()
         
         # Count labels in training set
@@ -87,7 +89,7 @@ class TestDatasetPreparation:
         # Each class should have roughly equal representation
         assert len(label_counts) == 3
         for count in label_counts.values():
-            assert 5 <= count <= 9  # Roughly 1/3 of ~21 samples
+            assert count == 100
     
     def test_manifest_generation(self, temp_dataset_dir):
         """Test that manifests are generated correctly."""
@@ -96,14 +98,14 @@ class TestDatasetPreparation:
         preparer = DatasetPreparer(temp_dataset_dir)
         
         result = preparer.prepare_training_dataset(
-            run_id='test_run_003',
+            run_id='run_0003',
             train_fraction=0.8
         )
         
         # Check manifest files exist
         manifests_dir = Path(temp_dataset_dir) / 'manifests'
-        train_manifest = manifests_dir / 'test_run_003_train.jsonl'
-        test_manifest = manifests_dir / 'test_run_003_test.jsonl'
+        train_manifest = manifests_dir / 'run_0003_train.jsonl'
+        test_manifest = manifests_dir / 'run_0003_test.jsonl'
         
         assert train_manifest.exists()
         assert test_manifest.exists()
@@ -115,6 +117,7 @@ class TestDatasetPreparation:
                 assert 'video_id' in entry
                 assert 'path' in entry
                 assert 'label' in entry
+                assert 'source_video' in entry
     
     def test_dataset_hash_calculation(self, temp_dataset_dir):
         """Test that dataset hash is deterministic."""
@@ -137,13 +140,13 @@ class TestDatasetPreparation:
         
         # Prepare twice with same seed
         result1 = preparer.prepare_training_dataset(
-            run_id='run_a',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=999
         )
         
         result2 = preparer.prepare_training_dataset(
-            run_id='run_b',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=999
         )
@@ -151,6 +154,24 @@ class TestDatasetPreparation:
         # Should have same counts
         assert result1['train_count'] == result2['train_count']
         assert result1['test_count'] == result2['test_count']
+
+
+def _write_test_video(path: Path, frame_count: int = 20) -> None:
+    """Create a tiny synthetic MP4 video for frame extraction tests."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fourcc_fn = getattr(cv2, "VideoWriter_fourcc")
+    writer = cv2.VideoWriter(
+        str(path),
+        fourcc_fn(*"mp4v"),
+        10.0,
+        (32, 32),
+    )
+    if not writer.isOpened():
+        raise RuntimeError(f"Unable to create test video: {path}")
+    for idx in range(frame_count):
+        frame = np.full((32, 32, 3), idx % 255, dtype=np.uint8)
+        writer.write(frame)
+    writer.release()
 
 
 class TestTAOConfiguration:

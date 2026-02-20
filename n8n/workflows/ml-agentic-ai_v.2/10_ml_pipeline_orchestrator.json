@@ -1,0 +1,255 @@
+{
+  "name": "ML Pipeline Orchestrator — EfficientNet-B0 (Reachy 08.4.2)",
+  "description": "End-to-end ML pipeline orchestrating dataset preparation, training, evaluation, and deployment for EfficientNet-B0 emotion classifier.",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ml/pipeline/start",
+        "responseMode": "onReceived",
+        "options": {"responseCode": 202}
+      },
+      "id": "webhook_start",
+      "name": "Webhook: pipeline.start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-800, 300],
+      "webhookId": "ml-pipeline-start"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Initialize pipeline run\nconst timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);\nconst pipelineId = `ml_pipeline_${timestamp}`;\n\nreturn [{\n  json: {\n    pipeline_id: pipelineId,\n    model: 'efficientnet-b0-hsemotion',\n    model_storage_path: '/media/rusty_admin/project_data/ml_models/efficientnet_b0',\n    stages: ['dataset_check', 'training', 'evaluation', 'deployment'],\n    current_stage: 'dataset_check',\n    config: $json.config || 'fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml',\n    auto_deploy: $json.auto_deploy || false,\n    correlation_id: $json.correlation_id || pipelineId\n  }\n}];"
+      },
+      "id": "init_pipeline",
+      "name": "Code: init.pipeline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-600, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) FILTER (WHERE label='happy' AND split='train') AS happy_train, COUNT(*) FILTER (WHERE label='sad' AND split='train') AS sad_train, COUNT(*) FILTER (WHERE label='neutral' AND split='train') AS neutral_train, COUNT(*) FILTER (WHERE label='happy' AND split='test') AS happy_test, COUNT(*) FILTER (WHERE label='sad' AND split='test') AS sad_test, COUNT(*) FILTER (WHERE label='neutral' AND split='test') AS neutral_test FROM video;"
+      },
+      "id": "db_dataset_stats",
+      "name": "Postgres: dataset.stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-400, 300],
+      "credentials": {"postgres": {"id": "2", "name": "PostgreSQL - reachy_local"}}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Check dataset readiness\nconst stats = items[0].json;\nconst minTrainPerClass = 50;\nconst minTestPerClass = 20;\n\nconst trainReady = Math.min(stats.happy_train, stats.sad_train, stats.neutral_train) >= minTrainPerClass;\nconst testReady = Math.min(stats.happy_test, stats.sad_test, stats.neutral_test) >= minTestPerClass;\nconst maxTrain = Math.max(stats.happy_train, stats.sad_train, stats.neutral_train);\nconst minTrain = Math.min(stats.happy_train, stats.sad_train, stats.neutral_train);\nconst balanced = maxTrain > 0 ? (maxTrain - minTrain) / maxTrain < 0.2 : false;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    dataset_stats: stats,\n    dataset_ready: trainReady && testReady,\n    train_ready: trainReady,\n    test_ready: testReady,\n    balanced: balanced,\n    current_stage: trainReady ? 'training' : 'dataset_check'\n  }\n}];"
+      },
+      "id": "check_dataset",
+      "name": "Code: check.dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.dataset_ready}}", "value2": true}
+          ]
+        }
+      },
+      "id": "if_dataset_ready",
+      "name": "IF: dataset.ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.N8N_HOST}}/webhook/agent/training/efficientnet/start",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
+            {"name": "correlation_id", "value": "={{$json.correlation_id}}"},
+            {"name": "config", "value": "={{$json.config}}"},
+            {"name": "dataset_hash", "value": "={{$json.dataset_stats.happy_train + '_' + $json.dataset_stats.sad_train + '_' + $json.dataset_stats.neutral_train}}"}
+          ]
+        }
+      },
+      "id": "trigger_training",
+      "name": "HTTP: trigger.training",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {"amount": 10, "unit": "minutes"},
+      "id": "wait_training",
+      "name": "Wait: training",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/training/status/{{$json.pipeline_id}}",
+        "method": "GET"
+      },
+      "id": "check_training",
+      "name": "HTTP: check.training_status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {"value1": "={{$json.status}}", "operation": "contains", "value2": "completed"}
+          ]
+        }
+      },
+      "id": "if_training_done",
+      "name": "IF: training.done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.N8N_HOST}}/webhook/agent/evaluation/efficientnet/start",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "correlation_id", "value": "={{$json.correlation_id}}"}
+          ]
+        }
+      },
+      "id": "trigger_evaluation",
+      "name": "HTTP: trigger.evaluation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 100]
+    },
+    {
+      "parameters": {"amount": 5, "unit": "minutes"},
+      "id": "wait_evaluation",
+      "name": "Wait: evaluation",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1200, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.auto_deploy && $json.gate_a_passed}}", "value2": true}
+          ]
+        }
+      },
+      "id": "if_auto_deploy",
+      "name": "IF: auto_deploy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1400, 100]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.N8N_HOST}}/webhook/agent/deployment/efficientnet/start",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "gate_a_passed", "value": "={{$json.gate_a_passed}}"},
+            {"name": "onnx_path", "value": "={{$json.onnx_path}}"},
+            {"name": "correlation_id", "value": "={{$json.correlation_id}}"}
+          ]
+        }
+      },
+      "id": "trigger_deployment",
+      "name": "HTTP: trigger.deployment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1600, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/pipeline",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=pipeline.completed"},
+            {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
+            {"name": "model", "value": "=efficientnet-b0-hsemotion"},
+            {"name": "final_stage", "value": "={{$json.current_stage}}"},
+            {"name": "gate_a_passed", "value": "={{$json.gate_a_passed}}"},
+            {"name": "deployed", "value": "={{$json.deployed || false}}"}
+          ]
+        }
+      },
+      "id": "emit_complete",
+      "name": "HTTP: emit.pipeline_complete",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1800, 100]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/pipeline",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=pipeline.blocked"},
+            {"name": "pipeline_id", "value": "={{$json.pipeline_id}}"},
+            {"name": "reason", "value": "=Insufficient training data"},
+            {"name": "dataset_stats", "value": "={{JSON.stringify($json.dataset_stats)}}"},
+            {"name": "required", "value": "={train: 50/class, test: 20/class}"}
+          ]
+        }
+      },
+      "id": "emit_blocked",
+      "name": "HTTP: emit.blocked",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [200, 400]
+    }
+  ],
+  "connections": {
+    "webhook_start": {"main": [[{"node": "init_pipeline", "type": "main", "index": 0}]]},
+    "init_pipeline": {"main": [[{"node": "db_dataset_stats", "type": "main", "index": 0}]]},
+    "db_dataset_stats": {"main": [[{"node": "check_dataset", "type": "main", "index": 0}]]},
+    "check_dataset": {"main": [[{"node": "if_dataset_ready", "type": "main", "index": 0}]]},
+    "if_dataset_ready": {
+      "main": [
+        [{"node": "trigger_training", "type": "main", "index": 0}],
+        [{"node": "emit_blocked", "type": "main", "index": 0}]
+      ]
+    },
+    "trigger_training": {"main": [[{"node": "wait_training", "type": "main", "index": 0}]]},
+    "wait_training": {"main": [[{"node": "check_training", "type": "main", "index": 0}]]},
+    "check_training": {"main": [[{"node": "if_training_done", "type": "main", "index": 0}]]},
+    "if_training_done": {
+      "main": [
+        [{"node": "trigger_evaluation", "type": "main", "index": 0}],
+        [{"node": "wait_training", "type": "main", "index": 0}]
+      ]
+    },
+    "trigger_evaluation": {"main": [[{"node": "wait_evaluation", "type": "main", "index": 0}]]},
+    "wait_evaluation": {"main": [[{"node": "if_auto_deploy", "type": "main", "index": 0}]]},
+    "if_auto_deploy": {
+      "main": [
+        [{"node": "trigger_deployment", "type": "main", "index": 0}],
+        [{"node": "emit_complete", "type": "main", "index": 0}]
+      ]
+    },
+    "trigger_deployment": {"main": [[{"node": "emit_complete", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [{"name": "orchestrator"}, {"name": "ml-pipeline"}, {"name": "efficientnet"}, {"name": "ml-v1"}],
+  "updatedAt": "2025-11-29T00:00:00.000Z",
+  "versionId": "1"
+}

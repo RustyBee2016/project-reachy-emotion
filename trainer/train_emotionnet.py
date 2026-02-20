@@ -70,7 +70,7 @@ class TrainingOrchestrator:
     
     def prepare_dataset(
         self,
-        run_id: str,
+        run_id: Optional[str] = None,
         train_fraction: float = 0.7,
         seed: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -78,23 +78,27 @@ class TrainingOrchestrator:
         Prepare training dataset with balanced sampling.
         
         Args:
-            run_id: Unique identifier for this training run
+            run_id: Training run ID (run_xxxx). Auto-generated if omitted.
             train_fraction: Fraction of data for training
             seed: Random seed for reproducibility
         
         Returns:
             Dataset metadata dictionary
         """
-        logger.info(f"Preparing dataset for run: {run_id}")
+        resolved_run_id = self.dataset_preparer.resolve_run_id(run_id)
+        logger.info(f"Preparing dataset for run: {resolved_run_id}")
         
         dataset_info = self.dataset_preparer.prepare_training_dataset(
-            run_id=run_id,
+            run_id=resolved_run_id,
             train_fraction=train_fraction,
             seed=seed
         )
         
-        logger.info(f"Dataset prepared: {dataset_info['train_count']} train, "
-                   f"{dataset_info['test_count']} test samples")
+        logger.info(
+            "Dataset prepared: %s train frame samples (run_id=%s)",
+            dataset_info['train_count'],
+            dataset_info['run_id'],
+        )
         
         return dataset_info
     
@@ -269,9 +273,9 @@ class TrainingOrchestrator:
         """
         # Generate run ID if not provided
         if run_id is None:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            model_name = self.config.get('model', {}).get('model_name', 'emotionnet')
-            run_id = f"{model_name}_{timestamp}"
+            run_id = self.dataset_preparer.resolve_run_id(None)
+        else:
+            run_id = self.dataset_preparer.resolve_run_id(run_id)
         
         logger.info(f"=" * 60)
         logger.info(f"Starting training pipeline: {run_id}")
@@ -314,7 +318,12 @@ class TrainingOrchestrator:
                     dataset_hash=dataset_info['dataset_hash'],
                     train_count=dataset_info['train_count'],
                     test_count=dataset_info['test_count'],
-                    additional_info={'seed': dataset_info['seed']}
+                    additional_info={
+                        'seed': dataset_info['seed'],
+                        'run_id': dataset_info['run_id'],
+                        'frames_per_video': dataset_info.get('frames_per_video'),
+                        'videos_processed': dataset_info.get('videos_processed'),
+                    }
                 )
             
             # Step 3: Train model

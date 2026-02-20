@@ -1,0 +1,266 @@
+{
+  "name": "Agent 4 — Reconciler/Audit Agent (Reachy 08.4.2)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "15 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule_trigger",
+      "name": "Schedule: daily 02:15",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-600, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "reconciler/audit",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook_manual",
+      "name": "Webhook: manual.trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-600, 450],
+      "webhookId": "reconciler-manual"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "root_dir",
+              "value": "/videos",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "safe_fix",
+              "value": "=false",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      "id": "set_config",
+      "name": "Set: config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [-400, 350]
+    },
+    {
+      "parameters": {
+        "command": "find /videos/{temp,train,test,dataset_all} -type f -name '*.mp4' -printf '{\"file_path\":\"%P\",\"size_bytes\":%s,\"mtime\":\"%TY-%Tm-%TdT%TH:%TM:%TSZ\"}\\n'",
+        "authentication": "password"
+      },
+      "id": "ssh_scan_fs",
+      "name": "SSH: scan.filesystem",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [-200, 350],
+      "credentials": {
+        "sshPassword": {
+          "id": "3",
+          "name": "SSH Ubuntu1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse JSONL filesystem scan results\nconst output = $json.stdout || '';\nconst lines = output.split('\\n').filter(Boolean);\nconst items = [];\n\nfor (const line of lines) {\n  try {\n    const obj = JSON.parse(line);\n    const pathParts = obj.file_path.split('/');\n    const split = pathParts[0];\n    \n    items.push({\n      json: {\n        file_path: obj.file_path,\n        size_bytes: parseInt(obj.size_bytes, 10),\n        mtime: obj.mtime,\n        split,\n        source: 'fs'\n      }\n    });\n  } catch (e) {\n    // Skip malformed lines\n  }\n}\n\nreturn items;"
+      },
+      "id": "parse_fs_scan",
+      "name": "Code: parse.fs_scan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 350]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  video_id,\n  file_path,\n  split,\n  label,\n  size_bytes,\n  sha256,\n  updated_at\nFROM video;",
+        "options": {}
+      },
+      "id": "db_fetch_all",
+      "name": "Postgres: fetch.all_videos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [200, 200],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Diff filesystem vs database\nconst fsItems = $('parse_fs_scan').all();\nconst dbItems = $('db_fetch_all').all();\n\n// Build maps\nconst fsMap = new Map();\nfor (const item of fsItems) {\n  fsMap.set(item.json.file_path, item.json);\n}\n\nconst dbMap = new Map();\nfor (const item of dbItems) {\n  dbMap.set(item.json.file_path, item.json);\n}\n\n// Find differences\nconst orphans_fs = [];\nconst missing_fs = [];\nconst mismatches = [];\n\n// Orphans: in FS, not in DB\nfor (const [path, fsData] of fsMap) {\n  if (!dbMap.has(path)) {\n    orphans_fs.push({ file_path: path, ...fsData });\n  }\n}\n\n// Missing: in DB, not in FS\nfor (const [path, dbData] of dbMap) {\n  if (!fsMap.has(path)) {\n    missing_fs.push({ file_path: path, video_id: dbData.video_id });\n  } else {\n    // Check for mismatches\n    const fsData = fsMap.get(path);\n    if (fsData.size_bytes !== dbData.size_bytes || fsData.split !== dbData.split) {\n      mismatches.push({\n        file_path: path,\n        fs_size: fsData.size_bytes,\n        db_size: dbData.size_bytes,\n        fs_split: fsData.split,\n        db_split: dbData.split\n      });\n    }\n  }\n}\n\nreturn [{\n  json: {\n    summary: {\n      total_fs: fsMap.size,\n      total_db: dbMap.size,\n      orphans_count: orphans_fs.length,\n      missing_count: missing_fs.length,\n      mismatch_count: mismatches.length\n    },\n    orphans_fs,\n    missing_fs,\n    mismatches,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "diff_fs_db",
+      "name": "Code: diff.fs_db",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.summary.orphans_count > 0 || $json.summary.missing_count > 0 || $json.summary.mismatch_count > 0}}"
+            }
+          ]
+        }
+      },
+      "id": "if_drift_found",
+      "name": "IF: drift.found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@reachy.local",
+        "toEmail": "rustybee255@gmail.com",
+        "subject": "=Reconciler Report: {{$json.summary.orphans_count}} orphans, {{$json.summary.missing_count}} missing",
+        "emailType": "text",
+        "message": "=Reconciler completed at {{$json.timestamp}}\n\nSummary:\n- FS files: {{$json.summary.total_fs}}\n- DB records: {{$json.summary.total_db}}\n- Orphans (FS only): {{$json.summary.orphans_count}}\n- Missing (DB only): {{$json.summary.missing_count}}\n- Mismatches: {{$json.summary.mismatch_count}}\n\nReview in database or n8n execution logs."
+      },
+      "id": "email_report",
+      "name": "Email: send.report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [800, 200]
+    }
+  ],
+  "connections": {
+    "schedule_trigger": {
+      "main": [
+        [
+          {
+            "node": "set_config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook_manual": {
+      "main": [
+        [
+          {
+            "node": "set_config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_config": {
+      "main": [
+        [
+          {
+            "node": "ssh_scan_fs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "db_fetch_all",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ssh_scan_fs": {
+      "main": [
+        [
+          {
+            "node": "parse_fs_scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_fs_scan": {
+      "main": [
+        [
+          {
+            "node": "diff_fs_db",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_fetch_all": {
+      "main": [
+        [
+          {
+            "node": "diff_fs_db",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "diff_fs_db": {
+      "main": [
+        [
+          {
+            "node": "if_drift_found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if_drift_found": {
+      "main": [
+        [
+          {
+            "node": "email_report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "agent",
+      "id": "1"
+    },
+    {
+      "name": "reconciler",
+      "id": "2"
+    },
+    {
+      "name": "phase4",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}

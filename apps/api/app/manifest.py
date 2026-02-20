@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -21,7 +22,10 @@ class ManifestBackend(Protocol):
         """Reset manifest state; used during full rehydration."""
 
 
-@dataclass(slots=True)
+_DATACLASS_KWARGS = {"slots": True} if sys.version_info >= (3, 10) else {}
+
+
+@dataclass(**_DATACLASS_KWARGS)
 class LoggingManifestBackend:
     """Default backend that logs manifest operations for observability."""
 

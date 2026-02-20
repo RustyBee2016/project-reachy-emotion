@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import shutil
 from pathlib import Path
 
 import pytest
@@ -15,10 +16,12 @@ from tests.apps.api.db.test_migrations import _alembic_config
 
 @pytest.mark.asyncio
 async def test_async_roundtrip(tmp_path: Path) -> None:
+    migrated_db = tmp_path / "migrated.db"
     db_path = tmp_path / "async.db"
-    sync_url = f"sqlite:///{db_path}"
+    sync_url = f"sqlite:///{migrated_db}"
     cfg = _alembic_config(sync_url)
     command.upgrade(cfg, "head")
+    shutil.copy2(migrated_db, db_path)
 
     async_url = f"sqlite+aiosqlite:///{db_path}"
     sessionmaker = get_async_sessionmaker(async_url)
@@ -26,9 +29,9 @@ async def test_async_roundtrip(tmp_path: Path) -> None:
     # type: AsyncSession
     async with sessionmaker() as session:  
         video = models.Video(
-            file_path="dataset_all/clip_async.mp4",
-            split="dataset_all",
-            label="angry",
+            file_path="train/clip_async.mp4",
+            split="train",
+            label="sad",
             size_bytes=8192,
             sha256="e" * 64,
         )

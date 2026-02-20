@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, List, Literal, Optional
+from typing_extensions import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, UUID4, field_validator
@@ -12,22 +13,23 @@ from ..db.enums import EmotionEnum, SelectionTargetEnum
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from ..services.promote_service import SampleResult, StageResult
 
-_ALLOWED_LABELS = frozenset(str(label) for label in EmotionEnum.enums)
+_ALLOWED_LABELS = frozenset({"happy", "sad", "neutral"})
 _ALLOWED_TARGET_SPLITS = frozenset(str(split) for split in SelectionTargetEnum.enums)
 
 
-VideoIdList = Annotated[list[UUID4], Field(min_length=1, max_length=200)]
+VideoIdList = Annotated[List[UUID4], Field(min_length=1, max_length=200)]
 SampleFraction = Annotated[float, Field(gt=0)]
-OptionalSeed = Annotated[int | None, Field(ge=0, le=2**31 - 1)]
+OptionalSeed = Annotated[Optional[int], Field(ge=0, le=2**31 - 1)]
+RunId = Annotated[str, Field(pattern=r"^run_\d{4}$")]
 
 
 class StageRequest(BaseModel):
-    """Request body for staging videos from temp into dataset_all."""
+    """Deprecated compatibility request for legacy stage endpoint."""
 
     video_ids: VideoIdList = Field(
-        ..., description="Identifiers of videos to stage into dataset_all."
+        ..., description="Video identifiers (legacy payload; prefer /api/media/promote)."
     )
-    label: str = Field(..., description="Emotion label applied to staged clips.")
+    label: str = Field(..., description="3-class label (happy|sad|neutral).")
     dry_run: bool = Field(
         default=False,
         description="When true, validate and plan the operation without persisting changes.",
@@ -44,14 +46,14 @@ class StageRequest(BaseModel):
 
 
 class StageResponse(BaseModel):
-    """Response payload after staging videos."""
+    """Deprecated compatibility response for legacy stage endpoint."""
 
     model_config = ConfigDict(from_attributes=True)
 
     status: Literal["accepted", "error"] = "accepted"
-    promoted_ids: list[str] = Field(default_factory=list)
-    skipped_ids: list[str] = Field(default_factory=list)
-    failed_ids: list[str] = Field(default_factory=list)
+    promoted_ids: List[str] = Field(default_factory=list)
+    skipped_ids: List[str] = Field(default_factory=list)
+    failed_ids: List[str] = Field(default_factory=list)
     dry_run: bool = Field(
         default=False,
         description="Indicates whether the response represents a simulated operation.",
@@ -74,15 +76,15 @@ class StageResponse(BaseModel):
 
 
 class SampleRequest(BaseModel):
-    """Request body for sampling dataset_all clips into train/test splits."""
+    """Deprecated compatibility request for legacy sample endpoint."""
 
-    run_id: UUID4
+    run_id: RunId
     target_split: str = Field(..., description="Destination split (train or test).")
     sample_fraction: SampleFraction = Field(
         ...,
         description=(
-            "Fraction of dataset_all clips to sample (>0). Values greater than 1 select all"
-            " available candidates."
+            "Legacy sampling fraction (>0). Endpoint is deprecated; "
+            "run-scoped frame dataset preparation should be used instead."
         ),
     )
     strategy: Literal["balanced_random"] = Field(default="balanced_random")
@@ -106,16 +108,16 @@ class SampleRequest(BaseModel):
 
 
 class SampleResponse(BaseModel):
-    """Response payload after sampling dataset_all clips."""
+    """Deprecated compatibility response for legacy sample endpoint."""
 
     model_config = ConfigDict(from_attributes=True)
 
     status: Literal["accepted", "error"] = "accepted"
     run_id: str
     target_split: str
-    copied_ids: list[str] = Field(default_factory=list)
-    skipped_ids: list[str] = Field(default_factory=list)
-    failed_ids: list[str] = Field(default_factory=list)
+    copied_ids: List[str] = Field(default_factory=list)
+    skipped_ids: List[str] = Field(default_factory=list)
+    failed_ids: List[str] = Field(default_factory=list)
     dry_run: bool = Field(
         default=False,
         description="Indicates whether the response represents a simulated operation.",
@@ -146,7 +148,7 @@ class ResetManifestRequest(BaseModel):
         ...,
         description="Human-readable reason for triggering a manifest reset.",
     )
-    run_id: UUID4 | None = Field(
+    run_id: Optional[RunId] = Field(
         default=None,
         description="Optional training run identifier scoped to the reset.",
     )
@@ -165,7 +167,7 @@ class ResetManifestResponse(BaseModel):
 
     status: Literal["accepted", "error"] = "accepted"
     reason: str
-    run_id: str | None = None
+    run_id: Optional[str] = None
 
     @classmethod
     def from_request(

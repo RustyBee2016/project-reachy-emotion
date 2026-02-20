@@ -9,6 +9,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import hashlib
 
+import cv2
+import numpy as np
+
 from trainer.prepare_dataset import DatasetPreparer
 
 
@@ -17,20 +20,18 @@ def temp_dataset_dir():
     """Create temporary dataset directory structure."""
     temp_dir = tempfile.mkdtemp()
     base_path = Path(temp_dir)
-    
-    # Create dataset_all with sample structure
-    dataset_all = base_path / 'dataset_all'
-    dataset_all.mkdir()
-    
-    # Create emotion directories with sample files
-    for emotion in ['happy', 'sad']:
-        emotion_dir = dataset_all / emotion
+    train_root = base_path / 'train'
+    train_root.mkdir()
+
+    # Create emotion directories with sample video files (3-class: happy, sad, neutral)
+    for emotion in ['happy', 'sad', 'neutral']:
+        emotion_dir = train_root / emotion
         emotion_dir.mkdir()
-        
-        # Create 10 dummy video files per emotion
+
+        # Create 10 short videos per emotion
         for i in range(10):
             video_file = emotion_dir / f'{emotion}_{i:03d}.mp4'
-            video_file.write_text(f'dummy video content {i}')
+            _write_test_video(video_file)
     
     yield base_path
     
@@ -46,7 +47,6 @@ class TestDatasetPreparer:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         assert preparer.base_path == temp_dataset_dir
-        assert preparer.dataset_all_path.exists()
         assert preparer.manifests_path.exists()
         assert preparer.train_path.exists()
         assert preparer.test_path.exists()
@@ -56,7 +56,7 @@ class TestDatasetPreparer:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         result = preparer.prepare_training_dataset(
-            run_id='test_run_001',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
@@ -68,53 +68,44 @@ class TestDatasetPreparer:
         assert 'seed' in result
         assert 'dataset_hash' in result
         
-        # Check counts (20 total videos, 70/30 split)
-        assert result['train_count'] == 14
-        assert result['test_count'] == 6
+        # 30 source videos x 10 frames each
+        assert result['train_count'] == 300
+        assert result['test_count'] == 0
+        assert result['frames_per_video'] == 10
         assert result['seed'] == 42
     
     def test_train_test_split_ratio(self, temp_dataset_dir):
         """Test train/test split maintains correct ratio."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        # Test different fractions
+        # train_fraction is compatibility-only in frame extraction mode
         for fraction in [0.6, 0.7, 0.8]:
             result = preparer.prepare_training_dataset(
-                run_id=f'test_run_{fraction}',
+                run_id=f'run_{int(fraction * 10):04d}',
                 train_fraction=fraction,
                 seed=42
             )
-            
-            total = result['train_count'] + result['test_count']
-            actual_fraction = result['train_count'] / total
-            
-            # Allow small variance due to rounding
-            assert abs(actual_fraction - fraction) < 0.1
+
+            assert result['train_count'] == 300
+            assert result['test_count'] == 0
     
     def test_reproducibility_with_seed(self, temp_dataset_dir):
         """Test same seed produces same split."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        # Run twice with same seed
         result1 = preparer.prepare_training_dataset(
-            run_id='test_run_1',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
-        
-        # Clear splits
-        shutil.rmtree(preparer.train_path)
-        shutil.rmtree(preparer.test_path)
-        preparer.train_path.mkdir()
-        preparer.test_path.mkdir()
         
         result2 = preparer.prepare_training_dataset(
-            run_id='test_run_2',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=42
         )
         
-        # Should have same counts
+        # Should have same frame counts
         assert result1['train_count'] == result2['train_count']
         assert result1['test_count'] == result2['test_count']
     
@@ -123,24 +114,18 @@ class TestDatasetPreparer:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         result1 = preparer.prepare_training_dataset(
-            run_id='test_run_1',
+            run_id='run_0001',
             train_fraction=0.7,
             seed=42
         )
         
-        # Clear splits
-        shutil.rmtree(preparer.train_path)
-        shutil.rmtree(preparer.test_path)
-        preparer.train_path.mkdir()
-        preparer.test_path.mkdir()
-        
         result2 = preparer.prepare_training_dataset(
-            run_id='test_run_2',
+            run_id='run_0002',
             train_fraction=0.7,
             seed=99
         )
         
-        # Counts should be same but actual files different
+        # Counts should be same across seeds in fixed-size extraction
         assert result1['train_count'] == result2['train_count']
         assert result1['test_count'] == result2['test_count']
     
@@ -148,7 +133,7 @@ class TestDatasetPreparer:
         """Test JSONL manifest files are generated correctly."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        run_id = 'test_run_manifest'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(
             run_id=run_id,
             train_fraction=0.7,
@@ -166,7 +151,7 @@ class TestDatasetPreparer:
         with open(train_manifest) as f:
             train_lines = f.readlines()
         
-        assert len(train_lines) == 14  # 70% of 20
+        assert len(train_lines) == 300
         
         # Check each line is valid JSON
         for line in train_lines:
@@ -174,7 +159,8 @@ class TestDatasetPreparer:
             assert 'video_id' in entry
             assert 'path' in entry
             assert 'label' in entry
-            assert entry['label'] in ['happy', 'sad']
+            assert entry['label'] in ['happy', 'sad', 'neutral']
+            assert 'source_video' in entry
     
     def test_dataset_hash_calculation(self, temp_dataset_dir):
         """Test dataset hash is calculated correctly."""
@@ -196,59 +182,54 @@ class TestDatasetPreparer:
         
         hash1 = preparer.calculate_dataset_hash()
         
-        # Add a new video
-        new_video = preparer.dataset_all_path / 'happy' / 'happy_new.mp4'
-        new_video.write_text('new video content')
+        # Add a new source video
+        new_video = preparer.train_path / 'happy' / 'happy_new.mp4'
+        _write_test_video(new_video)
         
         hash2 = preparer.calculate_dataset_hash()
         
         # Hash should be different
         assert hash1 != hash2
     
-    def test_files_copied_to_train_test_dirs(self, temp_dataset_dir):
-        """Test videos are copied to train/test directories."""
+    def test_frames_extracted_to_run_dirs(self, temp_dataset_dir):
+        """Test frames are extracted to label/run and consolidated run directories."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
-        
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(
-            run_id='test_run_copy',
+            run_id=run_id,
             train_fraction=0.7,
             seed=42
         )
-        
-        # Check train directory has files
-        train_files = list(preparer.train_path.rglob('*.mp4'))
-        assert len(train_files) == 14
-        
-        # Check test directory has files
-        test_files = list(preparer.test_path.rglob('*.mp4'))
-        assert len(test_files) == 6
-        
-        # Check label subdirectories exist
-        assert (preparer.train_path / 'happy').exists()
-        assert (preparer.train_path / 'sad').exists()
-        assert (preparer.test_path / 'happy').exists()
-        assert (preparer.test_path / 'sad').exists()
+
+        # Label-specific run directories: /train/<label>/<run_id>
+        for label in ['happy', 'sad', 'neutral']:
+            label_run_dir = preparer.train_path / label / run_id
+            assert label_run_dir.exists()
+            assert len(list(label_run_dir.glob('*.jpg'))) == 100
+
+        # Consolidated run directory: /train/run/<run_id>/<label>
+        for label in ['happy', 'sad', 'neutral']:
+            consolidated_label_dir = preparer.train_runs_path / run_id / label
+            assert consolidated_label_dir.exists()
+            assert len(list(consolidated_label_dir.glob('*.jpg'))) == 100
     
     def test_empty_dataset_handling(self):
         """Test handling of empty dataset."""
         temp_dir = tempfile.mkdtemp()
         base_path = Path(temp_dir)
         
-        # Create empty dataset_all
-        dataset_all = base_path / 'dataset_all'
-        dataset_all.mkdir()
+        # Create empty train root
+        train_root = base_path / 'train'
+        train_root.mkdir()
         
         preparer = DatasetPreparer(str(base_path))
         
-        result = preparer.prepare_training_dataset(
-            run_id='test_empty',
-            train_fraction=0.7,
-            seed=42
-        )
-        
-        # Should handle gracefully
-        assert result['train_count'] == 0
-        assert result['test_count'] == 0
+        with pytest.raises(ValueError, match='missing source videos'):
+            preparer.prepare_training_dataset(
+                run_id='run_0001',
+                train_fraction=0.7,
+                seed=42
+            )
         
         shutil.rmtree(temp_dir)
     
@@ -257,27 +238,25 @@ class TestDatasetPreparer:
         temp_dir = tempfile.mkdtemp()
         base_path = Path(temp_dir)
         
-        # Create dataset with only happy
-        dataset_all = base_path / 'dataset_all'
-        dataset_all.mkdir()
+        # Create dataset with only happy under train/
+        train_root = base_path / 'train'
+        train_root.mkdir()
         
-        happy_dir = dataset_all / 'happy'
+        happy_dir = train_root / 'happy'
         happy_dir.mkdir()
         
         for i in range(10):
             video_file = happy_dir / f'happy_{i:03d}.mp4'
-            video_file.write_text(f'video {i}')
+            _write_test_video(video_file)
         
         preparer = DatasetPreparer(str(base_path))
         
-        result = preparer.prepare_training_dataset(
-            run_id='test_single_class',
-            train_fraction=0.7,
-            seed=42
-        )
-        
-        # Should still work
-        assert result['train_count'] + result['test_count'] == 10
+        with pytest.raises(ValueError, match='missing source videos'):
+            preparer.prepare_training_dataset(
+                run_id='run_0001',
+                train_fraction=0.7,
+                seed=42
+            )
         
         shutil.rmtree(temp_dir)
 
@@ -289,7 +268,7 @@ class TestManifestFormat:
         """Test manifests are valid JSONL."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        run_id = 'test_jsonl'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
         
         manifest_file = preparer.manifests_path / f'{run_id}_train.jsonl'
@@ -306,7 +285,7 @@ class TestManifestFormat:
         """Test manifest entries have required fields."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        run_id = 'test_fields'
+        run_id = 'run_0001'
         preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
         
         manifest_file = preparer.manifests_path / f'{run_id}_train.jsonl'
@@ -324,6 +303,43 @@ class TestManifestFormat:
                 assert isinstance(entry['video_id'], str)
                 assert isinstance(entry['path'], str)
                 assert isinstance(entry['label'], str)
+
+
+def _write_test_video(path: Path, frame_count: int = 20) -> None:
+    """Create a tiny synthetic MP4 video for frame extraction tests."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fourcc_fn = getattr(cv2, "VideoWriter_fourcc")
+    writer = cv2.VideoWriter(
+        str(path),
+        fourcc_fn(*"mp4v"),
+        10.0,
+        (32, 32),
+    )
+    if not writer.isOpened():
+        raise RuntimeError(f"Unable to create test video: {path}")
+    for idx in range(frame_count):
+        frame = np.full((32, 32, 3), idx % 255, dtype=np.uint8)
+        writer.write(frame)
+    writer.release()
+
+
+class TestRunIdPolicy:
+    """Test strict run ID behavior."""
+
+    def test_auto_generates_next_run_id(self, temp_dataset_dir):
+        preparer = DatasetPreparer(str(temp_dataset_dir))
+
+        result1 = preparer.prepare_training_dataset(seed=42)
+        result2 = preparer.prepare_training_dataset(seed=42)
+
+        assert result1['run_id'] == 'run_0001'
+        assert result2['run_id'] == 'run_0002'
+
+    def test_rejects_invalid_run_id(self, temp_dataset_dir):
+        preparer = DatasetPreparer(str(temp_dataset_dir))
+
+        with pytest.raises(ValueError, match='run_xxxx'):
+            preparer.prepare_training_dataset(run_id='run_1', seed=42)
 
 
 if __name__ == '__main__':

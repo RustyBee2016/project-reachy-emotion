@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import models
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True)
 class VideoRecord:
     """Lightweight representation of a video row."""
 
-    video_id: uuid.UUID
+    video_id: str  # UUID stored as string in database
     split: str
     label: str | None
     file_path: str
@@ -24,11 +24,11 @@ class VideoRecord:
     size_bytes: int
 
 
-@dataclass(slots=True)
+@dataclass
 class StageMutation:
-    """Requested transition from temp to dataset_all for a video."""
+    """Requested transition from temp to a labeled target split for a video."""
 
-    video_id: uuid.UUID
+    video_id: str  # UUID stored as string
     from_split: str
     to_split: str
     intended_label: str
@@ -36,11 +36,11 @@ class StageMutation:
     new_file_path: str
 
 
-@dataclass(slots=True)
+@dataclass
 class SamplingMutation:
-    """Requested transition when selecting clips into train/test splits."""
+    """Requested transition for legacy train/test sampling compatibility."""
 
-    video_id: uuid.UUID
+    video_id: str  # UUID stored as string
     from_split: str
     to_split: str
     current_label: str | None
@@ -54,7 +54,7 @@ class VideoRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def fetch_videos_for_stage(self, video_ids: Sequence[uuid.UUID]) -> list[VideoRecord]:
+    async def fetch_videos_for_stage(self, video_ids: Sequence[str]) -> list[VideoRecord]:
         """Return video metadata for ids targeted for staging."""
 
         if not video_ids:
@@ -64,26 +64,26 @@ class VideoRepository:
         rows = (await self._session.execute(stmt)).scalars().all()
         return [self._to_record(row) for row in rows]
 
-    async def fetch_dataset_all_for_sampling(
+    async def fetch_train_pool_for_sampling(
         self,
         *,
-        exclude_ids: Collection[uuid.UUID] | None = None,
+        exclude_ids: Collection[str] | None = None,
     ) -> list[VideoRecord]:
-        """Return candidates from dataset_all, optionally excluding specific ids."""
+        """Compatibility hook retained for deprecated sample endpoint.
 
-        stmt = sa.select(models.Video).where(models.Video.split == "dataset_all")
-        if exclude_ids:
-            stmt = stmt.where(sa.not_(models.Video.video_id.in_(exclude_ids)))
-        stmt = stmt.order_by(models.Video.label.asc(), models.Video.video_id.asc())
-        rows = (await self._session.execute(stmt)).scalars().all()
-        return [self._to_record(row) for row in rows]
+        Runtime sampling now relies on run-scoped frame dataset preparation
+        from train/<label> sources.
+        """
+
+        _ = exclude_ids
+        return []
 
     async def get_existing_selection_ids(
         self,
         *,
-        run_id: uuid.UUID,
+        run_id: str,
         target_split: str,
-    ) -> set[uuid.UUID]:
+    ) -> set[str]:
         """Return the set of video ids already selected for the given run/split."""
 
         training_selection_table = models.TrainingSelection.__table__
@@ -92,10 +92,10 @@ class VideoRepository:
             training_selection_table.c.target_split == target_split,
         )
         existing_ids = (await self._session.execute(stmt)).scalars().all()
-        return {uuid.UUID(str(video_id)) for video_id in existing_ids}
+        return set(existing_ids)
 
     async def persist_stage_results(self, mutations: Sequence[StageMutation]) -> None:
-        """Apply split/label updates and log promotions for staging."""
+        """Apply split/label updates and log promotion mutations."""
 
         if not mutations:
             return
@@ -129,13 +129,13 @@ class VideoRepository:
     async def persist_sampling_results(
         self,
         *,
-        run_id: uuid.UUID,
+        run_id: str,
         strategy: str,
         target_split: str,
         sample_fraction: float,
         selections: Sequence[SamplingMutation],
     ) -> None:
-        """Persist selection outcomes and associated promotion logs."""
+        """Persist legacy selection outcomes and associated promotion logs."""
 
         if not selections:
             return

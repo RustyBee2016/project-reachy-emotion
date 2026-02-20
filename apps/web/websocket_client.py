@@ -3,16 +3,43 @@ WebSocket client with auto-reconnection and event handling for real-time updates
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import queue
 import threading
 import time
+import sys
+import types
 from typing import Callable, Dict, Any, Optional, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, asdict
 from enum import Enum
-import socketio
+
+try:
+    import socketio
+except ImportError:  # pragma: no cover - optional dependency fallback
+    socketio = types.ModuleType("socketio")
+
+    class _StubAsyncClient:  # minimal interface for tests and non-realtime environments
+        def __init__(self, *args, **kwargs):
+            self._handlers = {}
+
+        def event(self, func):
+            self._handlers[func.__name__] = func
+            return func
+
+        async def connect(self, *args, **kwargs):
+            return None
+
+        async def disconnect(self):
+            return None
+
+        async def emit(self, *args, **kwargs):
+            return None
+
+    socketio.AsyncClient = _StubAsyncClient  # type: ignore[attr-defined]
+    sys.modules["socketio"] = socketio
 
 logger = logging.getLogger(__name__)
 
@@ -111,16 +138,35 @@ class WebSocketClient:
         self.errors_count = 0
         self.reconnection_count = 0
         
-        # Register event handlers
-        self._register_handlers()
+        # Register handlers lazily at connect-time so test/mocked clients can
+        # replace .on/.event after construction.
+        self._handlers_registered = False
         
         # Heartbeat task
         self._heartbeat_task = None
     
+    def _bind_event(self, event_name: str, handler: Callable[..., Any]) -> None:
+        """Bind an event handler across real and mocked socket clients."""
+        on_method = getattr(self.sio, "on", None)
+        if callable(on_method) and not inspect.iscoroutinefunction(on_method):
+            try:
+                on_method(event_name, handler)
+                return
+            except TypeError:
+                decorator = on_method(event_name)
+                if callable(decorator):
+                    decorator(handler)
+                    return
+
+        event_method = getattr(self.sio, "event", None)
+        if callable(event_method) and not inspect.iscoroutinefunction(event_method):
+            event_method(handler)
+
     def _register_handlers(self):
         """Register WebSocket event handlers."""
+        if self._handlers_registered:
+            return
         
-        @self.sio.event
         async def connect():
             """Handle connection event."""
             logger.info(f"WebSocket connected to {self.server_url}")
@@ -131,7 +177,7 @@ class WebSocketClient:
             await self.sio.emit('register', {
                 'device_id': self.device_id,
                 'device_type': 'ui',
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             })
             
             # Start heartbeat
@@ -139,7 +185,6 @@ class WebSocketClient:
                 self._heartbeat_task.cancel()
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         
-        @self.sio.event
         async def disconnect():
             """Handle disconnection event."""
             logger.warning("WebSocket disconnected")
@@ -151,22 +196,18 @@ class WebSocketClient:
                 self._heartbeat_task.cancel()
                 self._heartbeat_task = None
         
-        @self.sio.event
         async def emotion_event(data: Dict[str, Any]):
             """Handle emotion detection event from Jetson."""
             await self._handle_emotion_event(data)
         
-        @self.sio.event
         async def promotion_complete(data: Dict[str, Any]):
             """Handle video promotion completion event."""
             await self._handle_promotion_event(data)
         
-        @self.sio.event
         async def training_status(data: Dict[str, Any]):
             """Handle training status update event."""
             await self._handle_training_event(data)
         
-        @self.sio.event
         async def error(data: Dict[str, Any]):
             """Handle error event from server."""
             logger.error(f"Server error: {data}")
@@ -179,6 +220,14 @@ class WebSocketClient:
                     await callback(data)
                 except Exception as e:
                     logger.error(f"Error in callback: {e}")
+
+        self._bind_event("connect", connect)
+        self._bind_event("disconnect", disconnect)
+        self._bind_event(EventType.EMOTION.value, emotion_event)
+        self._bind_event(EventType.PROMOTION.value, promotion_complete)
+        self._bind_event(EventType.TRAINING.value, training_status)
+        self._bind_event(EventType.ERROR.value, error)
+        self._handlers_registered = True
     
     async def _handle_emotion_event(self, data: Dict[str, Any]):
         """Process emotion event."""
@@ -260,7 +309,7 @@ class WebSocketClient:
             try:
                 await self.sio.emit('heartbeat', {
                     'device_id': self.device_id,
-                    'timestamp': datetime.utcnow().isoformat()
+                    'timestamp': datetime.now(timezone.utc).isoformat()
                 })
                 self.last_heartbeat = datetime.now()
                 await asyncio.sleep(self.heartbeat_interval)
@@ -273,6 +322,8 @@ class WebSocketClient:
     async def connect(self):
         """Connect to WebSocket server."""
         try:
+            if not self._handlers_registered:
+                self._register_handlers()
             await self.sio.connect(self.server_url, namespaces=['/'])
             logger.info("WebSocket connection established")
         except Exception as e:

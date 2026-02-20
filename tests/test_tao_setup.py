@@ -12,9 +12,9 @@ from trainer.tao.config_loader import TAOConfigLoader, InvalidConfigError
 class TestTAOConfigLoader:
     """Test TAO configuration loading and validation."""
     
-    def test_load_valid_2cls_config(self):
-        """Test loading valid 2-class configuration."""
-        config_path = Path(__file__).parent.parent / "trainer/tao/specs/emotionnet_2cls.yaml"
+    def test_load_valid_3cls_config(self):
+        """Test loading valid 3-class configuration (Phase 1)."""
+        config_path = Path(__file__).parent.parent / "trainer/tao/specs/emotionnet_3cls.yaml"
         
         if not config_path.exists():
             pytest.skip("Config file not found")
@@ -30,11 +30,11 @@ class TestTAOConfigLoader:
         
         # Check model config
         assert config['model']['arch'] == 'resnet18'
-        assert config['model']['num_classes'] == 2
+        assert config['model']['num_classes'] == 3
         assert config['model']['input_shape'] == [224, 224, 3]
         
-        # Check dataset config
-        assert config['dataset']['classes'] == ['happy', 'sad']
+        # Check dataset config (3-class: happy, sad, neutral)
+        assert config['dataset']['classes'] == ['happy', 'sad', 'neutral']
         assert config['dataset']['augmentation']['enable'] is True
         
         # Check training config
@@ -42,8 +42,8 @@ class TestTAOConfigLoader:
         assert config['training']['num_epochs'] == 50
         assert config['training']['optimizer'] == 'adam'
     
-    def test_load_valid_6cls_config(self):
-        """Test loading valid 6-class configuration."""
+    def test_load_valid_legacy_config(self):
+        """Test loading optional legacy configuration (if present)."""
         config_path = Path(__file__).parent.parent / "trainer/tao/specs/emotionnet_6cls.yaml"
         
         if not config_path.exists():
@@ -52,13 +52,9 @@ class TestTAOConfigLoader:
         loader = TAOConfigLoader()
         config = loader.load_config(str(config_path))
         
-        # Check 6-class specific settings
-        assert config['model']['num_classes'] == 6
-        assert len(config['dataset']['classes']) == 6
-        assert 'angry' in config['dataset']['classes']
+        # Legacy configs may vary by branch; ensure it is internally consistent.
+        assert config['model']['num_classes'] == len(config['dataset']['classes'])
         assert 'neutral' in config['dataset']['classes']
-        assert 'surprise' in config['dataset']['classes']
-        assert 'fearful' in config['dataset']['classes']
     
     def test_config_file_not_found(self):
         """Test error when config file doesn't exist."""

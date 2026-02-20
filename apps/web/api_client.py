@@ -1,23 +1,103 @@
+from __future__ import annotations
+
+import logging
 import os
-from typing import Any, Dict, Optional
+import time
+import ipaddress
+from functools import wraps
+from typing import Any, Callable, Dict, Optional, TypeVar
+from urllib.parse import urlparse
 
 import requests
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 
-DEFAULT_MEDIA_BASE = "http://localhost:8081/api/media"
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Type variable for generic function
+F = TypeVar('F', bound=Callable[..., Any])
+
+# Default URLs - can be overridden via environment variables
+DEFAULT_MEDIA_BASE = "http://localhost:8083"
 DEFAULT_GATEWAY_BASE = "http://localhost:8000"
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_BACKOFF = 1.0  # seconds
+
+
+def retry_on_failure(max_retries: int = MAX_RETRIES, backoff: float = RETRY_BACKOFF) -> Callable[[F], F]:
+    """Decorator to retry API calls on transient failures.
+    
+    Retries on connection errors, timeouts, and 5xx server errors.
+    Uses exponential backoff between retries.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        backoff: Initial backoff time in seconds (doubles each retry)
+        
+    Returns:
+        Decorated function with retry logic
+    """
+    def decorator(func: F) -> F:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, Timeout) as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        wait_time = backoff * (2 ** attempt)
+                        logger.warning(
+                            f"API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                            f"Retrying in {wait_time:.1f}s..."
+                        )
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"API call failed after {max_retries + 1} attempts: {e}")
+                except HTTPError as e:
+                    # Retry on 5xx server errors, but not 4xx client errors
+                    if e.response is not None and 500 <= e.response.status_code < 600:
+                        last_exception = e
+                        if attempt < max_retries:
+                            wait_time = backoff * (2 ** attempt)
+                            logger.warning(
+                                f"Server error {e.response.status_code} (attempt {attempt + 1}/{max_retries + 1}). "
+                                f"Retrying in {wait_time:.1f}s..."
+                            )
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"Server error after {max_retries + 1} attempts: {e}")
+                    else:
+                        # Don't retry 4xx errors
+                        raise
+                except Exception as e:
+                    # Don't retry unexpected errors
+                    logger.error(f"Unexpected error in API call: {e}")
+                    raise
+            
+            # If we get here, all retries failed
+            if last_exception:
+                raise last_exception
+            raise RuntimeError("All retry attempts failed")
+        
+        return wrapper  # type: ignore
+    return decorator
 
 
 def _base_url() -> str:
+    """Get the Media Mover API base URL from environment or use default."""
     return os.getenv("REACHY_API_BASE", DEFAULT_MEDIA_BASE).rstrip("/")
 
 
 def _gateway_base() -> str:
+    """Get the Gateway API base URL from environment or use default."""
     env = os.getenv("REACHY_GATEWAY_BASE")
     if env:
         return env.rstrip("/")
-    base = _base_url()
-    if base.endswith("/api/media"):
-        return base[: -len("/api/media")]
     return DEFAULT_GATEWAY_BASE.rstrip("/")
 
 
@@ -36,6 +116,61 @@ def _headers() -> Dict[str, str]:
     return hdrs
 
 
+def _env_bool(name: str) -> Optional[bool]:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _is_private_or_local_host(hostname: Optional[str]) -> bool:
+    if not hostname:
+        return False
+    lowered = hostname.lower()
+    if lowered in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        return ipaddress.ip_address(lowered).is_private
+    except ValueError:
+        return lowered.endswith(".local")
+
+
+def _allow_self_signed(service_name: str) -> bool:
+    """Return True if self-signed certs are allowed for the given service."""
+    service_env = _env_bool(f"REACHY_{service_name}_ALLOW_SELF_SIGNED")
+    if service_env is not None:
+        return service_env
+    global_pref = _env_bool("REACHY_ALLOW_SELF_SIGNED")
+    return bool(global_pref)
+
+
+def _request_verify(base_url: str, service: str) -> bool | str:
+    """Determine the requests.verify value for a given service call."""
+    service_name = service.upper()
+    ca_bundle = os.getenv(f"REACHY_{service_name}_CA_BUNDLE") or os.getenv("REACHY_CA_BUNDLE")
+    if ca_bundle:
+        return ca_bundle
+
+    parsed = urlparse(base_url)
+    hostname = parsed.hostname
+    if parsed.scheme == "https" and _is_private_or_local_host(hostname):
+        if _allow_self_signed(service_name):
+            logger.warning(
+                "TLS verification disabled for %s (%s). "
+                "Use CA bundle env vars in production.",
+                service_name,
+                hostname,
+            )
+            return False
+
+    return True
+
+
 def media_api_base() -> str:
     """Return the configured Media Mover API base URL."""
     return _base_url()
@@ -46,11 +181,45 @@ def gateway_api_base() -> str:
     return _gateway_base()
 
 
+@retry_on_failure()
 def list_videos(split: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-    url = f"{_base_url()}/videos/list"
-    resp = requests.get(url, headers=_headers(), params={"split": split, "limit": limit, "offset": offset}, timeout=10)
+    """List videos from the specified split.
+    
+    Uses the v1 API endpoint which returns standardized response format.
+    
+    Args:
+        split: Video split (temp, train, test, purged)
+        limit: Maximum number of videos to return
+        offset: Pagination offset
+        
+    Returns:
+        Dictionary with 'items', 'pagination' keys (unwrapped from v1 response)
+    """
+    url = f"{_base_url()}/api/v1/media/list"
+    resp = requests.get(
+        url,
+        headers=_headers(),
+        params={"split": split, "limit": limit, "offset": offset},
+        timeout=10,
+        verify=_request_verify(_base_url(), "API"),
+    )
     resp.raise_for_status()
-    return resp.json()
+    
+    # Parse v1 response format
+    body = resp.json()
+    if body.get("status") == "success" and "data" in body:
+        data = body["data"]
+        # Return unwrapped data for backward compatibility
+        return {
+            "items": data["items"],
+            "total": data["pagination"]["total"],
+            "limit": data["pagination"]["limit"],
+            "offset": data["pagination"]["offset"],
+            "has_more": data["pagination"]["has_more"],
+        }
+    
+    # Fallback for unexpected format
+    return body
 
 
 def promote(
@@ -63,14 +232,40 @@ def promote(
     use_gateway: bool = False,
     idempotency_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    # Keep compatibility alias in mind; prefer /api/media/promote
-    payload: Dict[str, Any] = {"video_id": video_id, "dest_split": dest_split, "dry_run": dry_run}
+    """Promote a video to a different split (gateway/media compatibility endpoint).
+    
+    Args:
+        video_id: Video ID to promote
+        dest_split: Destination split (train, test)
+        label: Optional emotion label
+        dry_run: If True, validate without executing
+        correlation_id: Optional correlation ID for tracking
+        use_gateway: If True, use gateway endpoint instead of media mover
+        idempotency_key: Optional idempotency key for gateway
+        
+    Returns:
+        Response dictionary
+    """
+    normalized_split = dest_split.strip().lower()
+    if normalized_split not in {"train", "test"}:
+        raise ValueError("dest_split must be one of: train, test")
+
+    normalized_label: Optional[str] = None
     if label is not None:
-        payload["label"] = label
+        normalized_label = label.strip().lower()
+    if normalized_split == "train":
+        if normalized_label not in {"happy", "sad", "neutral"}:
+            raise ValueError("train promotions require label in {happy, sad, neutral}")
+    else:
+        normalized_label = None
+
+    payload: Dict[str, Any] = {"video_id": video_id, "dest_split": normalized_split, "dry_run": dry_run}
+    if normalized_label is not None:
+        payload["label"] = normalized_label
     if correlation_id:
         payload["correlation_id"] = correlation_id
 
-    url = f"{_base_url()}/promote"
+    url = f"{_base_url()}/api/media/promote"
     headers = _headers()
 
     if use_gateway:
@@ -79,14 +274,15 @@ def promote(
         # Gateway requires Idempotency-Key; fall back to correlation/video id
         headers["Idempotency-Key"] = idempotency_key or correlation_id or video_id
 
-    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+    verify = _request_verify(_gateway_base() if use_gateway else _base_url(), "GATEWAY" if use_gateway else "API")
+    resp = requests.post(url, headers=headers, json=payload, timeout=15, verify=verify)
     resp.raise_for_status()
     return resp.json()
 
 
 def rebuild_manifest() -> Dict[str, Any]:
     url = f"{_base_url()}/manifest/rebuild"
-    resp = requests.post(url, headers=_headers(), timeout=30)
+    resp = requests.post(url, headers=_headers(), timeout=30, verify=_request_verify(_base_url(), "API"))
     resp.raise_for_status()
     return resp.json()
 
@@ -126,10 +322,49 @@ def upload_video(
     if metadata:
         for key, value in metadata.items():
             data[f"meta[{key}]"] = value
-    resp = requests.post(url, headers=headers, files=files, data=data, timeout=60)
+    resp = requests.post(
+        url,
+        headers=headers,
+        files=files,
+        data=data,
+        timeout=60,
+        verify=_request_verify(_gateway_base(), "GATEWAY"),
+    )
     resp.raise_for_status()
     return resp.json()
 
+
+def register_local_video(
+    file_path: str,
+    *,
+    correlation_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    file_name: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Register a locally available video already on disk (temp/)."""
+    url = f"{_base_url()}/api/v1/ingest/register-local"
+    payload: Dict[str, Any] = {"file_path": file_path}
+    if correlation_id:
+        payload["correlation_id"] = correlation_id
+    if metadata:
+        payload["metadata"] = metadata
+    if file_name:
+        payload["file_name"] = file_name
+
+    headers = _headers()
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+
+    resp = requests.post(
+        url,
+        headers=headers,
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 def request_generation(prompt: str, correlation_id: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     url = f"{_gateway_base()}/api/gen/request"
@@ -140,7 +375,13 @@ def request_generation(prompt: str, correlation_id: str, params: Optional[Dict[s
     }
     if params:
         payload.update(params)
-    resp = requests.post(url, headers=_headers(), json=payload, timeout=30)
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_gateway_base(), "GATEWAY"),
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -150,6 +391,150 @@ def reject_video(video_id: str, correlation_id: str, reason: Optional[str] = Non
     payload: Dict[str, Any] = {"correlation_id": correlation_id}
     if reason:
         payload["reason"] = reason
-    resp = requests.post(url, headers=_headers(), json=payload, timeout=15)
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=15,
+        verify=_request_verify(_gateway_base(), "GATEWAY"),
+    )
     resp.raise_for_status()
     return resp.json()
+
+
+@retry_on_failure()
+def stage_to_train(
+    video_ids: list[str],
+    label: str,
+    dry_run: bool = False,
+    correlation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Batch helper to promote videos from temp -> train/<label>."""
+    promoted_ids: list[str] = []
+    skipped_ids: list[str] = []
+    failed_ids: list[str] = []
+
+    for video_id in video_ids:
+        try:
+            _ = promote(
+                video_id=video_id,
+                dest_split="train",
+                label=label,
+                dry_run=dry_run,
+                correlation_id=correlation_id,
+                use_gateway=False,
+            )
+            promoted_ids.append(video_id)
+        except Exception:
+            failed_ids.append(video_id)
+
+    return {
+        "status": "accepted" if not failed_ids else "error",
+        "promoted_ids": promoted_ids,
+        "skipped_ids": skipped_ids,
+        "failed_ids": failed_ids,
+        "dry_run": dry_run,
+        "message": "batch promotion completed via /api/media/promote",
+    }
+
+
+# ============================================================================
+# Training Pipeline Endpoints
+# ============================================================================
+
+
+@retry_on_failure()
+def extract_frames(
+    run_id: Optional[str] = None,
+    seed: Optional[int] = None,
+    frames_per_video: int = 10,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Trigger frame extraction from classified training videos.
+
+    Calls POST /api/v1/train/extract-frames on the Media Mover API.
+    For each emotion class, samples N random frames from every video
+    in train/<emotion>/ and creates a consolidated run dataset.
+
+    Args:
+        run_id: Run identifier (run_xxxx). Auto-generated if None.
+        seed: Random seed for reproducible sampling.
+        frames_per_video: Number of frames to sample per video.
+        dry_run: If True, validate without extracting.
+
+    Returns:
+        Response dict with run_id, frame counts, paths, and dataset hash.
+    """
+    url = f"{_base_url()}/api/v1/train/extract-frames"
+    payload: Dict[str, Any] = {
+        "frames_per_video": frames_per_video,
+        "dry_run": dry_run,
+    }
+    if run_id is not None:
+        payload["run_id"] = run_id
+    if seed is not None:
+        payload["seed"] = seed
+
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=120,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def get_training_run(run_id: str) -> Dict[str, Any]:
+    """Get the status of a training run.
+
+    Args:
+        run_id: Training run identifier (run_xxxx format).
+
+    Returns:
+        Dictionary with run status, counts, and metadata.
+    """
+    url = f"{_base_url()}/api/v1/train/runs/{run_id}"
+    resp = requests.get(
+        url,
+        headers=_headers(),
+        timeout=10,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def sample_split(
+    run_id: str,
+    target_split: str,
+    sample_fraction: float,
+    dry_run: bool = False,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Deprecated: use extract_frames() instead.
+
+    Retained for backward compatibility with the legacy 03_Train.py UI.
+    """
+    return {
+        "status": "deprecated",
+        "message": (
+            "The sample_split endpoint is deprecated. "
+            "Use 'Extract Frames' to create run-scoped frame datasets."
+        ),
+        "run_id": run_id,
+        "target_split": target_split,
+    }
+
+
+def get_training_status(pipeline_id: str) -> Dict[str, Any]:
+    """Get training pipeline status.
+
+    Wraps get_training_run for backward compatibility with legacy UI code.
+    """
+    try:
+        return get_training_run(pipeline_id)
+    except Exception:
+        return {"status": "unknown", "run_id": pipeline_id}

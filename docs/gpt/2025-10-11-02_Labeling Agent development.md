@@ -417,7 +417,7 @@ Credentials & env
 
 *   **Postgres credentials** (n8n → Credentials → Postgres): point at Ubuntu 1’s DB (least-privileged role for `video` & `label_event`).
 *   **Env vars** (n8n host):
-    *   `MEDIA_MOVER_BASE_URL=http://ubuntu1:8081`
+    *   `MEDIA_MOVER_BASE_URL=http://ubuntu1:8083`
     *   `MEDIA_MOVER_TOKEN=…` (short-lived JWT/Bearer you already planned) requirements\_08.3.3
 *   **Webhook URL**: in the Webhook node you get **Test** and **Production** URLs and can choose response mode (we use Respond node). [n8n Docs](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/?utm_source=chatgpt.com)
 

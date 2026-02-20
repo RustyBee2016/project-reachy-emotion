@@ -1,0 +1,201 @@
+{
+  "name": "Agent 7 — Deployment Agent ResNet-50 (Reachy 08.4.2)",
+  "description": "Deploys validated ResNet-50 emotion classifier to Jetson Xavier NX. Handles ONNX→TensorRT conversion and DeepStream integration.",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/deployment/resnet50/start",
+        "responseMode": "onReceived",
+        "options": {"responseCode": 202}
+      },
+      "id": "webhook_deploy",
+      "name": "Webhook: deployment.start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-600, 300],
+      "webhookId": "resnet50-deploy-start"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.gate_a_passed}}", "value2": true}
+          ]
+        }
+      },
+      "id": "if_gate_passed",
+      "name": "IF: gate_a.passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Prepare deployment paths\nconst runId = $json.run_id;\nconst onnxPath = $json.onnx_path || `/workspace/exports/${runId}/emotion_classifier_${runId}.onnx`;\nconst enginePath = `/opt/reachy/models/emotion_resnet50.engine`;\nconst backupPath = `/opt/reachy/models/backup/emotion_resnet50_${Date.now()}.engine`;\n\nreturn [{\n  json: {\n    ...items[0].json,\n    onnx_path: onnxPath,\n    engine_path: enginePath,\n    backup_path: backupPath,\n    model_placeholder: 'resnet50-affectnet-raf-db',\n    deployment_stage: 'shadow'\n  }\n}];"
+      },
+      "id": "prepare_deploy",
+      "name": "Code: prepare.deployment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-200, 200]
+    },
+    {
+      "parameters": {
+        "command": "scp {{$json.onnx_path}} jetson@10.0.4.150:/tmp/emotion_classifier.onnx",
+        "authentication": "password"
+      },
+      "id": "scp_onnx",
+      "name": "SSH: scp.onnx_to_jetson",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [0, 200],
+      "credentials": {"sshPassword": {"id": "3", "name": "SSH Ubuntu1"}}
+    },
+    {
+      "parameters": {
+        "command": "# Backup existing engine\nif [ -f {{$json.engine_path}} ]; then\n  mkdir -p /opt/reachy/models/backup\n  cp {{$json.engine_path}} {{$json.backup_path}}\nfi\n\n# Convert ONNX to TensorRT\n/usr/src/tensorrt/bin/trtexec \\\n  --onnx=/tmp/emotion_classifier.onnx \\\n  --saveEngine={{$json.engine_path}} \\\n  --fp16 \\\n  --workspace=2048 \\\n  --minShapes=input:1x3x224x224 \\\n  --optShapes=input:1x3x224x224 \\\n  --maxShapes=input:8x3x224x224",
+        "authentication": "password"
+      },
+      "id": "ssh_convert_trt",
+      "name": "SSH: convert.to_tensorrt",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [200, 200],
+      "credentials": {"sshPassword": {"id": "4", "name": "SSH Jetson"}}
+    },
+    {
+      "parameters": {
+        "command": "# Update DeepStream config to use new engine\nsed -i 's|model-engine-file=.*|model-engine-file={{$json.engine_path}}|' /opt/reachy/config/emotion_inference.txt\n\n# Restart DeepStream service\nsudo systemctl restart reachy-emotion",
+        "authentication": "password"
+      },
+      "id": "ssh_update_config",
+      "name": "SSH: update.deepstream_config",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [400, 200],
+      "credentials": {"sshPassword": {"id": "4", "name": "SSH Jetson"}}
+    },
+    {
+      "parameters": {"amount": 30, "unit": "seconds"},
+      "id": "wait_startup",
+      "name": "Wait: 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "command": "# Check service status and get metrics\nsystemctl is-active reachy-emotion && \\\ncat /var/log/reachy/emotion_metrics.json | tail -1",
+        "authentication": "password"
+      },
+      "id": "ssh_verify",
+      "name": "SSH: verify.deployment",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [800, 200],
+      "credentials": {"sshPassword": {"id": "4", "name": "SSH Jetson"}}
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse verification results\nconst output = $json.stdout || '';\nconst lines = output.trim().split('\\n');\nconst serviceActive = lines[0] === 'active';\n\nlet metrics = {};\ntry {\n  metrics = JSON.parse(lines[1] || '{}');\n} catch (e) {\n  metrics = {fps: 0, latency_ms: 999};\n}\n\n// Check Gate B requirements\nconst gateB = {\n  service_active: serviceActive,\n  fps_ok: metrics.fps >= 25,\n  latency_ok: metrics.latency_p50_ms <= 120,\n  passed: serviceActive && metrics.fps >= 25 && metrics.latency_p50_ms <= 120\n};\n\nreturn [{\n  json: {\n    ...items[0].json,\n    service_active: serviceActive,\n    metrics: metrics,\n    gate_b: gateB,\n    deployment_status: gateB.passed ? 'success' : 'failed'\n  }\n}];"
+      },
+      "id": "parse_verify",
+      "name": "Code: parse.verification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.gate_b.passed}}", "value2": true}
+          ]
+        }
+      },
+      "id": "if_gate_b",
+      "name": "IF: Gate_B.pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/deployment",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=deployment.completed"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "model", "value": "=resnet50-affectnet-raf-db"},
+            {"name": "engine_path", "value": "={{$json.engine_path}}"},
+            {"name": "fps", "value": "={{$json.metrics.fps}}"},
+            {"name": "latency_p50_ms", "value": "={{$json.metrics.latency_p50_ms}}"},
+            {"name": "deployment_stage", "value": "=shadow"}
+          ]
+        }
+      },
+      "id": "emit_success",
+      "name": "HTTP: emit.success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1400, 100]
+    },
+    {
+      "parameters": {
+        "command": "# Rollback to previous engine\nif [ -f {{$json.backup_path}} ]; then\n  cp {{$json.backup_path}} {{$json.engine_path}}\n  sudo systemctl restart reachy-emotion\nfi",
+        "authentication": "password"
+      },
+      "id": "ssh_rollback",
+      "name": "SSH: rollback",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [1400, 300],
+      "credentials": {"sshPassword": {"id": "4", "name": "SSH Jetson"}}
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/deployment",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "event_type", "value": "=deployment.rollback"},
+            {"name": "run_id", "value": "={{$json.run_id}}"},
+            {"name": "reason", "value": "=Gate B failed - performance requirements not met"},
+            {"name": "metrics", "value": "={{JSON.stringify($json.metrics)}}"}
+          ]
+        }
+      },
+      "id": "emit_rollback",
+      "name": "HTTP: emit.rollback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "webhook_deploy": {"main": [[{"node": "if_gate_passed", "type": "main", "index": 0}]]},
+    "if_gate_passed": {"main": [[{"node": "prepare_deploy", "type": "main", "index": 0}]]},
+    "prepare_deploy": {"main": [[{"node": "scp_onnx", "type": "main", "index": 0}]]},
+    "scp_onnx": {"main": [[{"node": "ssh_convert_trt", "type": "main", "index": 0}]]},
+    "ssh_convert_trt": {"main": [[{"node": "ssh_update_config", "type": "main", "index": 0}]]},
+    "ssh_update_config": {"main": [[{"node": "wait_startup", "type": "main", "index": 0}]]},
+    "wait_startup": {"main": [[{"node": "ssh_verify", "type": "main", "index": 0}]]},
+    "ssh_verify": {"main": [[{"node": "parse_verify", "type": "main", "index": 0}]]},
+    "parse_verify": {"main": [[{"node": "if_gate_b", "type": "main", "index": 0}]]},
+    "if_gate_b": {
+      "main": [
+        [{"node": "emit_success", "type": "main", "index": 0}],
+        [{"node": "ssh_rollback", "type": "main", "index": 0}]
+      ]
+    },
+    "ssh_rollback": {"main": [[{"node": "emit_rollback", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "tags": [{"name": "agent"}, {"name": "deployment"}, {"name": "resnet50"}, {"name": "ml-v1"}],
+  "updatedAt": "2025-11-29T00:00:00.000Z",
+  "versionId": "1"
+}
