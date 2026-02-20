@@ -79,10 +79,19 @@ with col2:
         st.error(f"Failed to load test split: {exc}")
 
 st.divider()
-st.subheader("Manifest + Sampling")
+st.subheader("Manifest + Frame Extraction")
 
-run_id = st.text_input("Run ID (UUID4)", value=str(uuid.uuid4()))
-sample_fraction = st.slider("Sample fraction", min_value=0.1, max_value=1.0, value=0.8, step=0.1)
+if "train_run_id" not in st.session_state:
+    st.session_state["train_run_id"] = ""
+
+run_id = st.text_input("Run ID (run_xxxx, optional)", key="train_run_id")
+sample_fraction = st.slider(
+    "Train fraction (compat metadata)",
+    min_value=0.1,
+    max_value=1.0,
+    value=0.8,
+    step=0.1,
+)
 dry_run = st.toggle("Dry run", value=True)
 
 action_col1, action_col2, action_col3 = st.columns(3)
@@ -96,34 +105,30 @@ with action_col1:
             st.error(f"Manifest rebuild failed: {exc}")
 
 with action_col2:
-    if st.button("Sample Train", use_container_width=True):
+    if st.button("Prepare 10-Frame Run", use_container_width=True):
         try:
-            resp = api_client.sample_split(
-                run_id=run_id,
-                target_split="train",
-                sample_fraction=sample_fraction,
-                dry_run=dry_run,
+            if dry_run:
+                st.info("Dry run is not supported for frame extraction; running live extraction.")
+            corr_id = str(uuid.uuid4())
+            resp = api_client.prepare_run_frames(
+                run_id=run_id or None,
+                train_fraction=sample_fraction,
+                correlation_id=corr_id,
+                idempotency_key=corr_id,
             )
+            st.success(f"Prepared frame dataset for run: {resp.get('run_id', 'unknown')}")
             st.json(resp)
         except Exception as exc:  # noqa: BLE001
-            st.error(f"Sampling train failed: {exc}")
+            st.error(f"Frame extraction failed: {exc}")
 
 with action_col3:
-    if st.button("Sample Test", use_container_width=True):
-        try:
-            resp = api_client.sample_split(
-                run_id=run_id,
-                target_split="test",
-                sample_fraction=sample_fraction,
-                dry_run=dry_run,
-            )
-            st.json(resp)
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Sampling test failed: {exc}")
+    if st.button("Generate New Run ID", use_container_width=True):
+        st.session_state["train_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
+        st.info("Generated run ID. Leave empty to auto-generate the next run_xxxx on the backend.")
 
 st.divider()
 st.subheader("Training Status")
-pipeline_id = st.text_input("Pipeline ID", value=run_id)
+pipeline_id = st.text_input("Pipeline ID", value=st.session_state.get("train_run_id", ""))
 if st.button("Refresh Training Status"):
     try:
         run_payload = _as_dict(api_client.get_training_status(pipeline_id))

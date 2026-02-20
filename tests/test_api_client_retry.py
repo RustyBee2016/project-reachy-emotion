@@ -171,6 +171,30 @@ class TestV1EndpointUsage:
         call_args = mock_post.call_args
         assert "/api/media/promote" in call_args[0][0]
 
+    @patch("requests.post")
+    def test_rebuild_manifest_uses_v1_ingest_endpoint(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok"})
+        api_client.rebuild_manifest()
+        call_args = mock_post.call_args
+        assert "/api/v1/ingest/manifest/rebuild" in call_args[0][0]
+        assert call_args[1]["json"]["splits"] == ["train", "test"]
+
+    @patch("requests.post")
+    def test_prepare_run_frames_uses_v1_ingest_endpoint(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok", "run_id": "run_0001"})
+        api_client.prepare_run_frames(run_id="run_0001", train_fraction=0.8, seed=42)
+        call_args = mock_post.call_args
+        assert "/api/v1/ingest/prepare-run-frames" in call_args[0][0]
+        assert call_args[1]["json"]["run_id"] == "run_0001"
+        assert call_args[1]["json"]["seed"] == 42
+
+    @patch("requests.get")
+    def test_get_training_status_uses_gateway_status_endpoint(self, mock_get):
+        mock_get.return_value = Mock(status_code=200, json=lambda: {"status": "training"})
+        api_client.get_training_status("run_0001")
+        call_args = mock_get.call_args
+        assert "/api/training/status/run_0001" in call_args[0][0]
+
 
 class TestResponseParsing:
     """Test that client correctly parses v1 response format."""

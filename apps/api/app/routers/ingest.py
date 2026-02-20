@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import subprocess
 import uuid
 from datetime import datetime
@@ -19,7 +20,8 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import insert, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
@@ -92,6 +94,45 @@ class RebuildManifestResponse(BaseModel):
     manifests_rebuilt: List[str]
     train_count: int = 0
     test_count: int = 0
+    correlation_id: Optional[str] = None
+
+
+class PrepareRunFramesRequest(BaseModel):
+    """Request payload for run-scoped frame extraction."""
+
+    run_id: Optional[str] = Field(
+        default=None,
+        description="Optional run identifier (run_xxxx). Auto-generated when omitted.",
+    )
+    train_fraction: float = Field(
+        default=0.7,
+        gt=0.0,
+        le=1.0,
+        description="Compatibility field retained for orchestration parity.",
+    )
+    seed: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=2**31 - 1,
+        description="Optional deterministic seed for frame sampling.",
+    )
+    correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
+
+
+class PrepareRunFramesResponse(BaseModel):
+    """Response payload for run-scoped frame extraction."""
+
+    status: str
+    run_id: str
+    train_count: int
+    test_count: int
+    videos_processed: int
+    frames_per_video: int
+    train_manifest_path: str
+    test_manifest_path: str
+    train_run_root: str
+    dataset_hash: str
+    seed: int
     correlation_id: Optional[str] = None
 
 
@@ -582,17 +623,33 @@ async def register_local_video(
                 },
             )
 
-        file_path = config.videos_root / rel_path
-        if not file_path.exists():
+        roots_to_try: list[Path] = [config.videos_root]
+        legacy_root = os.getenv("MEDIA_VIDEOS_ROOT")
+        if legacy_root:
+            legacy_path = Path(legacy_root)
+            if legacy_path not in roots_to_try:
+                roots_to_try.append(legacy_path)
+
+        resolved_root: Optional[Path] = None
+        file_path: Optional[Path] = None
+        for root in roots_to_try:
+            candidate = root / rel_path
+            if candidate.exists() and candidate.is_file():
+                resolved_root = root
+                file_path = candidate
+                break
+
+        if file_path is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"File not found: {file_path}",
+                    "message": f"File not found in configured roots: {raw_path}",
                     "correlation_id": corr_id,
                 },
             )
 
+        stored_rel_path = str(file_path.relative_to(resolved_root))
         video_bytes = file_path.read_bytes()
         sha256 = compute_sha256(video_bytes)
         size_bytes = len(video_bytes)
@@ -629,27 +686,56 @@ async def register_local_video(
         thumb_path = config.thumbs_path / f"{video_id}.jpg"
         await generate_thumbnail(file_path, thumb_path)
 
-        video = Video(
-            video_id=video_id,
-            file_path=str(rel_path),
-            split="temp",
-            label=None,
-            sha256=sha256,
-            size_bytes=size_bytes,
-            duration_sec=metadata.duration_sec,
-            fps=metadata.fps,
-            width=metadata.width,
-            height=metadata.height,
-            extra_data=parsed_meta,
-        )
-        db.add(video)
-        await db.commit()
+        # NOTE: production databases can have legacy timestamp columns without defaults;
+        # insert explicit UTC-naive timestamps for cross-schema compatibility.
+        now = datetime.utcnow()
+        insert_values = {
+            "video_id": video_id,
+            "file_path": stored_rel_path,
+            "split": "temp",
+            "label": None,
+            "sha256": sha256,
+            "size_bytes": size_bytes,
+            "duration_sec": metadata.duration_sec,
+            "fps": metadata.fps,
+            "width": metadata.width,
+            "height": metadata.height,
+            "extra_data": parsed_meta,
+            "created_at": now,
+            "updated_at": now,
+        }
+        try:
+            await db.execute(insert(Video).values(**insert_values))
+            await db.commit()
+        except SQLAlchemyError:
+            await db.rollback()
+            # Handle race/duplicate insert by reusing the existing SHA+size row.
+            existing = await db.execute(
+                select(Video).where(Video.sha256 == sha256, Video.size_bytes == size_bytes)
+            )
+            existing_video = existing.scalar_one_or_none()
+            if existing_video is not None:
+                return RegisterLocalVideoResponse(
+                    status="duplicate",
+                    video_id=existing_video.video_id,
+                    sha256=sha256,
+                    file_path=existing_video.file_path,
+                    size_bytes=existing_video.size_bytes,
+                    duration_sec=existing_video.duration_sec,
+                    fps=existing_video.fps,
+                    width=existing_video.width,
+                    height=existing_video.height,
+                    correlation_id=corr_id,
+                    duplicate=True,
+                    file_name=request.file_name,
+                )
+            raise
 
         return RegisterLocalVideoResponse(
             status="done",
             video_id=video_id,
             sha256=sha256,
-            file_path=str(rel_path),
+            file_path=stored_rel_path,
             size_bytes=size_bytes,
             duration_sec=metadata.duration_sec,
             fps=metadata.fps,
@@ -793,6 +879,97 @@ async def rebuild_manifest(
                 "correlation_id": correlation_id
             }
         )
+
+
+@router.post("/prepare-run-frames", response_model=PrepareRunFramesResponse)
+async def prepare_run_frames(
+    request: PrepareRunFramesRequest,
+    config: AppConfig = Depends(get_config),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+) -> PrepareRunFramesResponse:
+    """Extract run-scoped random frames from train videos and generate manifests.
+
+    Expected outputs:
+    - train/<label>/<run_id>/*.jpg (per-label extraction artifacts)
+    - train/run/<run_id>/<label>/*.jpg (consolidated training dataset)
+    - manifests/<run_id>_train.jsonl and manifests/<run_id>_test.jsonl
+    """
+    correlation_id = request.correlation_id or str(uuid.uuid4())
+    try:
+        try:
+            from trainer.prepare_dataset import DatasetPreparer
+        except ImportError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "dependency_error",
+                    "message": (
+                        "Frame extraction dependency is missing. "
+                        "Install trainer dependencies (opencv-python-headless)."
+                    ),
+                    "correlation_id": correlation_id,
+                },
+            ) from exc
+
+        preparer = DatasetPreparer(str(config.videos_root))
+        result = preparer.prepare_training_dataset(
+            run_id=request.run_id,
+            train_fraction=request.train_fraction,
+            seed=request.seed,
+        )
+
+        run_id = str(result["run_id"])
+        train_manifest_path = config.manifests_path / f"{run_id}_train.jsonl"
+        test_manifest_path = config.manifests_path / f"{run_id}_test.jsonl"
+        train_run_root = config.videos_root / "train" / "run" / run_id
+
+        logger.info(
+            "prepare_run_frames_completed",
+            extra={
+                "correlation_id": correlation_id,
+                "run_id": run_id,
+                "train_count": result["train_count"],
+                "videos_processed": result["videos_processed"],
+                "frames_per_video": result["frames_per_video"],
+                "idempotency_key": idempotency_key,
+            },
+        )
+
+        return PrepareRunFramesResponse(
+            status="ok",
+            run_id=run_id,
+            train_count=int(result["train_count"]),
+            test_count=int(result["test_count"]),
+            videos_processed=int(result["videos_processed"]),
+            frames_per_video=int(result["frames_per_video"]),
+            train_manifest_path=str(train_manifest_path),
+            test_manifest_path=str(test_manifest_path),
+            train_run_root=str(train_run_root),
+            dataset_hash=str(result["dataset_hash"]),
+            seed=int(result["seed"]),
+            correlation_id=correlation_id,
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_error",
+                "message": str(exc),
+                "correlation_id": correlation_id,
+            },
+        ) from exc
+    except Exception as exc:
+        logger.exception("prepare_run_frames_failed", extra={"correlation_id": correlation_id})
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Frame extraction failed: {exc}",
+                "correlation_id": correlation_id,
+            },
+        ) from exc
 
 
 @router.get("/status/{video_id}")
