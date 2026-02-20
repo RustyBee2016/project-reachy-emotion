@@ -195,6 +195,91 @@ class TestPullVideoEndpoint:
 
 
 # ============================================================================
+# Register Local Endpoint Tests
+# ============================================================================
+
+
+class TestRegisterLocalEndpoint:
+    """Tests for POST /api/v1/ingest/register-local."""
+
+    @pytest.mark.asyncio
+    async def test_register_local_success(
+        self, client, test_config, db_session, mock_video_bytes, create_test_video_file
+    ):
+        """Register an existing temp file and persist metadata."""
+        rel_path = "temp/local_clip.mp4"
+        create_test_video_file(rel_path, mock_video_bytes)
+
+        with patch("apps.api.app.routers.ingest.ffprobe_metadata", new_callable=AsyncMock) as mock_ffprobe:
+            mock_ffprobe.return_value = MagicMock(
+                duration_sec=5.0, fps=30.0, width=1280, height=720, codec="h264", bitrate=1000000
+            )
+            with patch("apps.api.app.routers.ingest.generate_thumbnail", new_callable=AsyncMock) as mock_thumb:
+                mock_thumb.return_value = True
+                response = await client.post(
+                    "/api/v1/ingest/register-local",
+                    json={
+                        "file_path": rel_path,
+                        "correlation_id": "register-local-success",
+                        "file_name": "local_clip.mp4",
+                    },
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "done"
+        assert data["duplicate"] is False
+        assert data["file_path"] == rel_path
+        assert data["file_name"] == "local_clip.mp4"
+
+        saved = await db_session.get(Video, data["video_id"])
+        assert saved is not None
+        assert saved.file_path == rel_path
+        assert saved.split == "temp"
+        assert saved.label is None
+
+    @pytest.mark.asyncio
+    async def test_register_local_duplicate_reuses_existing_video(
+        self, client, db_session, mock_video_bytes, mock_video_sha256, create_test_video_file
+    ):
+        """Return duplicate status when SHA+size already exists."""
+        existing_id = str(uuid.uuid4())
+        rel_path = "temp/already_registered.mp4"
+        create_test_video_file(rel_path, mock_video_bytes)
+
+        existing_video = Video(
+            video_id=existing_id,
+            file_path=rel_path,
+            split="temp",
+            sha256=mock_video_sha256,
+            size_bytes=len(mock_video_bytes),
+            duration_sec=4.0,
+            fps=24.0,
+            width=640,
+            height=360,
+        )
+        db_session.add(existing_video)
+        await db_session.commit()
+
+        with patch("apps.api.app.routers.ingest.ffprobe_metadata", new_callable=AsyncMock) as mock_ffprobe:
+            mock_ffprobe.return_value = MagicMock(
+                duration_sec=4.0, fps=24.0, width=640, height=360, codec="h264", bitrate=800000
+            )
+            with patch("apps.api.app.routers.ingest.generate_thumbnail", new_callable=AsyncMock) as mock_thumb:
+                mock_thumb.return_value = True
+                response = await client.post(
+                    "/api/v1/ingest/register-local",
+                    json={"file_path": rel_path, "correlation_id": "register-local-dup"},
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "duplicate"
+        assert data["duplicate"] is True
+        assert data["video_id"] == existing_id
+
+
+# ============================================================================
 # Manifest Rebuild Endpoint Tests
 # ============================================================================
 

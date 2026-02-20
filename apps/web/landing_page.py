@@ -158,9 +158,6 @@ def _legacy_clip_identifier(current: dict, video_id: Optional[str]) -> Optional[
     if isinstance(video_id, str) and video_id:
         return video_id
 
-    if isinstance(video_id, str) and video_id:
-        return video_id
-
     backend_path = current.get("backend_path")
     if isinstance(backend_path, str) and backend_path:
         return Path(backend_path).name
@@ -519,12 +516,12 @@ with col9:
                     clip_id = _legacy_clip_identifier(current, video_id)
                     if not clip_id:
                         st.error("Unable to resolve a clip identifier for promotion.")
-                    elif not _is_uuid_identifier(clip_id):
-                        st.error(
-                            "Unable to promote because the resolved video identifier is not a UUID. "
-                            "Please refresh and retry so the clip can be registered first."
-                        )
                     else:
+                        if not _is_uuid_identifier(clip_id):
+                            st.info(
+                                "Using legacy clip identifier for promotion. "
+                                "Backend will resolve/register the clip from temp storage."
+                            )
                         promote_via_gateway(
                             video_id=clip_id,
                             dest_split="train",
@@ -536,8 +533,7 @@ with col9:
                         )
                         st.success(f"✅ Classified as: **{selected_emotion}**")
                         st.info(f"Video promoted from temp to train/{selected_emotion}")
-
-                    st.session_state.current_video = None
+                        st.session_state.current_video = None
             except Exception as e:  # noqa: BLE001
                 st.error(f"❌ Classification failed: {str(e)}")
 

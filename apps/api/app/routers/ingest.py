@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import subprocess
 import uuid
 from datetime import datetime
@@ -19,7 +20,8 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import insert, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
@@ -582,17 +584,33 @@ async def register_local_video(
                 },
             )
 
-        file_path = config.videos_root / rel_path
-        if not file_path.exists():
+        roots_to_try: list[Path] = [config.videos_root]
+        legacy_root = os.getenv("MEDIA_VIDEOS_ROOT")
+        if legacy_root:
+            legacy_path = Path(legacy_root)
+            if legacy_path not in roots_to_try:
+                roots_to_try.append(legacy_path)
+
+        resolved_root: Optional[Path] = None
+        file_path: Optional[Path] = None
+        for root in roots_to_try:
+            candidate = root / rel_path
+            if candidate.exists() and candidate.is_file():
+                resolved_root = root
+                file_path = candidate
+                break
+
+        if file_path is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"File not found: {file_path}",
+                    "message": f"File not found in configured roots: {raw_path}",
                     "correlation_id": corr_id,
                 },
             )
 
+        stored_rel_path = str(file_path.relative_to(resolved_root))
         video_bytes = file_path.read_bytes()
         sha256 = compute_sha256(video_bytes)
         size_bytes = len(video_bytes)
@@ -629,27 +647,56 @@ async def register_local_video(
         thumb_path = config.thumbs_path / f"{video_id}.jpg"
         await generate_thumbnail(file_path, thumb_path)
 
-        video = Video(
-            video_id=video_id,
-            file_path=str(rel_path),
-            split="temp",
-            label=None,
-            sha256=sha256,
-            size_bytes=size_bytes,
-            duration_sec=metadata.duration_sec,
-            fps=metadata.fps,
-            width=metadata.width,
-            height=metadata.height,
-            extra_data=parsed_meta,
-        )
-        db.add(video)
-        await db.commit()
+        # NOTE: production databases can have legacy timestamp columns without defaults;
+        # insert explicit UTC-naive timestamps for cross-schema compatibility.
+        now = datetime.utcnow()
+        insert_values = {
+            "video_id": video_id,
+            "file_path": stored_rel_path,
+            "split": "temp",
+            "label": None,
+            "sha256": sha256,
+            "size_bytes": size_bytes,
+            "duration_sec": metadata.duration_sec,
+            "fps": metadata.fps,
+            "width": metadata.width,
+            "height": metadata.height,
+            "extra_data": parsed_meta,
+            "created_at": now,
+            "updated_at": now,
+        }
+        try:
+            await db.execute(insert(Video).values(**insert_values))
+            await db.commit()
+        except SQLAlchemyError:
+            await db.rollback()
+            # Handle race/duplicate insert by reusing the existing SHA+size row.
+            existing = await db.execute(
+                select(Video).where(Video.sha256 == sha256, Video.size_bytes == size_bytes)
+            )
+            existing_video = existing.scalar_one_or_none()
+            if existing_video is not None:
+                return RegisterLocalVideoResponse(
+                    status="duplicate",
+                    video_id=existing_video.video_id,
+                    sha256=sha256,
+                    file_path=existing_video.file_path,
+                    size_bytes=existing_video.size_bytes,
+                    duration_sec=existing_video.duration_sec,
+                    fps=existing_video.fps,
+                    width=existing_video.width,
+                    height=existing_video.height,
+                    correlation_id=corr_id,
+                    duplicate=True,
+                    file_name=request.file_name,
+                )
+            raise
 
         return RegisterLocalVideoResponse(
             status="done",
             video_id=video_id,
             sha256=sha256,
-            file_path=str(rel_path),
+            file_path=stored_rel_path,
             size_bytes=size_bytes,
             duration_sec=metadata.duration_sec,
             fps=metadata.fps,
