@@ -21,6 +21,8 @@ from ..deps import get_db
 from ..schemas.train import (
     ExtractFramesRequest,
     ExtractFramesResponse,
+    InitiateRunRequest,
+    InitiateRunResponse,
     TrainingRunStatus,
 )
 
@@ -238,4 +240,129 @@ async def get_training_run(
         dataset_hash=row.dataset_hash,
         seed=row.seed,
         error_message=row.error_message,
+    )
+
+
+# Valid extraction-complete statuses that allow training initiation.
+_EXTRACTION_COMPLETE_STATUSES = frozenset({"completed", "completed_gate_passed"})
+
+# n8n webhook path for the Agent 5 Training Orchestrator.
+_N8N_TRAINING_WEBHOOK = "webhook/agent/training/efficientnet/start"
+
+
+@router.post(
+    "/initiate-run",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=InitiateRunResponse,
+)
+async def initiate_run(
+    payload: InitiateRunRequest,
+    request_ctx: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_db),
+    config: AppConfig = Depends(get_config),
+):
+    """Initiate ML fine-tuning for an extracted frame dataset.
+
+    Validates that the referenced run_id has completed frame extraction,
+    transitions the TrainingRun to status='training', and notifies the
+    n8n Training Orchestrator (Agent 5) via webhook so it can monitor
+    the training process.
+
+    The actual training is executed by n8n calling
+    trainer/run_efficientnet_pipeline.py on the training host via SSH.
+    """
+    import httpx
+
+    correlation_id = _resolve_correlation_id(request_ctx)
+    response.headers[CORRELATION_ID_HEADER] = correlation_id
+
+    # Validate that the training run exists and extraction is complete.
+    training_run = await session.get(models.TrainingRun, payload.run_id)
+    if training_run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": f"Training run not found: {payload.run_id}",
+                "correlation_id": correlation_id,
+            },
+        )
+
+    if training_run.status not in _EXTRACTION_COMPLETE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": (
+                    f"Run {payload.run_id} is in status '{training_run.status}'. "
+                    f"Frame extraction must be completed first "
+                    f"(expected one of: {', '.join(sorted(_EXTRACTION_COMPLETE_STATUSES))})."
+                ),
+                "correlation_id": correlation_id,
+            },
+        )
+
+    # Transition status to 'training'.
+    training_run.status = "training"
+    training_run.started_at = datetime.now(timezone.utc)
+    training_run.completed_at = None
+    training_run.error_message = None
+
+    # Merge config_path into existing config metadata.
+    existing_config = dict(training_run.config or {})
+    existing_config["training_config_path"] = payload.config_path
+    existing_config["training_correlation_id"] = correlation_id
+    training_run.config = existing_config
+
+    await session.commit()
+
+    # Notify n8n Training Orchestrator webhook.
+    n8n_url = f"http://{config.n8n_host}:{config.n8n_port}/{_N8N_TRAINING_WEBHOOK}"
+    n8n_payload = {
+        "run_id": payload.run_id,
+        "config_path": payload.config_path,
+        "dataset_hash": training_run.dataset_hash,
+        "correlation_id": correlation_id,
+    }
+
+    n8n_notified = False
+    n8n_status_code = None
+    message = ""
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            n8n_resp = await client.post(n8n_url, json=n8n_payload)
+            n8n_status_code = n8n_resp.status_code
+            n8n_notified = 200 <= n8n_status_code < 300
+            if n8n_notified:
+                message = (
+                    f"Training initiated. n8n Agent 5 notified "
+                    f"(HTTP {n8n_status_code})."
+                )
+            else:
+                message = (
+                    f"Training run status updated to 'training', but n8n returned "
+                    f"HTTP {n8n_status_code}. Check n8n workflow status manually."
+                )
+    except Exception as exc:
+        logger.warning(
+            "Failed to notify n8n for run %s: %s", payload.run_id, exc,
+        )
+        message = (
+            f"Training run status updated to 'training', but n8n notification "
+            f"failed: {exc}. The orchestrator may need to be triggered manually."
+        )
+
+    logger.info(
+        "Initiate run: run_id=%s n8n_notified=%s n8n_status=%s",
+        payload.run_id, n8n_notified, n8n_status_code,
+    )
+
+    return InitiateRunResponse(
+        status="accepted",
+        run_id=payload.run_id,
+        n8n_notified=n8n_notified,
+        n8n_status_code=n8n_status_code,
+        dataset_hash=training_run.dataset_hash,
+        config_path=payload.config_path,
+        message=message,
     )

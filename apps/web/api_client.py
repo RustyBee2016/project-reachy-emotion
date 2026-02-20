@@ -507,6 +507,42 @@ def get_training_run(run_id: str) -> Dict[str, Any]:
     return resp.json()
 
 
+@retry_on_failure()
+def initiate_run(
+    run_id: str,
+    config_path: str = "trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",
+) -> Dict[str, Any]:
+    """Initiate ML fine-tuning for an extracted frame dataset.
+
+    Calls POST /api/v1/train/initiate-run on the Media Mover API.
+    The backend validates extraction is complete, transitions the
+    TrainingRun to 'training' status, and notifies the n8n Training
+    Orchestrator (Agent 5) via webhook.
+
+    Args:
+        run_id: Run identifier from a completed extraction (run_xxxx).
+        config_path: Path to the training YAML config.
+
+    Returns:
+        Response dict with run_id, n8n notification status, and message.
+    """
+    url = f"{_base_url()}/api/v1/train/initiate-run"
+    payload: Dict[str, Any] = {
+        "run_id": run_id,
+        "config_path": config_path,
+    }
+
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def sample_split(
     run_id: str,
     target_split: str,

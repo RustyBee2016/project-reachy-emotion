@@ -72,6 +72,46 @@ class ExtractFramesResponse(BaseModel):
     )
 
 
+class InitiateRunRequest(BaseModel):
+    """Request to initiate ML fine-tuning for an extracted frame dataset."""
+
+    run_id: str = Field(
+        ...,
+        description="Run identifier from a completed frame extraction (run_xxxx format).",
+    )
+    config_path: str = Field(
+        default="trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",
+        description="Path to the training YAML configuration.",
+    )
+
+    @field_validator("run_id")
+    @classmethod
+    def _validate_run_id(cls, value: str) -> str:
+        import re
+        normalized = value.strip()
+        if not re.fullmatch(r"run_\d{4}", normalized):
+            raise ValueError("run_id must match pattern run_xxxx (e.g., run_0001)")
+        return normalized
+
+
+class InitiateRunResponse(BaseModel):
+    """Response after submitting a training run to the n8n orchestrator."""
+
+    status: str = Field(description="Submission result: accepted or error.")
+    run_id: str = Field(description="Run identifier.")
+    n8n_notified: bool = Field(description="Whether n8n training webhook was called.")
+    n8n_status_code: Optional[int] = Field(
+        default=None,
+        description="HTTP status code from n8n webhook (None if notification skipped).",
+    )
+    dataset_hash: Optional[str] = Field(
+        default=None,
+        description="Dataset hash from the extraction phase.",
+    )
+    config_path: str = Field(description="Training YAML config used.")
+    message: str = Field(default="", description="Human-readable status message.")
+
+
 class TrainingRunStatus(BaseModel):
     """Status snapshot of a training run."""
 

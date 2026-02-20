@@ -34,6 +34,8 @@ from .responses import (
 from .train import (
     ExtractFramesRequest,
     ExtractFramesResponse,
+    InitiateRunRequest,
+    InitiateRunResponse,
     TrainingRunStatus,
 )
 
@@ -52,6 +54,8 @@ __all__ = [
     # Training schemas
     "ExtractFramesRequest",
     "ExtractFramesResponse",
+    "InitiateRunRequest",
+    "InitiateRunResponse",
     "TrainingRunStatus",
     # Response schemas
     "ResponseMeta",

@@ -18,6 +18,18 @@ TOTAL_VIDEO_THRESHOLD = 9001
 PER_EMOTION_THRESHOLD = 3000
 EMOTION_CLASSES = ("happy", "sad", "neutral")
 
+# Extraction-complete statuses that allow training initiation.
+_EXTRACTION_COMPLETE = {"completed", "completed_gate_passed"}
+
+# Training in-progress statuses.
+_TRAINING_IN_PROGRESS = {"training", "evaluating", "sampling"}
+
+# Initialize session state for tracking extraction results.
+if "last_extraction_run_id" not in st.session_state:
+    st.session_state.last_extraction_run_id = None
+if "last_extraction_status" not in st.session_state:
+    st.session_state.last_extraction_status = None
+
 
 def _items_for_split(split: str) -> list[dict]:
     data = api_client.list_videos(split=split, limit=1000, offset=0)
@@ -31,23 +43,25 @@ def _as_dict(value: Any) -> Dict[str, Any]:
 
 def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
     st.markdown(f"**{title}**")
-    status = str(payload.get("status") or "unknown").lower()
+    run_status = str(payload.get("status") or "unknown").lower()
     metrics = _as_dict(payload.get("metrics"))
     error_message = payload.get("error_message")
     blocked_reason = metrics.get("blocked_reason")
 
-    if status == "blocked":
+    if run_status == "blocked":
         st.warning(f"Blocked: {blocked_reason or 'pipeline gate not satisfied'}")
-    elif status in {"completed", "completed_gate_passed", "completed_gate_failed"}:
-        st.success(f"Completed ({status})")
-    elif status in {"training", "evaluating", "pending", "sampling", "running"}:
-        st.info(f"In progress ({status})")
-    elif status in {"failed", "error", "cancelled"}:
-        st.error(f"Failed ({status})")
+    elif run_status in {"completed", "completed_gate_passed"}:
+        st.success(f"Completed ({run_status})")
+    elif run_status == "completed_gate_failed":
+        st.error(f"Completed but Gate A failed ({run_status})")
+    elif run_status in _TRAINING_IN_PROGRESS | {"pending", "running"}:
+        st.info(f"In progress ({run_status})")
+    elif run_status in {"failed", "error", "cancelled"}:
+        st.error(f"Failed ({run_status})")
     else:
-        st.caption(f"Status: {status}")
+        st.caption(f"Status: {run_status}")
 
-    if status == "blocked":
+    if run_status == "blocked":
         counts = _as_dict(metrics.get("counts"))
         min_required = metrics.get("min_required_per_class")
         if counts:
@@ -57,6 +71,14 @@ def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
             )
         if min_required is not None:
             st.caption(f"Minimum required per class: {min_required}")
+
+    # Show Gate A results if available.
+    gate_results = metrics.get("gate_a_gates") or metrics.get("gate_results")
+    if isinstance(gate_results, dict):
+        st.markdown("**Gate A Results:**")
+        for gate_name, passed in gate_results.items():
+            icon = "PASS" if passed else "FAIL"
+            st.caption(f"  {gate_name}: {icon}")
 
     if error_message:
         st.caption(f"Error: {error_message}")
@@ -220,6 +242,9 @@ with btn_col1:
                         f"{resp.get('train_count', 0)} frames from "
                         f"{resp.get('videos_processed', 0)} videos."
                     )
+                    # Track extraction completion in session state.
+                    st.session_state.last_extraction_run_id = resp.get("run_id")
+                    st.session_state.last_extraction_status = "completed"
             else:
                 st.warning(f"Unexpected status: {resp_status}")
             st.json(resp)
@@ -237,6 +262,98 @@ with btn_col2:
 
 
 # ============================================================================
+# Initiate ML Training Run
+# ============================================================================
+
+st.divider()
+st.subheader("Initiate Training Run")
+st.caption(
+    "Once frame extraction is complete, initiate EfficientNet-B0 fine-tuning. "
+    "This notifies the n8n Training Orchestrator (Agent 5) to start the ML "
+    "pipeline: train, evaluate, and validate against Gate A thresholds."
+)
+
+# Determine if a run is ready to initiate training.
+# Check session state first (from a just-completed extraction), then allow
+# manual entry for runs completed in prior sessions.
+initiate_run_id = st.text_input(
+    "Run ID to initiate",
+    value=st.session_state.last_extraction_run_id or "",
+    placeholder="run_0001",
+    help="Enter the run_id from a completed frame extraction.",
+    key="initiate_run_id",
+)
+
+config_path = st.text_input(
+    "Training config path",
+    value="trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml",
+    help="Path to the EfficientNet training YAML configuration.",
+    key="training_config_path",
+)
+
+# Check whether the specified run has completed extraction.
+run_ready = False
+run_status_msg = ""
+if initiate_run_id.strip():
+    try:
+        run_info = _as_dict(api_client.get_training_status(initiate_run_id.strip()))
+        current_status = str(run_info.get("status", "unknown")).lower()
+        if current_status in _EXTRACTION_COMPLETE:
+            run_ready = True
+            run_status_msg = f"Run {initiate_run_id} extraction complete. Ready to train."
+        elif current_status in _TRAINING_IN_PROGRESS:
+            run_status_msg = f"Run {initiate_run_id} is already in progress ({current_status})."
+        elif current_status in {"failed", "error", "cancelled"}:
+            run_status_msg = f"Run {initiate_run_id} has failed. Cannot initiate training."
+        else:
+            run_status_msg = f"Run {initiate_run_id} status: {current_status}. Extraction must complete first."
+    except Exception:  # noqa: BLE001
+        run_status_msg = f"Run {initiate_run_id} not found. Extract frames first."
+
+if run_status_msg:
+    if run_ready:
+        st.success(run_status_msg)
+    else:
+        st.warning(run_status_msg)
+
+if st.button(
+    "Initiate Run",
+    type="primary",
+    use_container_width=True,
+    disabled=not run_ready,
+):
+    try:
+        with st.spinner("Initiating training run..."):
+            resp = api_client.initiate_run(
+                run_id=initiate_run_id.strip(),
+                config_path=config_path.strip(),
+            )
+        resp_status = resp.get("status", "unknown")
+        n8n_notified = resp.get("n8n_notified", False)
+        message = resp.get("message", "")
+
+        if resp_status == "accepted":
+            if n8n_notified:
+                st.success(
+                    f"Training initiated for **{resp.get('run_id')}**. "
+                    f"n8n Agent 5 has been notified and is orchestrating the pipeline."
+                )
+            else:
+                st.warning(
+                    f"Training run status updated for **{resp.get('run_id')}**, "
+                    f"but n8n notification may have failed. {message}"
+                )
+            # Clear extraction state so button reflects new status on rerun.
+            st.session_state.last_extraction_status = None
+        else:
+            st.warning(f"Unexpected response: {resp_status}")
+
+        st.json(resp)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Failed to initiate training: {exc}")
+
+
+# ============================================================================
 # Training Run Status
 # ============================================================================
 
@@ -244,7 +361,9 @@ st.divider()
 st.subheader("Training Run Status")
 status_run_id = st.text_input(
     "Run ID to check",
-    value=extract_run_id if extract_run_id.strip() else "run_0001",
+    value=initiate_run_id if initiate_run_id.strip() else (
+        extract_run_id if extract_run_id.strip() else "run_0001"
+    ),
     key="status_run_id",
 )
 if st.button("Refresh Training Status"):
