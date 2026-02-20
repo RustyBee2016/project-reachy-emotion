@@ -7,13 +7,13 @@ After=network.target
 Type=simple
 User=rusty_admin
 Group=rusty_admin
-WorkingDirectory=/home/rusty_admin/projects/reachy_08.4.2
+WorkingDirectory=%h/projects/reachy_08.4.2_frames_01
 
 # Load environment variables from gateway .env file
-EnvironmentFile=-/home/rusty_admin/projects/reachy_08.4.2/apps/gateway/.env
+EnvironmentFile=-%h/projects/reachy_08.4.2_frames_01/apps/gateway/.env
 
 # Start the gateway using the startup script
-ExecStart=/home/rusty_admin/projects/reachy_08.4.2/start_gateway.sh
+ExecStart=%h/projects/reachy_08.4.2_frames_01/start_gateway.sh
 
 # Restart policy
 Restart=on-failure

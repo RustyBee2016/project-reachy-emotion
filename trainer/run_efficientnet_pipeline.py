@@ -186,6 +186,8 @@ def _collect_predictions(
     input_size: int,
     batch_size: int,
     num_workers: int,
+    run_id: Optional[str] = None,
+    frames_per_video: int = 1,
 ) -> Dict[str, Any]:
     import numpy as np
     import torch
@@ -203,6 +205,8 @@ def _collect_predictions(
         class_names=class_names,
         frame_sampling_train="random",
         frame_sampling_val="middle",
+        frames_per_video=frames_per_video,
+        run_id=run_id,
     )
 
     y_true: List[int] = []
@@ -320,6 +324,8 @@ def main() -> int:
         input_size=config.model.input_size,
         batch_size=config.data.batch_size,
         num_workers=config.data.num_workers,
+        run_id=args.run_id,
+        frames_per_video=config.data.frames_per_video,
     )
 
     output_dir = Path(args.output_dir)
