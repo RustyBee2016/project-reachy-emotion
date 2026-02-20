@@ -6,6 +6,8 @@ the n8n Ingest Agent (Agent 1) and Promotion Agent (Agent 3).
 
 import hashlib
 import json
+import sys
+import types
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -277,6 +279,73 @@ class TestRegisterLocalEndpoint:
         assert data["status"] == "duplicate"
         assert data["duplicate"] is True
         assert data["video_id"] == existing_id
+
+
+# ============================================================================
+# Prepare Run Frames Endpoint Tests
+# ============================================================================
+
+
+class TestPrepareRunFramesEndpoint:
+    """Tests for POST /api/v1/ingest/prepare-run-frames."""
+
+    @pytest.mark.asyncio
+    async def test_prepare_run_frames_success(self, client):
+        """Return run metadata and output paths for successful extraction."""
+
+        class FakePreparer:
+            def __init__(self, base_path: str):
+                self.base_path = base_path
+
+            def prepare_training_dataset(self, run_id=None, train_fraction=0.7, seed=None):
+                return {
+                    "run_id": run_id or "run_0001",
+                    "train_count": 30,
+                    "test_count": 0,
+                    "videos_processed": 3,
+                    "frames_per_video": 10,
+                    "seed": 42 if seed is None else seed,
+                    "dataset_hash": "a" * 64,
+                }
+
+        fake_module = types.SimpleNamespace(DatasetPreparer=FakePreparer)
+        with patch.dict(sys.modules, {"trainer.prepare_dataset": fake_module}):
+            response = await client.post(
+                "/api/v1/ingest/prepare-run-frames",
+                json={"run_id": "run_0001", "train_fraction": 0.8, "seed": 123},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["run_id"] == "run_0001"
+        assert data["train_count"] == 30
+        assert data["frames_per_video"] == 10
+        assert data["dataset_hash"] == "a" * 64
+        assert data["seed"] == 123
+        assert data["train_manifest_path"].endswith("run_0001_train.jsonl")
+
+    @pytest.mark.asyncio
+    async def test_prepare_run_frames_validation_error(self, client):
+        """Convert dataset preparer validation failures into HTTP 422."""
+
+        class FakePreparer:
+            def __init__(self, base_path: str):
+                self.base_path = base_path
+
+            def prepare_training_dataset(self, run_id=None, train_fraction=0.7, seed=None):
+                raise ValueError("run_id must match pattern run_xxxx (e.g., run_0001)")
+
+        fake_module = types.SimpleNamespace(DatasetPreparer=FakePreparer)
+        with patch.dict(sys.modules, {"trainer.prepare_dataset": fake_module}):
+            response = await client.post(
+                "/api/v1/ingest/prepare-run-frames",
+                json={"run_id": "bad_run"},
+            )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert data["detail"]["error"] == "validation_error"
 
 
 # ============================================================================

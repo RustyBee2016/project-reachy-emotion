@@ -97,6 +97,45 @@ class RebuildManifestResponse(BaseModel):
     correlation_id: Optional[str] = None
 
 
+class PrepareRunFramesRequest(BaseModel):
+    """Request payload for run-scoped frame extraction."""
+
+    run_id: Optional[str] = Field(
+        default=None,
+        description="Optional run identifier (run_xxxx). Auto-generated when omitted.",
+    )
+    train_fraction: float = Field(
+        default=0.7,
+        gt=0.0,
+        le=1.0,
+        description="Compatibility field retained for orchestration parity.",
+    )
+    seed: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=2**31 - 1,
+        description="Optional deterministic seed for frame sampling.",
+    )
+    correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
+
+
+class PrepareRunFramesResponse(BaseModel):
+    """Response payload for run-scoped frame extraction."""
+
+    status: str
+    run_id: str
+    train_count: int
+    test_count: int
+    videos_processed: int
+    frames_per_video: int
+    train_manifest_path: str
+    test_manifest_path: str
+    train_run_root: str
+    dataset_hash: str
+    seed: int
+    correlation_id: Optional[str] = None
+
+
 class VideoMetadataFFprobe(BaseModel):
     """Video metadata extracted via FFprobe."""
     duration_sec: Optional[float] = None
@@ -840,6 +879,97 @@ async def rebuild_manifest(
                 "correlation_id": correlation_id
             }
         )
+
+
+@router.post("/prepare-run-frames", response_model=PrepareRunFramesResponse)
+async def prepare_run_frames(
+    request: PrepareRunFramesRequest,
+    config: AppConfig = Depends(get_config),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+) -> PrepareRunFramesResponse:
+    """Extract run-scoped random frames from train videos and generate manifests.
+
+    Expected outputs:
+    - train/<label>/<run_id>/*.jpg (per-label extraction artifacts)
+    - train/run/<run_id>/<label>/*.jpg (consolidated training dataset)
+    - manifests/<run_id>_train.jsonl and manifests/<run_id>_test.jsonl
+    """
+    correlation_id = request.correlation_id or str(uuid.uuid4())
+    try:
+        try:
+            from trainer.prepare_dataset import DatasetPreparer
+        except ImportError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "dependency_error",
+                    "message": (
+                        "Frame extraction dependency is missing. "
+                        "Install trainer dependencies (opencv-python-headless)."
+                    ),
+                    "correlation_id": correlation_id,
+                },
+            ) from exc
+
+        preparer = DatasetPreparer(str(config.videos_root))
+        result = preparer.prepare_training_dataset(
+            run_id=request.run_id,
+            train_fraction=request.train_fraction,
+            seed=request.seed,
+        )
+
+        run_id = str(result["run_id"])
+        train_manifest_path = config.manifests_path / f"{run_id}_train.jsonl"
+        test_manifest_path = config.manifests_path / f"{run_id}_test.jsonl"
+        train_run_root = config.videos_root / "train" / "run" / run_id
+
+        logger.info(
+            "prepare_run_frames_completed",
+            extra={
+                "correlation_id": correlation_id,
+                "run_id": run_id,
+                "train_count": result["train_count"],
+                "videos_processed": result["videos_processed"],
+                "frames_per_video": result["frames_per_video"],
+                "idempotency_key": idempotency_key,
+            },
+        )
+
+        return PrepareRunFramesResponse(
+            status="ok",
+            run_id=run_id,
+            train_count=int(result["train_count"]),
+            test_count=int(result["test_count"]),
+            videos_processed=int(result["videos_processed"]),
+            frames_per_video=int(result["frames_per_video"]),
+            train_manifest_path=str(train_manifest_path),
+            test_manifest_path=str(test_manifest_path),
+            train_run_root=str(train_run_root),
+            dataset_hash=str(result["dataset_hash"]),
+            seed=int(result["seed"]),
+            correlation_id=correlation_id,
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_error",
+                "message": str(exc),
+                "correlation_id": correlation_id,
+            },
+        ) from exc
+    except Exception as exc:
+        logger.exception("prepare_run_frames_failed", extra={"correlation_id": correlation_id})
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Frame extraction failed: {exc}",
+                "correlation_id": correlation_id,
+            },
+        ) from exc
 
 
 @router.get("/status/{video_id}")

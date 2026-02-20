@@ -280,9 +280,76 @@ def promote(
     return resp.json()
 
 
-def rebuild_manifest() -> Dict[str, Any]:
-    url = f"{_base_url()}/manifest/rebuild"
-    resp = requests.post(url, headers=_headers(), timeout=30, verify=_request_verify(_base_url(), "API"))
+def rebuild_manifest(
+    *,
+    splits: Optional[list[str]] = None,
+    correlation_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    url = f"{_base_url()}/api/v1/ingest/manifest/rebuild"
+    payload: Dict[str, Any] = {"splits": splits or ["train", "test"]}
+    if correlation_id:
+        payload["correlation_id"] = correlation_id
+
+    headers = _headers()
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+
+    resp = requests.post(
+        url,
+        headers=headers,
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def prepare_run_frames(
+    *,
+    run_id: Optional[str] = None,
+    train_fraction: float = 0.7,
+    seed: Optional[int] = None,
+    correlation_id: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Trigger run-scoped frame extraction (10 random frames per train video)."""
+    url = f"{_base_url()}/api/v1/ingest/prepare-run-frames"
+    payload: Dict[str, Any] = {
+        "train_fraction": train_fraction,
+    }
+    if run_id:
+        payload["run_id"] = run_id
+    if seed is not None:
+        payload["seed"] = seed
+    if correlation_id:
+        payload["correlation_id"] = correlation_id
+
+    headers = _headers()
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+
+    resp = requests.post(
+        url,
+        headers=headers,
+        json=payload,
+        timeout=120,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_training_status(pipeline_id: str) -> Dict[str, Any]:
+    """Fetch persisted training status by run id (or 'latest')."""
+    url = f"{_gateway_base()}/api/training/status/{pipeline_id}"
+    resp = requests.get(
+        url,
+        headers=_headers(),
+        timeout=10,
+        verify=_request_verify(_gateway_base(), "GATEWAY"),
+    )
     resp.raise_for_status()
     return resp.json()
 
