@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from collections import Counter
 from typing import Any, Dict
 
@@ -57,6 +56,10 @@ def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
     st.json(payload)
 
 
+# ============================================================================
+# Train/Test Split Overview
+# ============================================================================
+
 col1, col2 = st.columns(2)
 with col1:
     try:
@@ -78,15 +81,79 @@ with col2:
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load test split: {exc}")
 
+
+# ============================================================================
+# Frame Extraction
+# ============================================================================
+
 st.divider()
-st.subheader("Manifest + Sampling")
+st.subheader("Frame Extraction")
+st.caption(
+    "Extract random frames from classified videos in train/<emotion>/. "
+    "Frames are stored per-emotion and consolidated into a run dataset "
+    "at train/run/<run_id>/<emotion>/."
+)
 
-run_id = st.text_input("Run ID (UUID4)", value=str(uuid.uuid4()))
-sample_fraction = st.slider("Sample fraction", min_value=0.1, max_value=1.0, value=0.8, step=0.1)
-dry_run = st.toggle("Dry run", value=True)
+extract_col1, extract_col2 = st.columns(2)
+with extract_col1:
+    extract_run_id = st.text_input(
+        "Run ID (run_xxxx)",
+        value="",
+        placeholder="Auto-generated if empty",
+        help="Leave blank to auto-generate the next sequential run ID.",
+        key="extract_run_id",
+    )
+    frames_per_video = st.number_input(
+        "Frames per video",
+        min_value=1,
+        max_value=100,
+        value=10,
+        step=1,
+        help="Number of random frames to sample from each video.",
+    )
 
-action_col1, action_col2, action_col3 = st.columns(3)
-with action_col1:
+with extract_col2:
+    extract_seed = st.number_input(
+        "Random seed",
+        min_value=0,
+        max_value=2**31 - 1,
+        value=0,
+        step=1,
+        help="Set to 0 for auto-generated seed based on run ID.",
+    )
+    extract_dry_run = st.toggle("Dry run (preview only)", value=True, key="extract_dry_run")
+
+btn_col1, btn_col2 = st.columns(2)
+with btn_col1:
+    if st.button("Extract Frames", type="primary", use_container_width=True):
+        resolved_run_id = extract_run_id.strip() if extract_run_id.strip() else None
+        resolved_seed = extract_seed if extract_seed > 0 else None
+        try:
+            with st.spinner("Extracting frames..."):
+                resp = api_client.extract_frames(
+                    run_id=resolved_run_id,
+                    seed=resolved_seed,
+                    frames_per_video=frames_per_video,
+                    dry_run=extract_dry_run,
+                )
+            resp_status = resp.get("status", "unknown")
+            if resp_status in ("completed", "dry_run"):
+                if extract_dry_run:
+                    st.info(f"Dry run: {resp.get('videos_processed', 0)} videos, "
+                            f"{resp.get('train_count', 0)} frames would be extracted.")
+                else:
+                    st.success(
+                        f"Extraction complete: run **{resp.get('run_id')}** - "
+                        f"{resp.get('train_count', 0)} frames from "
+                        f"{resp.get('videos_processed', 0)} videos."
+                    )
+            else:
+                st.warning(f"Unexpected status: {resp_status}")
+            st.json(resp)
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Frame extraction failed: {exc}")
+
+with btn_col2:
     if st.button("Rebuild Manifests", use_container_width=True):
         try:
             resp = api_client.rebuild_manifest()
@@ -95,43 +162,21 @@ with action_col1:
         except Exception as exc:  # noqa: BLE001
             st.error(f"Manifest rebuild failed: {exc}")
 
-with action_col2:
-    if st.button("Sample Train", use_container_width=True):
-        try:
-            resp = api_client.sample_split(
-                run_id=run_id,
-                target_split="train",
-                sample_fraction=sample_fraction,
-                dry_run=dry_run,
-            )
-            st.json(resp)
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Sampling train failed: {exc}")
 
-with action_col3:
-    if st.button("Sample Test", use_container_width=True):
-        try:
-            resp = api_client.sample_split(
-                run_id=run_id,
-                target_split="test",
-                sample_fraction=sample_fraction,
-                dry_run=dry_run,
-            )
-            st.json(resp)
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Sampling test failed: {exc}")
+# ============================================================================
+# Training Run Status
+# ============================================================================
 
 st.divider()
-st.subheader("Training Status")
-pipeline_id = st.text_input("Pipeline ID", value=run_id)
+st.subheader("Training Run Status")
+status_run_id = st.text_input(
+    "Run ID to check",
+    value=extract_run_id if extract_run_id.strip() else "run_0001",
+    key="status_run_id",
+)
 if st.button("Refresh Training Status"):
     try:
-        run_payload = _as_dict(api_client.get_training_status(pipeline_id))
-        latest_payload = _as_dict(api_client.get_training_status("latest"))
-        col_run, col_latest = st.columns(2)
-        with col_run:
-            _render_status_panel(f"Run: {pipeline_id}", run_payload)
-        with col_latest:
-            _render_status_panel("Latest Snapshot", latest_payload)
+        run_payload = _as_dict(api_client.get_training_status(status_run_id))
+        _render_status_panel(f"Run: {status_run_id}", run_payload)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Status fetch failed: {exc}")

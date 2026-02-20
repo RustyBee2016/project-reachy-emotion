@@ -31,6 +31,11 @@ from .responses import (
     create_single_error_response,
     create_success_response,
 )
+from .train import (
+    ExtractFramesRequest,
+    ExtractFramesResponse,
+    TrainingRunStatus,
+)
 
 __all__ = [
     # Dialogue schemas
@@ -44,6 +49,10 @@ __all__ = [
     "SampleResponse",
     "ResetManifestRequest",
     "ResetManifestResponse",
+    # Training schemas
+    "ExtractFramesRequest",
+    "ExtractFramesResponse",
+    "TrainingRunStatus",
     # Response schemas
     "ResponseMeta",
     "PaginationMeta",

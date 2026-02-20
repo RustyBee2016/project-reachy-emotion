@@ -436,3 +436,105 @@ def stage_to_train(
         "dry_run": dry_run,
         "message": "batch promotion completed via /api/media/promote",
     }
+
+
+# ============================================================================
+# Training Pipeline Endpoints
+# ============================================================================
+
+
+@retry_on_failure()
+def extract_frames(
+    run_id: Optional[str] = None,
+    seed: Optional[int] = None,
+    frames_per_video: int = 10,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Trigger frame extraction from classified training videos.
+
+    Calls POST /api/v1/train/extract-frames on the Media Mover API.
+    For each emotion class, samples N random frames from every video
+    in train/<emotion>/ and creates a consolidated run dataset.
+
+    Args:
+        run_id: Run identifier (run_xxxx). Auto-generated if None.
+        seed: Random seed for reproducible sampling.
+        frames_per_video: Number of frames to sample per video.
+        dry_run: If True, validate without extracting.
+
+    Returns:
+        Response dict with run_id, frame counts, paths, and dataset hash.
+    """
+    url = f"{_base_url()}/api/v1/train/extract-frames"
+    payload: Dict[str, Any] = {
+        "frames_per_video": frames_per_video,
+        "dry_run": dry_run,
+    }
+    if run_id is not None:
+        payload["run_id"] = run_id
+    if seed is not None:
+        payload["seed"] = seed
+
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=120,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def get_training_run(run_id: str) -> Dict[str, Any]:
+    """Get the status of a training run.
+
+    Args:
+        run_id: Training run identifier (run_xxxx format).
+
+    Returns:
+        Dictionary with run status, counts, and metadata.
+    """
+    url = f"{_base_url()}/api/v1/train/runs/{run_id}"
+    resp = requests.get(
+        url,
+        headers=_headers(),
+        timeout=10,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def sample_split(
+    run_id: str,
+    target_split: str,
+    sample_fraction: float,
+    dry_run: bool = False,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Deprecated: use extract_frames() instead.
+
+    Retained for backward compatibility with the legacy 03_Train.py UI.
+    """
+    return {
+        "status": "deprecated",
+        "message": (
+            "The sample_split endpoint is deprecated. "
+            "Use 'Extract Frames' to create run-scoped frame datasets."
+        ),
+        "run_id": run_id,
+        "target_split": target_split,
+    }
+
+
+def get_training_status(pipeline_id: str) -> Dict[str, Any]:
+    """Get training pipeline status.
+
+    Wraps get_training_run for backward compatibility with legacy UI code.
+    """
+    try:
+        return get_training_run(pipeline_id)
+    except Exception:
+        return {"status": "unknown", "run_id": pipeline_id}
