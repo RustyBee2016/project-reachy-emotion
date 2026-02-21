@@ -9,7 +9,8 @@ tensorflow>=2.11.0  # For mlflow.tensorflow
 # Data processing
 numpy>=1.24.0
 pandas>=2.0.0
-opencv-python-headless>=4.8.0
+# Required for frame extraction utilities (cv2)
+opencv-python-headless>=4.8.0,<5
 
 # Testing
 pytest>=7.3.0

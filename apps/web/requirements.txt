@@ -6,4 +6,5 @@ pydantic>=2.7,<3
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 python-json-logger>=2.0,<3
-
+# Included explicitly to avoid missing cv2 when this environment is reused for media tasks
+opencv-python-headless>=4.8,<5
