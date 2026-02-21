@@ -5,6 +5,7 @@ Handles run-specific frame extraction, manifest generation, and dataset hashing.
 
 import json
 import hashlib
+import os
 import random
 import re
 import shutil
@@ -167,7 +168,7 @@ class DatasetPreparer:
 
         if self.manifests_path.exists():
             for manifest in self.manifests_path.glob("run_*_train.jsonl"):
-                name = manifest.name.removesuffix("_train.jsonl")
+                name = manifest.name[:-len("_train.jsonl")]
                 match = pattern.fullmatch(name)
                 if match:
                     max_idx = max(max_idx, int(match.group(1)))
@@ -319,7 +320,7 @@ class DatasetPreparer:
         if destination.exists():
             destination.unlink()
         try:
-            destination.hardlink_to(source)
+            os.link(str(source), str(destination))
         except OSError:
             shutil.copy2(source, destination)
     
