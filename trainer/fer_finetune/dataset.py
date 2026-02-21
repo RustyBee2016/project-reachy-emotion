@@ -16,6 +16,8 @@ import numpy as np
 import cv2
 import logging
 
+from trainer.data_roots import resolve_training_data_roots
+
 logger = logging.getLogger(__name__)
 
 # Try to import albumentations, fall back to torchvision transforms
@@ -518,6 +520,8 @@ def create_dataloaders(
     class_names: Optional[List[str]] = None,
     frame_sampling_train: str = "random",
     frame_sampling_val: str = "middle",
+    run_id: Optional[str] = None,
+    frames_per_video: int = 1,
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation data loaders.
@@ -530,24 +534,30 @@ def create_dataloaders(
         class_names: List of class names
         frame_sampling_train: Frame sampling for training
         frame_sampling_val: Frame sampling for validation
-    
+        run_id: Optional run_xxxx to prefer run-scoped train/test roots
+        frames_per_video: Number of frames sampled per source video when using multi mode
+
     Returns:
         Tuple of (train_loader, val_loader)
     """
+    roots = resolve_training_data_roots(data_dir, run_id=run_id)
+
     train_dataset = EmotionDataset(
-        data_dir=data_dir,
+        data_dir=str(roots.train_root),
         split="train",
         transform=get_train_transforms(input_size),
         class_names=class_names,
         frame_sampling=frame_sampling_train,
+        frames_per_video=frames_per_video,
     )
-    
+
     val_dataset = EmotionDataset(
-        data_dir=data_dir,
+        data_dir=str(roots.val_root),
         split="test",
         transform=get_val_transforms(input_size),
         class_names=class_names,
         frame_sampling=frame_sampling_val,
+        frames_per_video=frames_per_video,
     )
     
     train_loader = DataLoader(

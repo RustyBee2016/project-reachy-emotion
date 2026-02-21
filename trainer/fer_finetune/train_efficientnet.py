@@ -181,7 +181,7 @@ class EfficientNetTrainer:
                 eta_min=self.config.min_lr,
             )
     
-    def _create_dataloaders(self):
+    def _create_dataloaders(self, run_id: Optional[str] = None):
         """Create train and validation data loaders."""
         self.train_loader, self.val_loader = create_dataloaders(
             data_dir=self.config.data.data_root,
@@ -191,6 +191,8 @@ class EfficientNetTrainer:
             class_names=self.config.data.class_names,
             frame_sampling_train="random",
             frame_sampling_val="middle",
+            run_id=run_id,
+            frames_per_video=max(1, int(self.config.data.frames_per_video)),
         )
         
         logger.info(f"Data loaders created: {len(self.train_loader)} train batches, "
@@ -512,7 +514,7 @@ class EfficientNetTrainer:
         logger.info("=" * 60)
         
         if self.train_loader is None:
-            self._create_dataloaders()
+            self._create_dataloaders(run_id=run_id)
         
         # MLflow tracking
         try:

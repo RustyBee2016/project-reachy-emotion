@@ -96,6 +96,33 @@ class DatasetPreparer:
             'dataset_hash': dataset_hash
         }
 
+    def plan_training_dataset(
+        self,
+        run_id: Optional[str] = None,
+        train_fraction: float = 0.7,
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Validate and estimate run outputs without writing frames/manifests."""
+        normalized_run_id = self.resolve_run_id(run_id)
+        if seed is None:
+            seed = int(hashlib.md5(normalized_run_id.encode()).hexdigest(), 16) % (2**31)
+
+        source_videos = self._collect_source_videos()
+        self._validate_source_videos(source_videos)
+
+        videos_processed = sum(len(videos) for videos in source_videos.values())
+        return {
+            "run_id": normalized_run_id,
+            "train_count": videos_processed * self.FRAMES_PER_VIDEO,
+            "test_count": 0,
+            "videos_processed": videos_processed,
+            "frames_per_video": self.FRAMES_PER_VIDEO,
+            "seed": seed,
+            "train_fraction": train_fraction,
+            "dataset_hash": "",
+            "dry_run": True,
+        }
+
     def resolve_run_id(self, run_id: Optional[str] = None) -> str:
         """Validate run ID or generate the next run_xxxx identifier."""
         if run_id is None:

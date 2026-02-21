@@ -311,6 +311,7 @@ def prepare_run_frames(
     run_id: Optional[str] = None,
     train_fraction: float = 0.7,
     seed: Optional[int] = None,
+    dry_run: bool = False,
     correlation_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -318,6 +319,7 @@ def prepare_run_frames(
     url = f"{_base_url()}/api/v1/ingest/prepare-run-frames"
     payload: Dict[str, Any] = {
         "train_fraction": train_fraction,
+        "dry_run": bool(dry_run),
     }
     if run_id:
         payload["run_id"] = run_id

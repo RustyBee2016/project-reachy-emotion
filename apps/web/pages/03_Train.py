@@ -107,18 +107,25 @@ with action_col1:
 with action_col2:
     if st.button("Prepare 10-Frame Run", use_container_width=True):
         try:
-            if dry_run:
-                st.info("Dry run is not supported for frame extraction; running live extraction.")
             corr_id = str(uuid.uuid4())
             resp = api_client.prepare_run_frames(
                 run_id=run_id or None,
                 train_fraction=sample_fraction,
+                dry_run=dry_run,
                 correlation_id=corr_id,
                 idempotency_key=corr_id,
             )
-            st.success(f"Prepared frame dataset for run: {resp.get('run_id', 'unknown')}")
+            if dry_run:
+                st.success(f"Dry-run validated frame dataset plan for run: {resp.get('run_id', 'unknown')}")
+            else:
+                st.success(f"Prepared frame dataset for run: {resp.get('run_id', 'unknown')}")
             st.json(resp)
         except Exception as exc:  # noqa: BLE001
+            if "404 Client Error" in str(exc) and "prepare-run-frames" in str(exc):
+                st.error(
+                    "Frame extraction endpoint is missing on the running backend. "
+                    "Restart fastapi-media with module apps.api.app.main:app, then retry."
+                )
             st.error(f"Frame extraction failed: {exc}")
 
 with action_col3:
