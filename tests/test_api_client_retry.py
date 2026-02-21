@@ -159,17 +159,59 @@ class TestV1EndpointUsage:
     
     @patch('requests.post')
     def test_stage_to_train_routes_to_direct_promote(self, mock_post):
-        """Test stage_to_train helper routes to /api/media/promote."""
+        """Test stage_to_train helper routes to canonical /api/v1/media/promote."""
         mock_post.return_value = Mock(
             status_code=200,
             json=lambda: {"status": "success", "promoted_ids": ["test1"]}
         )
-        
+
         api_client.stage_to_train(["test1"], "happy")
-        
+
         # Verify direct promotion endpoint was called
         call_args = mock_post.call_args
-        assert "/api/media/promote" in call_args[0][0]
+        assert "/api/v1/media/promote" in call_args[0][0]
+
+    @patch('requests.post')
+    def test_promote_falls_back_to_legacy_when_canonical_missing(self, mock_post):
+        missing = Mock(status_code=404, json=lambda: {"detail": "Not Found"})
+        missing.raise_for_status = Mock()
+        legacy_ok = Mock(status_code=200, json=lambda: {"status": "ok"})
+        legacy_ok.raise_for_status = Mock()
+        mock_post.side_effect = [missing, legacy_ok]
+
+        result = api_client.promote(video_id="vid-1", dest_split="train", label="happy", dry_run=True)
+
+        assert result["status"] == "ok"
+        assert mock_post.call_count == 2
+        first_url = mock_post.call_args_list[0][0][0]
+        second_url = mock_post.call_args_list[1][0][0]
+        assert "/api/v1/media/promote" in first_url
+        assert "/api/media/promote" in second_url
+
+    @patch("requests.post")
+    def test_rebuild_manifest_uses_v1_ingest_endpoint(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok"})
+        api_client.rebuild_manifest()
+        call_args = mock_post.call_args
+        assert "/api/v1/ingest/manifest/rebuild" in call_args[0][0]
+        assert call_args[1]["json"]["splits"] == ["train", "test"]
+
+    @patch("requests.post")
+    def test_prepare_run_frames_uses_v1_ingest_endpoint(self, mock_post):
+        mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok", "run_id": "run_0001"})
+        api_client.prepare_run_frames(run_id="run_0001", train_fraction=0.8, seed=42, dry_run=True)
+        call_args = mock_post.call_args
+        assert "/api/v1/ingest/prepare-run-frames" in call_args[0][0]
+        assert call_args[1]["json"]["run_id"] == "run_0001"
+        assert call_args[1]["json"]["seed"] == 42
+        assert call_args[1]["json"]["dry_run"] is True
+
+    @patch("requests.get")
+    def test_get_training_status_uses_gateway_status_endpoint(self, mock_get):
+        mock_get.return_value = Mock(status_code=200, json=lambda: {"status": "training"})
+        api_client.get_training_status("run_0001")
+        call_args = mock_get.call_args
+        assert "/api/training/status/run_0001" in call_args[0][0]
 
     @patch("requests.post")
     def test_rebuild_manifest_uses_v1_ingest_endpoint(self, mock_post):

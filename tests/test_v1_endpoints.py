@@ -256,6 +256,21 @@ class TestLegacyEndpoints:
         assert "Missing fields: dest_split" in detail.get("message", "")
         assert "deprecated" not in data
         assert "new_endpoint" not in data
+
+    def test_canonical_promote_validation_path(self, client):
+        """Canonical /api/v1/media/promote should be available and enforce same validation."""
+        response = client.post(
+            "/api/v1/media/promote",
+            json={
+                "video_id": "test",
+                "label": "happy"
+            }
+        )
+        assert response.status_code == 400
+        data = response.json()
+        detail = data.get("detail", {})
+        assert detail.get("error") == "validation_error"
+        assert "Missing fields: dest_split" in detail.get("message", "")
     
     def test_legacy_health(self, client):
         """Test that legacy health endpoint works."""

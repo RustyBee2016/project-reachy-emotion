@@ -191,8 +191,8 @@ class EfficientNetTrainer:
             class_names=self.config.data.class_names,
             frame_sampling_train="random",
             frame_sampling_val="middle",
-            frames_per_video=self.config.data.frames_per_video,
             run_id=run_id,
+            frames_per_video=max(1, int(self.config.data.frames_per_video)),
         )
         
         logger.info(f"Data loaders created: {len(self.train_loader)} train batches, "

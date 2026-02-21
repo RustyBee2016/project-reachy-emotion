@@ -69,14 +69,10 @@ class DatasetPreparer:
         source_videos = self._collect_source_videos()
         self._validate_source_videos(source_videos)
 
-        extracted_frames = self._extract_run_frames(
+        consolidated_frames = self._extract_run_frames(
             run_id=normalized_run_id,
             rng=rng,
             source_videos=source_videos,
-        )
-        consolidated_frames = self._build_consolidated_run_dataset(
-            run_id=normalized_run_id,
-            extracted_frames=extracted_frames,
         )
 
         # Test preparation is intentionally empty for this frame-first train run workflow.
@@ -94,6 +90,33 @@ class DatasetPreparer:
             'seed': seed,
             'train_fraction': train_fraction,
             'dataset_hash': dataset_hash
+        }
+
+    def plan_training_dataset(
+        self,
+        run_id: Optional[str] = None,
+        train_fraction: float = 0.7,
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Validate and estimate run outputs without writing frames/manifests."""
+        normalized_run_id = self.resolve_run_id(run_id)
+        if seed is None:
+            seed = int(hashlib.md5(normalized_run_id.encode()).hexdigest(), 16) % (2**31)
+
+        source_videos = self._collect_source_videos()
+        self._validate_source_videos(source_videos)
+
+        videos_processed = sum(len(videos) for videos in source_videos.values())
+        return {
+            "run_id": normalized_run_id,
+            "train_count": videos_processed * self.FRAMES_PER_VIDEO,
+            "test_count": 0,
+            "videos_processed": videos_processed,
+            "frames_per_video": self.FRAMES_PER_VIDEO,
+            "seed": seed,
+            "train_fraction": train_fraction,
+            "dataset_hash": "",
+            "dry_run": True,
         }
 
     def resolve_run_id(self, run_id: Optional[str] = None) -> str:
@@ -140,7 +163,7 @@ class DatasetPreparer:
 
         if self.manifests_path.exists():
             for manifest in self.manifests_path.glob("run_*_train.jsonl"):
-                name = manifest.name.removesuffix("_train.jsonl")
+                name = manifest.name[:-len("_train.jsonl")]
                 match = pattern.fullmatch(name)
                 if match:
                     max_idx = max(max_idx, int(match.group(1)))
@@ -176,24 +199,20 @@ class DatasetPreparer:
         rng: random.Random,
         source_videos: Dict[str, List[Path]],
     ) -> List[Dict[str, str]]:
-        """Extract random frames into train/<label>/<run_id> for each source video."""
+        """Extract random frames directly into train/run/<run_id>."""
         extracted: List[Dict[str, str]] = []
+        run_root = self.train_runs_path / run_id
+        if run_root.exists():
+            shutil.rmtree(run_root)
+        run_root.mkdir(parents=True, exist_ok=True)
 
         for label in self.EMOTIONS:
-            label_root = self.train_path / label
-            label_root.mkdir(parents=True, exist_ok=True)
-
-            run_label_dir = label_root / run_id
-            if run_label_dir.exists():
-                shutil.rmtree(run_label_dir)
-            run_label_dir.mkdir(parents=True, exist_ok=True)
-
             videos = source_videos.get(label, [])
             for video_path in videos:
                 frame_entries = self._extract_random_frames_from_video(
                     video_path=video_path,
                     num_frames=self.FRAMES_PER_VIDEO,
-                    output_dir=run_label_dir,
+                    output_dir=run_root,
                     label=label,
                     rng=rng,
                 )
@@ -236,7 +255,7 @@ class DatasetPreparer:
             if not success:
                 continue
 
-            frame_name = f"{stem}_f{order_idx:02d}_idx{frame_idx:05d}.jpg"
+            frame_name = f"{label}_{stem}_f{order_idx:02d}_idx{frame_idx:05d}.jpg"
             frame_path = output_dir / frame_name
             if not cv2.imwrite(str(frame_path), frame):
                 continue
@@ -253,49 +272,6 @@ class DatasetPreparer:
         cap.release()
         return entries
 
-    def _build_consolidated_run_dataset(
-        self,
-        *,
-        run_id: str,
-        extracted_frames: List[Dict[str, str]],
-    ) -> List[Dict[str, str]]:
-        """Create consolidated train/run/run_xxxx/<label>/ frame dataset for training."""
-        run_root = self.train_runs_path / run_id
-        if run_root.exists():
-            shutil.rmtree(run_root)
-        run_root.mkdir(parents=True, exist_ok=True)
-
-        consolidated: List[Dict[str, str]] = []
-        for frame in extracted_frames:
-            label = frame["label"]
-            source_frame = Path(frame["path"])
-            label_dir = run_root / label
-            label_dir.mkdir(parents=True, exist_ok=True)
-
-            destination = label_dir / source_frame.name
-            self._link_or_copy(source_frame, destination)
-
-            consolidated.append(
-                {
-                    "video_id": frame["video_id"],
-                    "path": str(destination),
-                    "label": label,
-                    "source_video": frame["source_video"],
-                }
-            )
-
-        return consolidated
-
-    @staticmethod
-    def _link_or_copy(source: Path, destination: Path) -> None:
-        """Prefer hard links to avoid duplication; fall back to copy."""
-        if destination.exists():
-            destination.unlink()
-        try:
-            destination.hardlink_to(source)
-        except OSError:
-            shutil.copy2(source, destination)
-    
     def _generate_manifests(
         self,
         run_id: str,

@@ -27,6 +27,7 @@ VIDEOS_ROOT = Path("/videos")
 
 
 @app.post("/api/media/promote")
+@app.post("/api/v1/media/promote")
 async def promote(request: Request) -> JSONResponse:
     """Stub: validate payload and simulate an atomic move.
 
@@ -80,7 +81,7 @@ async def promote(request: Request) -> JSONResponse:
 async def promote_alias(request: Request) -> JSONResponse:
     """Compatibility alias for clients calling /api/promote.
 
-    Delegates to the canonical /api/media/promote handler.
+    Delegates to the canonical /api/v1/media/promote handler.
     """
     return await promote(request)
 

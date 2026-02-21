@@ -27,7 +27,7 @@ class StageRequest(BaseModel):
     """Deprecated compatibility request for legacy stage endpoint."""
 
     video_ids: VideoIdList = Field(
-        ..., description="Video identifiers (legacy payload; prefer /api/media/promote)."
+        ..., description="Video identifiers (legacy payload; prefer /api/v1/media/promote)."
     )
     label: str = Field(..., description="3-class label (happy|sad|neutral).")
     dry_run: bool = Field(

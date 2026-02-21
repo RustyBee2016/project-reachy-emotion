@@ -2,7 +2,7 @@
 
 Legacy stage/sample compatibility endpoints are intentionally deprecated.
 Current runtime flow promotes clips directly temp -> train/<label> via
-/api/media/promote and builds run-scoped frame datasets during training prep.
+/api/v1/media/promote and builds run-scoped frame datasets during training prep.
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ class PromoteService:
     ) -> StageResult:
         """Compatibility shim for deprecated /api/v1/promote/stage endpoint.
 
-        Current runtime policy uses direct promotion via `/api/media/promote` with:
+        Current runtime policy uses direct promotion via `/api/v1/media/promote` with:
         - dest_split='train'
         - label in {'happy','sad','neutral'}
         """
@@ -151,7 +151,7 @@ class PromoteService:
             _ = dry_run
             raise PromotionValidationError(
                 "Deprecated endpoint: /api/v1/promote/stage is no longer supported. "
-                "Use /api/media/promote with dest_split='train' and a 3-class label."
+                "Use /api/v1/media/promote with dest_split='train' and a 3-class label."
             )
 
     async def sample_split(

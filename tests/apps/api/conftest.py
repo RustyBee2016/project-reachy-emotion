@@ -12,11 +12,19 @@ from pathlib import Path
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.dialects.postgresql import JSONB
 
 from apps.api.app.main import app
 from apps.api.app.db.base import Base
 from apps.api.app.deps import get_db, get_config_dep
 from apps.api.app.config import AppConfig, get_config
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(_type, _compiler, **_kw):
+    """Allow metadata.create_all() on SQLite test engines."""
+    return "JSON"
 
 
 # Test database URL will be set per-test using tmp_path

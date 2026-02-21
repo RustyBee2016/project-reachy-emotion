@@ -347,6 +347,39 @@ class TestPrepareRunFramesEndpoint:
         data = response.json()
         assert data["detail"]["error"] == "validation_error"
 
+    @pytest.mark.asyncio
+    async def test_prepare_run_frames_dry_run(self, client):
+        """Support dry-run planning without writing artifacts."""
+
+        class FakePreparer:
+            def __init__(self, base_path: str):
+                self.base_path = base_path
+
+            def plan_training_dataset(self, run_id=None, train_fraction=0.7, seed=None):
+                return {
+                    "run_id": run_id or "run_0002",
+                    "train_count": 60,
+                    "test_count": 0,
+                    "videos_processed": 6,
+                    "frames_per_video": 10,
+                    "seed": 99 if seed is None else seed,
+                    "dataset_hash": "",
+                    "dry_run": True,
+                }
+
+        fake_module = types.SimpleNamespace(DatasetPreparer=FakePreparer)
+        with patch.dict(sys.modules, {"trainer.prepare_dataset": fake_module}):
+            response = await client.post(
+                "/api/v1/ingest/prepare-run-frames",
+                json={"run_id": "run_0002", "dry_run": True, "seed": 99},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "dry_run"
+        assert data["dry_run"] is True
+        assert data["run_id"] == "run_0002"
+
 
 # ============================================================================
 # Manifest Rebuild Endpoint Tests

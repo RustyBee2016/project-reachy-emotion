@@ -205,8 +205,8 @@ def _collect_predictions(
         class_names=class_names,
         frame_sampling_train="random",
         frame_sampling_val="middle",
-        frames_per_video=frames_per_video,
         run_id=run_id,
+        frames_per_video=frames_per_video,
     )
 
     y_true: List[int] = []
@@ -325,7 +325,7 @@ def main() -> int:
         batch_size=config.data.batch_size,
         num_workers=config.data.num_workers,
         run_id=args.run_id,
-        frames_per_video=config.data.frames_per_video,
+        frames_per_video=max(1, int(config.data.frames_per_video)),
     )
 
     output_dir = Path(args.output_dir)

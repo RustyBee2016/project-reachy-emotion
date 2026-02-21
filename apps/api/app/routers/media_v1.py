@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
+from ..deps import get_db
+from ...routers import media as legacy_media_router
 from ..schemas import (
     ListVideosData,
     ListVideosResponse,
@@ -118,6 +121,20 @@ async def list_videos(
     )
     
     return create_success_response(data, _get_correlation_id(request))
+
+
+@router.post("/promote")
+async def promote_video(
+    request: Request,
+    config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
+):
+    """Canonical direct promotion endpoint.
+
+    Delegates to the existing promotion implementation to preserve current
+    filesystem/database behavior while clients migrate off legacy paths.
+    """
+    return await legacy_media_router.promote(request=request, config=config, db=db)
 
 
 @router.get("/{video_id}", response_model=VideoMetadataResponse)

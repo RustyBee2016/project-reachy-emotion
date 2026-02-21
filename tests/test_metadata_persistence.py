@@ -289,7 +289,7 @@ async def test_all_valid_emotion_labels(
                 dry_run=False,
             )
         
-        # Assert: row unchanged (direct promotions should use /api/media/promote)
+        # Assert: row unchanged (direct promotions should use /api/v1/media/promote)
         await async_session.refresh(video)
         assert video.split == "temp"
         assert video.label is None

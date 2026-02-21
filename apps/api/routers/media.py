@@ -34,13 +34,29 @@ logger.addHandler(_handler)
 VIDEOS_ROOT = Path(os.getenv("MEDIA_VIDEOS_ROOT", "/media/project_data/reachy_emotion/videos"))
 
 
-@router.post("/api/media/promote")
+CANONICAL_PROMOTE_PATH = "/api/v1/media/promote"
+LEGACY_PROMOTE_PATH = "/api/media/promote"
+LEGACY_PROMOTE_WARNING = f"299 - Deprecated endpoint: use {CANONICAL_PROMOTE_PATH}"
+
+
+def _promote_json_response(*, content: Dict[str, Any], status_code: int, legacy_path_used: bool) -> JSONResponse:
+    response = JSONResponse(status_code=status_code, content=content)
+    if legacy_path_used:
+        response.headers["Warning"] = LEGACY_PROMOTE_WARNING
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = f"<{CANONICAL_PROMOTE_PATH}>; rel=\"successor-version\""
+    return response
+
+
+@router.post(LEGACY_PROMOTE_PATH)
+@router.post(CANONICAL_PROMOTE_PATH)
 async def promote(
     request: Request,
     config: AppConfig = Depends(get_config),
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     body: Dict[str, Any] = await request.json()
+    legacy_path_used = request.url.path.endswith(LEGACY_PROMOTE_PATH) and not request.url.path.endswith(CANONICAL_PROMOTE_PATH)
 
     payload = body
     adapter_mode = "legacy"
@@ -282,11 +298,13 @@ async def promote(
             "correlation_id": payload["correlation_id"],
             "dry_run": dry_run,
             "adapter_mode": adapter_mode,
+            "legacy_path_used": legacy_path_used,
         },
     )
     if dry_run:
-        return JSONResponse(
+        return _promote_json_response(
             status_code=200,
+            legacy_path_used=legacy_path_used,
             content={
                 "status": "ok",
                 "video_id": video_id,
@@ -355,8 +373,9 @@ async def promote(
             },
         ) from exc
 
-    return JSONResponse(
+    return _promote_json_response(
         status_code=200,
+        legacy_path_used=legacy_path_used,
         content={
             "status": "ok",
             "video_id": video_id,

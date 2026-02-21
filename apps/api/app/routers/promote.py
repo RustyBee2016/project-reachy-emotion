@@ -53,7 +53,7 @@ async def stage_videos(  # noqa: D401
 
     correlation_id = _resolve_correlation_id(request_ctx)
     response.headers["Warning"] = (
-        "299 - Deprecated endpoint: use /api/media/promote with dest_split='train'"
+        "299 - Deprecated endpoint: use /api/v1/media/promote with dest_split='train'"
     )
     service.set_correlation_id(correlation_id)
     try:

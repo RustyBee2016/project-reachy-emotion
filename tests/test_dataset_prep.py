@@ -192,7 +192,7 @@ class TestDatasetPreparer:
         assert hash1 != hash2
     
     def test_frames_extracted_to_run_dirs(self, temp_dataset_dir):
-        """Test frames are extracted to label/run and consolidated run directories."""
+        """Test frames are extracted only to consolidated run directories."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         run_id = 'run_0001'
         preparer.prepare_training_dataset(
@@ -201,17 +201,16 @@ class TestDatasetPreparer:
             seed=42
         )
 
-        # Label-specific run directories: /train/<label>/<run_id>
+        # Legacy label-specific run directories should not be created.
         for label in ['happy', 'sad', 'neutral']:
             label_run_dir = preparer.train_path / label / run_id
-            assert label_run_dir.exists()
-            assert len(list(label_run_dir.glob('*.jpg'))) == 100
+            assert not label_run_dir.exists()
 
-        # Consolidated run directory: /train/run/<run_id>/<label>
-        for label in ['happy', 'sad', 'neutral']:
-            consolidated_label_dir = preparer.train_runs_path / run_id / label
-            assert consolidated_label_dir.exists()
-            assert len(list(consolidated_label_dir.glob('*.jpg'))) == 100
+        # Single consolidated run directory: /train/run/<run_id>
+        consolidated_dir = preparer.train_runs_path / run_id
+        assert consolidated_dir.exists()
+        assert len(list(consolidated_dir.glob('*.jpg'))) == 300
+        assert not any(path.is_dir() for path in consolidated_dir.iterdir())
     
     def test_empty_dataset_handling(self):
         """Test handling of empty dataset."""

@@ -116,6 +116,10 @@ class PrepareRunFramesRequest(BaseModel):
         le=2**31 - 1,
         description="Optional deterministic seed for frame sampling.",
     )
+    dry_run: bool = Field(
+        default=False,
+        description="If true, validate and estimate outputs without writing frames/manifests.",
+    )
     correlation_id: Optional[str] = Field(None, description="Correlation ID for tracing")
 
 
@@ -133,6 +137,7 @@ class PrepareRunFramesResponse(BaseModel):
     train_run_root: str
     dataset_hash: str
     seed: int
+    dry_run: bool = False
     correlation_id: Optional[str] = None
 
 
@@ -890,8 +895,7 @@ async def prepare_run_frames(
     """Extract run-scoped random frames from train videos and generate manifests.
 
     Expected outputs:
-    - train/<label>/<run_id>/*.jpg (per-label extraction artifacts)
-    - train/run/<run_id>/<label>/*.jpg (consolidated training dataset)
+    - train/run/<run_id>/*.jpg (single consolidated training dataset for the run)
     - manifests/<run_id>_train.jsonl and manifests/<run_id>_test.jsonl
     """
     correlation_id = request.correlation_id or str(uuid.uuid4())
@@ -912,11 +916,20 @@ async def prepare_run_frames(
             ) from exc
 
         preparer = DatasetPreparer(str(config.videos_root))
-        result = preparer.prepare_training_dataset(
-            run_id=request.run_id,
-            train_fraction=request.train_fraction,
-            seed=request.seed,
-        )
+        if request.dry_run:
+            result = preparer.plan_training_dataset(
+                run_id=request.run_id,
+                train_fraction=request.train_fraction,
+                seed=request.seed,
+            )
+            status = "dry_run"
+        else:
+            result = preparer.prepare_training_dataset(
+                run_id=request.run_id,
+                train_fraction=request.train_fraction,
+                seed=request.seed,
+            )
+            status = "ok"
 
         run_id = str(result["run_id"])
         train_manifest_path = config.manifests_path / f"{run_id}_train.jsonl"
@@ -932,11 +945,12 @@ async def prepare_run_frames(
                 "videos_processed": result["videos_processed"],
                 "frames_per_video": result["frames_per_video"],
                 "idempotency_key": idempotency_key,
+                "dry_run": request.dry_run,
             },
         )
 
         return PrepareRunFramesResponse(
-            status="ok",
+            status=status,
             run_id=run_id,
             train_count=int(result["train_count"]),
             test_count=int(result["test_count"]),
@@ -947,6 +961,7 @@ async def prepare_run_frames(
             train_run_root=str(train_run_root),
             dataset_hash=str(result["dataset_hash"]),
             seed=int(result["seed"]),
+            dry_run=bool(request.dry_run),
             correlation_id=correlation_id,
         )
     except HTTPException:
