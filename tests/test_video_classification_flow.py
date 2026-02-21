@@ -250,9 +250,9 @@ def test_step_5_refresh_video_metadata():
 
 
 def test_step_6_direct_promote_train():
-    """Step 6: Test direct /api/media/promote endpoint."""
+    """Step 6: Test direct /api/v1/media/promote endpoint (with legacy fallback)."""
     print("\n" + "="*60)
-    print("STEP 6: Direct /api/media/promote Endpoint")
+    print("STEP 6: Direct /api/v1/media/promote Endpoint")
     print("="*60)
     
     try:
@@ -269,9 +269,10 @@ def test_step_6_direct_promote_train():
         print(f"  Dry run: True")
         
         base_url = api_client._base_url()
-        url = f"{base_url}/api/media/promote"
-        
-        print(f"  URL: {url}")
+        canonical_url = f"{base_url}/api/v1/media/promote"
+        legacy_url = f"{base_url}/api/media/promote"
+
+        print(f"  URL: {canonical_url}")
         
         payload = {
             "video_id": test_video_id,
@@ -281,11 +282,19 @@ def test_step_6_direct_promote_train():
         }
         
         response = requests.post(
-            url,
+            canonical_url,
             json=payload,
             headers={**api_client._headers(), "X-Correlation-ID": "test-correlation"},
             timeout=30
         )
+        if response.status_code == 404:
+            print("  Canonical endpoint unavailable; retrying legacy compatibility endpoint")
+            response = requests.post(
+                legacy_url,
+                json=payload,
+                headers={**api_client._headers(), "X-Correlation-ID": "test-correlation"},
+                timeout=30
+            )
         
         print(f"  HTTP Status: {response.status_code}")
         
@@ -330,7 +339,7 @@ def main():
     results["Step 3: List Videos Endpoint"] = test_step_3_list_videos_endpoint()
     results["Step 4: list_videos() Function"] = test_step_4_api_client_list_videos()
     results["Step 5: Refresh Metadata Logic"] = test_step_5_refresh_video_metadata()
-    results["Step 6: direct /api/media/promote"] = test_step_6_direct_promote_train()
+    results["Step 6: direct /api/v1/media/promote"] = test_step_6_direct_promote_train()
     
     # Summary
     print("\n" + "="*70)

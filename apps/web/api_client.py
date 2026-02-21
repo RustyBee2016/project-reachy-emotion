@@ -265,17 +265,40 @@ def promote(
     if correlation_id:
         payload["correlation_id"] = correlation_id
 
-    url = f"{_base_url()}/api/media/promote"
     headers = _headers()
 
     if use_gateway:
-        url = f"{_gateway_base()}/api/promote"
+        gateway_url = f"{_gateway_base()}/api/promote"
         headers = headers.copy()
         # Gateway requires Idempotency-Key; fall back to correlation/video id
         headers["Idempotency-Key"] = idempotency_key or correlation_id or video_id
+        resp = requests.post(
+            gateway_url,
+            headers=headers,
+            json=payload,
+            timeout=15,
+            verify=_request_verify(_gateway_base(), "GATEWAY"),
+        )
+        resp.raise_for_status()
+        return resp.json()
 
-    verify = _request_verify(_gateway_base() if use_gateway else _base_url(), "GATEWAY" if use_gateway else "API")
-    resp = requests.post(url, headers=headers, json=payload, timeout=15, verify=verify)
+    canonical_url = f"{_base_url()}/api/v1/media/promote"
+    legacy_url = f"{_base_url()}/api/media/promote"
+    resp = requests.post(
+        canonical_url,
+        headers=headers,
+        json=payload,
+        timeout=15,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    if resp.status_code == 404:
+        resp = requests.post(
+            legacy_url,
+            headers=headers,
+            json=payload,
+            timeout=15,
+            verify=_request_verify(_base_url(), "API"),
+        )
     resp.raise_for_status()
     return resp.json()
 
@@ -503,5 +526,5 @@ def stage_to_train(
         "skipped_ids": skipped_ids,
         "failed_ids": failed_ids,
         "dry_run": dry_run,
-        "message": "batch promotion completed via /api/media/promote",
+        "message": "batch promotion completed via /api/v1/media/promote",
     }

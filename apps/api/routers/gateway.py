@@ -213,15 +213,34 @@ async def post_promotion(
         base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
         
         body = await request.json()
-        # Optionally validate payload locally; forward regardless to let upstream enforce contract
-        # (keeps behavior consistent with other proxy endpoints)
-        url = f"{base_url}/api/media/promote"
+        # Prefer canonical v1 endpoint and fall back to legacy only for partial deployments.
+        canonical_url = f"{base_url}/api/v1/media/promote"
+        legacy_url = f"{base_url}/api/media/promote"
         upstream = await http_client.post(
-            url,
+            canonical_url,
             json=body,
             headers={"Idempotency-Key": idempotency_key},
         )
-        logger.info("promotion_proxy_result", extra={"correlation_id": body.get("correlation_id"), "idempotency_key": idempotency_key, "upstream_status": upstream.status_code})
+        promote_url_used = canonical_url
+        fallback_used = False
+        if upstream.status_code == 404:
+            upstream = await http_client.post(
+                legacy_url,
+                json=body,
+                headers={"Idempotency-Key": idempotency_key},
+            )
+            promote_url_used = legacy_url
+            fallback_used = True
+        logger.info(
+            "promotion_proxy_result",
+            extra={
+                "correlation_id": body.get("correlation_id"),
+                "idempotency_key": idempotency_key,
+                "upstream_status": upstream.status_code,
+                "promote_url_used": promote_url_used,
+                "fallback_used": fallback_used,
+            },
+        )
 
         content_type = upstream.headers.get("content-type", "application/json")
         if upstream.is_error and content_type.startswith("application/json"):
