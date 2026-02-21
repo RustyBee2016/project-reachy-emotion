@@ -895,8 +895,7 @@ async def prepare_run_frames(
     """Extract run-scoped random frames from train videos and generate manifests.
 
     Expected outputs:
-    - train/<label>/<run_id>/*.jpg (per-label extraction artifacts)
-    - train/run/<run_id>/<label>/*.jpg (consolidated training dataset)
+    - train/run/<run_id>/*.jpg (single consolidated training dataset for the run)
     - manifests/<run_id>_train.jsonl and manifests/<run_id>_test.jsonl
     """
     correlation_id = request.correlation_id or str(uuid.uuid4())

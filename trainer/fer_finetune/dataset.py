@@ -15,6 +15,7 @@ from typing import Optional, List, Dict, Tuple, Callable, Any
 import numpy as np
 import cv2
 import logging
+import json
 
 from trainer.data_roots import resolve_training_data_roots
 
@@ -59,6 +60,7 @@ class EmotionDataset(Dataset):
         frame_sampling: str = "middle",
         frames_per_video: int = 1,
         face_detector: Optional[Any] = None,
+        manifest_path: Optional[str] = None,
     ):
         """
         Initialize emotion dataset.
@@ -75,6 +77,7 @@ class EmotionDataset(Dataset):
                 - "multi": Multiple frames per video
             frames_per_video: Number of frames for "multi" sampling
             face_detector: Optional face detector for cropping
+            manifest_path: Optional JSONL manifest to load labeled samples directly
         """
         self.data_dir = Path(data_dir)
         self.split = split
@@ -87,6 +90,7 @@ class EmotionDataset(Dataset):
         self.frame_sampling = frame_sampling
         self.frames_per_video = frames_per_video
         self.face_detector = face_detector
+        self.manifest_path = Path(manifest_path) if manifest_path else None
         
         # Set up class mapping
         if class_names is None:
@@ -96,13 +100,44 @@ class EmotionDataset(Dataset):
         self.idx_to_class = {idx: name for name, idx in self.class_to_idx.items()}
         
         # Collect samples
-        self.samples = self._collect_samples()
+        if self.manifest_path and self.manifest_path.exists():
+            self.samples = self._collect_manifest_samples(self.manifest_path)
+        else:
+            self.samples = self._collect_samples()
         
         logger.info(f"EmotionDataset initialized: {split}")
         logger.info(f"  Data dir: {self.split_dir}")
         logger.info(f"  Classes: {self.class_names}")
         logger.info(f"  Samples: {len(self.samples)}")
         logger.info(f"  Frame sampling: {frame_sampling}")
+
+    def _collect_manifest_samples(self, manifest_path: Path) -> List[Dict]:
+        """Collect samples from run manifest entries."""
+        samples: List[Dict] = []
+        with open(manifest_path, "r") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                label_name = str(entry.get("label", "")).strip().lower()
+                if label_name not in self.class_to_idx:
+                    continue
+                raw_path = Path(str(entry.get("path", "")))
+                path = raw_path if raw_path.is_absolute() else (self.data_dir / raw_path)
+                if not path.exists() or not path.is_file():
+                    continue
+                suffix = path.suffix.lower()
+                sample_type = "video" if suffix in {".mp4", ".mov", ".avi", ".mkv"} else "image"
+                samples.append(
+                    {
+                        "path": path,
+                        "type": sample_type,
+                        "label": self.class_to_idx[label_name],
+                        "class_name": label_name,
+                    }
+                )
+        return samples
     
     def _collect_samples(self) -> List[Dict]:
         """Collect all samples from the split directory."""
@@ -541,23 +576,35 @@ def create_dataloaders(
         Tuple of (train_loader, val_loader)
     """
     roots = resolve_training_data_roots(data_dir, run_id=run_id)
+    data_root = Path(data_dir)
+    train_manifest_path = None
+    val_manifest_path = None
+    if run_id:
+        candidate_train_manifest = data_root / "manifests" / f"{run_id}_train.jsonl"
+        candidate_val_manifest = data_root / "manifests" / f"{run_id}_test.jsonl"
+        if candidate_train_manifest.exists():
+            train_manifest_path = str(candidate_train_manifest)
+        if candidate_val_manifest.exists() and candidate_val_manifest.stat().st_size > 0:
+            val_manifest_path = str(candidate_val_manifest)
 
     train_dataset = EmotionDataset(
-        data_dir=str(roots.train_root),
+        data_dir=data_dir,
         split="train",
         transform=get_train_transforms(input_size),
         class_names=class_names,
         frame_sampling=frame_sampling_train,
         frames_per_video=frames_per_video,
+        manifest_path=train_manifest_path,
     )
 
     val_dataset = EmotionDataset(
-        data_dir=str(roots.val_root),
+        data_dir=data_dir if val_manifest_path else str(roots.val_root),
         split="test",
         transform=get_val_transforms(input_size),
         class_names=class_names,
         frame_sampling=frame_sampling_val,
         frames_per_video=frames_per_video,
+        manifest_path=val_manifest_path,
     )
     
     train_loader = DataLoader(
