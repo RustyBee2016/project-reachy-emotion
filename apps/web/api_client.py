@@ -335,6 +335,10 @@ def prepare_run_frames(
     train_fraction: float = 0.7,
     seed: Optional[int] = None,
     dry_run: bool = False,
+    split_run: bool = False,
+    split_train_ratio: float = 0.9,
+    strip_valid_labels: bool = True,
+    persist_valid_metadata: bool = False,
     correlation_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -343,6 +347,10 @@ def prepare_run_frames(
     payload: Dict[str, Any] = {
         "train_fraction": train_fraction,
         "dry_run": bool(dry_run),
+        "split_run": bool(split_run),
+        "split_train_ratio": split_train_ratio,
+        "strip_valid_labels": bool(strip_valid_labels),
+        "persist_valid_metadata": bool(persist_valid_metadata),
     }
     if run_id:
         payload["run_id"] = run_id

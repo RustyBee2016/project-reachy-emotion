@@ -353,6 +353,123 @@ class TestPrepareRunFramesEndpoint:
         assert len(persisted.scalars().all()) == 30
 
     @pytest.mark.asyncio
+    async def test_prepare_run_frames_split_persists_valid_metadata(self, client, db_session):
+        """When split_run is enabled, persist both train and valid frame rows."""
+
+        class FakePreparer:
+            def __init__(self, base_path: str):
+                self.base_path = base_path
+
+            def prepare_training_dataset(self, run_id=None, train_fraction=0.7, seed=None):
+                run = run_id or "run_0003"
+                manifests = Path(self.base_path) / "manifests"
+                run_root = Path(self.base_path) / "train" / "run" / run
+                manifests.mkdir(parents=True, exist_ok=True)
+                run_root.mkdir(parents=True, exist_ok=True)
+                train_manifest = manifests / f"{run}_train.jsonl"
+                test_manifest = manifests / f"{run}_test.jsonl"
+                rows = [
+                    ("happy_a_f00_idx00000.jpg", "happy", "train/happy/source_000.mp4"),
+                    ("happy_b_f01_idx00001.jpg", "happy", "train/happy/source_001.mp4"),
+                    ("sad_a_f02_idx00002.jpg", "sad", "train/sad/source_002.mp4"),
+                    ("sad_b_f03_idx00003.jpg", "sad", "train/sad/source_003.mp4"),
+                    ("neutral_a_f04_idx00004.jpg", "neutral", "train/neutral/source_004.mp4"),
+                    ("neutral_b_f05_idx00005.jpg", "neutral", "train/neutral/source_005.mp4"),
+                ]
+                with open(train_manifest, "w", encoding="utf-8") as handle:
+                    for idx, (name, label, source_video) in enumerate(rows):
+                        handle.write(
+                            json.dumps(
+                                {
+                                    "video_id": f"source_{idx:03d}",
+                                    "path": str(run_root / name),
+                                    "label": label,
+                                    "source_video": str(Path(self.base_path) / source_video),
+                                }
+                            )
+                            + "\n"
+                        )
+                test_manifest.write_text("", encoding="utf-8")
+                return {
+                    "run_id": run,
+                    "train_count": 6,
+                    "test_count": 0,
+                    "videos_processed": 6,
+                    "frames_per_video": 10,
+                    "seed": 7 if seed is None else seed,
+                    "dataset_hash": "b" * 64,
+                }
+
+            def split_run_dataset(self, run_id, train_ratio=0.9, seed=None, strip_valid_labels=True):
+                manifests = Path(self.base_path) / "manifests"
+                run_root = Path(self.base_path) / "train" / "run" / run_id
+                train_ds = run_root / f"train_ds_{run_id}"
+                valid_ds = run_root / f"valid_ds_{run_id}"
+                train_ds.mkdir(parents=True, exist_ok=True)
+                valid_ds.mkdir(parents=True, exist_ok=True)
+
+                train_rows = [
+                    {"path": str(train_ds / "happy_a_f00_idx00000.jpg"), "label": "happy"},
+                    {"path": str(train_ds / "sad_a_f02_idx00002.jpg"), "label": "sad"},
+                    {"path": str(train_ds / "neutral_a_f04_idx00004.jpg"), "label": "neutral"},
+                    {"path": str(train_ds / "happy_b_f01_idx00001.jpg"), "label": "happy"},
+                ]
+                valid_rows = [
+                    {"path": str(valid_ds / "sad_b_f03_idx00003.jpg"), "label": "sad"},
+                    {"path": str(valid_ds / "neutral_b_f05_idx00005.jpg"), "label": "neutral"},
+                ]
+                with open(manifests / f"{run_id}_train_ds.jsonl", "w", encoding="utf-8") as handle:
+                    for row in train_rows:
+                        handle.write(json.dumps(row) + "\n")
+                with open(manifests / f"{run_id}_valid_ds_labeled.jsonl", "w", encoding="utf-8") as handle:
+                    for row in valid_rows:
+                        handle.write(json.dumps(row) + "\n")
+                with open(manifests / f"{run_id}_valid_ds_unlabeled.jsonl", "w", encoding="utf-8") as handle:
+                    for row in valid_rows:
+                        handle.write(json.dumps({"path": row["path"], "label": None}) + "\n")
+
+                return {
+                    "run_id": run_id,
+                    "train_count": 4,
+                    "valid_count": 2,
+                    "train_manifest": str(manifests / f"{run_id}_train_ds.jsonl"),
+                    "valid_labeled_manifest": str(manifests / f"{run_id}_valid_ds_labeled.jsonl"),
+                    "valid_unlabeled_manifest": str(manifests / f"{run_id}_valid_ds_unlabeled.jsonl"),
+                }
+
+        fake_module = types.SimpleNamespace(DatasetPreparer=FakePreparer)
+        with patch.dict(sys.modules, {"trainer.prepare_dataset": fake_module}):
+            response = await client.post(
+                "/api/v1/ingest/prepare-run-frames",
+                json={
+                    "run_id": "run_0003",
+                    "split_run": True,
+                    "persist_valid_metadata": True,
+                    "split_train_ratio": 0.9,
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["split_run_applied"] is True
+        assert data["persisted_train_frames"] == 4
+        assert data["persisted_valid_frames"] == 2
+        assert data["train_ds_manifest_path"].endswith("run_0003_train_ds.jsonl")
+        assert data["valid_ds_manifest_path"].endswith("run_0003_valid_ds_labeled.jsonl")
+
+        persisted = await db_session.execute(
+            select(ExtractedFrame).where(ExtractedFrame.run_id == "run_0003")
+        )
+        rows = persisted.scalars().all()
+        assert len(rows) == 6
+        train_rows = [row for row in rows if row.split == "train"]
+        valid_rows = [row for row in rows if row.split == "valid"]
+        assert len(train_rows) == 4
+        assert len(valid_rows) == 2
+        assert all(row.label in {"happy", "sad", "neutral"} for row in valid_rows)
+
+    @pytest.mark.asyncio
     async def test_prepare_run_frames_validation_error(self, client):
         """Convert dataset preparer validation failures into HTTP 422."""
 
