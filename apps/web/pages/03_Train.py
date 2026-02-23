@@ -102,6 +102,14 @@ st.subheader("Manifest + Frame Extraction")
 
 if "train_run_id" not in st.session_state:
     st.session_state["train_run_id"] = ""
+if "prepare_split_run" not in st.session_state:
+    st.session_state["prepare_split_run"] = False
+if "prepare_split_train_ratio" not in st.session_state:
+    st.session_state["prepare_split_train_ratio"] = 0.9
+if "prepare_strip_valid_labels" not in st.session_state:
+    st.session_state["prepare_strip_valid_labels"] = True
+if "prepare_persist_valid_metadata" not in st.session_state:
+    st.session_state["prepare_persist_valid_metadata"] = True
 
 run_id = st.text_input("Run ID (run_xxxx, optional)", key="train_run_id")
 sample_fraction = st.slider(
@@ -112,6 +120,34 @@ sample_fraction = st.slider(
     step=0.1,
 )
 dry_run = st.toggle("Dry run", value=True)
+split_run = st.toggle(
+    "Split run into train_ds/valid_ds",
+    key="prepare_split_run",
+    help="When enabled, move frames into train_ds_<run_id> and valid_ds_<run_id> after extraction.",
+)
+split_train_ratio = st.slider(
+    "Split train ratio",
+    min_value=0.5,
+    max_value=0.95,
+    value=float(st.session_state["prepare_split_train_ratio"]),
+    step=0.05,
+    key="prepare_split_train_ratio",
+    disabled=not split_run,
+)
+strip_valid_labels = st.toggle(
+    "Strip valid_ds label prefixes",
+    key="prepare_strip_valid_labels",
+    disabled=not split_run,
+    help="Removes happy_/sad_/neutral_ prefixes from valid_ds filenames while keeping labels in manifests.",
+)
+persist_valid_metadata = st.toggle(
+    "Persist valid_ds metadata",
+    key="prepare_persist_valid_metadata",
+    disabled=not split_run,
+    help="Writes valid split frame rows to extracted_frame for run-level lineage/auditing.",
+)
+if dry_run and split_run:
+    st.caption("Dry run validates extraction only. Split/move and valid metadata persistence run when Dry run is OFF.")
 
 action_col1, action_col2, action_col3 = st.columns(3)
 with action_col1:
@@ -131,6 +167,10 @@ with action_col2:
                 run_id=run_id or None,
                 train_fraction=sample_fraction,
                 dry_run=dry_run,
+                split_run=split_run,
+                split_train_ratio=split_train_ratio,
+                strip_valid_labels=strip_valid_labels,
+                persist_valid_metadata=bool(split_run and persist_valid_metadata),
                 correlation_id=corr_id,
                 idempotency_key=corr_id,
             )
