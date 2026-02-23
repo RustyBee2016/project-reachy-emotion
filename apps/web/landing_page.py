@@ -21,6 +21,7 @@ except StreamlitAPIException:
     pass
 
 import uuid
+from collections import Counter
 from pathlib import Path
 from datetime import datetime
 import os
@@ -172,6 +173,49 @@ def _legacy_clip_identifier(current: dict, video_id: Optional[str]) -> Optional[
 
     return None
 
+
+def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[str]:
+    if isinstance(raw_label, str):
+        normalized = raw_label.strip().lower()
+        if normalized in {"happy", "sad", "neutral"}:
+            return normalized
+
+    if isinstance(file_path, str):
+        name = Path(file_path).name.lower()
+        for label in ("happy", "sad", "neutral"):
+            if name.startswith(f"{label}_"):
+                return label
+
+        parts = Path(file_path).parts
+        if len(parts) >= 2 and parts[0] == "train" and parts[1] in {"happy", "sad", "neutral"}:
+            return parts[1]
+
+    return None
+
+
+def _render_train_balance_counters() -> None:
+    counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
+    try:
+        listing = list_videos_api(split="train", limit=5000, offset=0)
+        for item in listing.get("items", []):
+            label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
+            if label in counts:
+                counts[label] += 1
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Unable to load train label counters: {exc}")
+        return
+
+    min_count = min(counts.values()) if counts else 0
+    underrepresented = sorted([label for label, value in counts.items() if value == min_count])
+    col_a, col_b, col_c, col_d = st.columns(4)
+    col_a.metric("Happy", counts["happy"])
+    col_b.metric("Sad", counts["sad"])
+    col_c.metric("Neutral", counts["neutral"])
+    col_d.metric("Total Labeled", counts["happy"] + counts["sad"] + counts["neutral"])
+
+    if underrepresented:
+        st.caption(f"Underrepresented class(es): {', '.join(underrepresented)}")
+
 # Load environment variables from the Streamlit app directory before access
 WEB_ENV_PATH = Path(__file__).resolve().parent / ".env"
 load_dotenv(WEB_ENV_PATH, override=False)
@@ -259,6 +303,7 @@ if "luma_client" not in st.session_state:
 
 # Header
 st.markdown('<h1 class="main-header">Welcome to Capstone Video App</h1>', unsafe_allow_html=True)
+_render_train_balance_counters()
 
 # Section 1: Upload Existing Video
 st.markdown('<div class="section-container">', unsafe_allow_html=True)

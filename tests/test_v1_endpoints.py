@@ -116,7 +116,9 @@ class TestMediaV1Endpoints:
         assert "size_bytes" in video
         assert "mtime" in video
         assert "split" in video
+        assert "label" in video
         assert video["split"] == "temp"
+        assert video["label"] is None
     
     def test_list_videos_purged(self, client):
         """Test listing videos from purged split."""
@@ -138,6 +140,17 @@ class TestMediaV1Endpoints:
         data = body["data"]
         assert data["pagination"]["total"] == 0
         assert len(data["items"]) == 0
+
+    def test_list_videos_train_label_inferred_from_path(self, client, test_videos_root):
+        """Train labels should be inferred from train/<label>/... paths."""
+        (test_videos_root / "train" / "happy").mkdir(parents=True, exist_ok=True)
+        (test_videos_root / "train" / "happy" / "clip_happy.mp4").write_text("fake")
+
+        response = client.get("/api/v1/media/list?split=train&limit=10&offset=0")
+        assert response.status_code == 200
+        items = response.json()["data"]["items"]
+        assert len(items) == 1
+        assert items[0]["label"] == "happy"
     
     def test_list_videos_invalid_split(self, client):
         """Test that invalid split returns 400."""

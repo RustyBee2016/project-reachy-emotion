@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import uuid
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -74,6 +75,47 @@ def _ensure_state() -> None:
 
 def _set_current_video(payload: Dict[str, Any]) -> None:
     st.session_state.current_video = payload
+
+
+def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[str]:
+    if isinstance(raw_label, str):
+        normalized = raw_label.strip().lower()
+        if normalized in {"happy", "sad", "neutral"}:
+            return normalized
+
+    if isinstance(file_path, str):
+        parts = Path(file_path).parts
+        if len(parts) >= 2 and parts[0] == "train" and parts[1] in {"happy", "sad", "neutral"}:
+            return parts[1]
+        name = Path(file_path).name.lower()
+        for label in ("happy", "sad", "neutral"):
+            if name.startswith(f"{label}_"):
+                return label
+
+    return None
+
+
+def _render_train_balance_counters() -> None:
+    counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
+    try:
+        listing = api_client.list_videos(split="train", limit=5000, offset=0)
+        for item in listing.get("items", []):
+            label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
+            if label in counts:
+                counts[label] += 1
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Unable to load train label counters: {exc}")
+        return
+
+    min_count = min(counts.values()) if counts else 0
+    underrepresented = sorted([label for label, value in counts.items() if value == min_count])
+    col_a, col_b, col_c, col_d = st.columns(4)
+    col_a.metric("Happy", counts["happy"])
+    col_b.metric("Sad", counts["sad"])
+    col_c.metric("Neutral", counts["neutral"])
+    col_d.metric("Total Labeled", counts["happy"] + counts["sad"] + counts["neutral"])
+    if underrepresented:
+        st.caption(f"Underrepresented class(es): {', '.join(underrepresented)}")
 
 
 def _refresh_video_metadata(current: Dict[str, Any]) -> Optional[str]:
@@ -338,6 +380,7 @@ def _gateway_label() -> str:
 # Page content
 _ensure_state()
 st.markdown('<h1 class="main-header">Welcome to Capstone Video App</h1>', unsafe_allow_html=True)
+_render_train_balance_counters()
 _upload_section()
 _generation_section()
 _classification_section()

@@ -211,6 +211,32 @@ class TestDatasetPreparer:
         assert consolidated_dir.exists()
         assert len(list(consolidated_dir.glob('*.jpg'))) == 300
         assert not any(path.is_dir() for path in consolidated_dir.iterdir())
+
+    def test_split_run_dataset_moves_and_writes_manifests(self, temp_dataset_dir):
+        """Test run split moves files into train/valid subfolders and emits manifests."""
+        preparer = DatasetPreparer(str(temp_dataset_dir))
+        run_id = "run_0001"
+        preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
+
+        result = preparer.split_run_dataset(run_id, train_ratio=0.9, seed=42)
+
+        run_root = preparer.train_runs_path / run_id
+        train_ds_dir = run_root / f"train_ds_{run_id}"
+        valid_ds_dir = run_root / f"valid_ds_{run_id}"
+        assert train_ds_dir.exists()
+        assert valid_ds_dir.exists()
+        assert len(list(train_ds_dir.glob("*.jpg"))) == result["train_count"]
+        assert len(list(valid_ds_dir.glob("*.jpg"))) == result["valid_count"]
+
+        # Frames are moved from flat run root into split datasets.
+        assert len(list(run_root.glob("*.jpg"))) == 0
+        assert result["train_count"] + result["valid_count"] == 300
+
+        # Unlabeled valid manifest should force null labels.
+        with open(result["valid_unlabeled_manifest"], "r", encoding="utf-8") as handle:
+            rows = [json.loads(line) for line in handle if line.strip()]
+        assert rows
+        assert all(entry.get("label") is None for entry in rows)
     
     def test_empty_dataset_handling(self):
         """Test handling of empty dataset."""

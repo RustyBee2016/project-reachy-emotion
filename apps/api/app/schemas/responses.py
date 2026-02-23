@@ -96,6 +96,10 @@ class VideoMetadata(BaseModel):
     size_bytes: int = Field(description="File size in bytes")
     mtime: float = Field(description="Last modification time (Unix timestamp)")
     split: str = Field(description="Video split (temp, train, test, purged)")
+    label: Optional[str] = Field(
+        default=None,
+        description="Emotion label when available (happy, sad, neutral).",
+    )
 
 
 class ListVideosData(BaseModel):

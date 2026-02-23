@@ -12,8 +12,10 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
+from ..deps import get_db
 from .media_v1 import list_videos as list_videos_v1
 
 router = APIRouter(tags=["legacy"])
@@ -42,6 +44,7 @@ async def legacy_list_videos(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Legacy endpoint for listing videos.
     
@@ -62,7 +65,14 @@ async def legacy_list_videos(
     _add_deprecation_headers(response)
     
     # Call v1 endpoint
-    v1_response = await list_videos_v1(request=request, split=split, limit=limit, offset=offset, config=config)
+    v1_response = await list_videos_v1(
+        request=request,
+        split=split,
+        limit=limit,
+        offset=offset,
+        config=config,
+        db=db,
+    )
     
     # Convert to old format (unwrap the envelope)
     old_format = {
@@ -83,6 +93,7 @@ async def legacy_list_videos_compat(
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Legacy compatibility endpoint for listing videos.
     
@@ -103,7 +114,14 @@ async def legacy_list_videos_compat(
     _add_deprecation_headers(response)
     
     # Call v1 endpoint
-    v1_response = await list_videos_v1(request=request, split=split, limit=limit, offset=offset, config=config)
+    v1_response = await list_videos_v1(
+        request=request,
+        split=split,
+        limit=limit,
+        offset=offset,
+        config=config,
+        db=db,
+    )
     
     # Convert to old format (unwrap the envelope)
     old_format = {

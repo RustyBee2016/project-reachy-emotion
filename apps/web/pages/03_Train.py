@@ -22,6 +22,25 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _resolve_label(item: Dict[str, Any]) -> str:
+    raw_label = item.get("label")
+    if isinstance(raw_label, str):
+        normalized = raw_label.strip().lower()
+        if normalized in {"happy", "sad", "neutral"}:
+            return normalized
+
+    file_path = item.get("file_path")
+    if isinstance(file_path, str):
+        parts = file_path.split("/")
+        if len(parts) >= 2 and parts[0] == "train" and parts[1] in {"happy", "sad", "neutral"}:
+            return parts[1]
+        name = parts[-1].lower()
+        for label in ("happy", "sad", "neutral"):
+            if name.startswith(f"{label}_"):
+                return label
+    return "unlabeled"
+
+
 def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
     st.markdown(f"**{title}**")
     status = str(payload.get("status") or "unknown").lower()
@@ -61,7 +80,7 @@ col1, col2 = st.columns(2)
 with col1:
     try:
         train_items = _items_for_split("train")
-        train_counts = Counter((it.get("label") or "unlabeled") for it in train_items)
+        train_counts = Counter(_resolve_label(it) for it in train_items)
         st.subheader("Train Split")
         st.metric("Total", len(train_items))
         st.json(dict(train_counts))

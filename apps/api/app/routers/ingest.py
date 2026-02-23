@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import uuid
 from datetime import datetime
@@ -20,17 +21,19 @@ import httpx
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import insert, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
-from ..db.models import Video
+from ..db.models import ExtractedFrame, Video
 from ..deps import get_db
 
 router = APIRouter(prefix="/api/v1/ingest", tags=["ingest"])
 
 logger = logging.getLogger(__name__)
+EMOTION_LABELS = {"happy", "sad", "neutral"}
+FRAME_NAME_RE = re.compile(r"^(happy|sad|neutral)_.+_f(\d{2})_idx(\d{5})\.jpg$")
 
 
 # ============================================================================
@@ -307,6 +310,106 @@ def compute_dataset_hash(videos: List[Dict[str, Any]]) -> str:
     
     combined = "\n".join(parts)
     return hashlib.sha256(combined.encode()).hexdigest()
+
+
+def _normalize_relative_path(raw_path: str, videos_root: Path) -> str:
+    """Return paths relative to videos root when possible."""
+    path = Path(raw_path)
+    if path.is_absolute():
+        try:
+            return str(path.relative_to(videos_root))
+        except ValueError:
+            return str(path)
+    return str(path)
+
+
+def _frame_indices_from_path(frame_path: str) -> tuple[Optional[int], Optional[int], Optional[str]]:
+    """Extract frame order/index and label from canonical frame filenames."""
+    match = FRAME_NAME_RE.match(Path(frame_path).name.lower())
+    if not match:
+        return None, None, None
+    label = match.group(1)
+    frame_order = int(match.group(2))
+    frame_index = int(match.group(3))
+    return frame_order, frame_index, label
+
+
+async def _persist_extracted_frame_metadata(
+    *,
+    db: AsyncSession,
+    config: AppConfig,
+    run_id: str,
+    correlation_id: str,
+    idempotency_key: Optional[str],
+) -> int:
+    """Persist per-frame metadata for a prepared run using the train manifest."""
+    train_manifest_path = config.manifests_path / f"{run_id}_train.jsonl"
+    if not train_manifest_path.exists():
+        raise ValueError(f"Train manifest not found for run: {run_id}")
+
+    frame_entries: List[Dict[str, Any]] = []
+    with open(train_manifest_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            frame_entries.append(json.loads(line))
+
+    source_paths = {
+        _normalize_relative_path(str(entry["source_video"]), config.videos_root)
+        for entry in frame_entries
+        if entry.get("source_video")
+    }
+    source_video_id_by_path: Dict[str, str] = {}
+    if source_paths:
+        rows = await db.execute(
+            select(Video.video_id, Video.file_path).where(Video.file_path.in_(sorted(source_paths)))
+        )
+        for video_id, file_path in rows.all():
+            if video_id and file_path:
+                source_video_id_by_path[str(file_path)] = str(video_id)
+
+    payload_rows: List[Dict[str, Any]] = []
+    for entry in frame_entries:
+        raw_frame_path = str(entry.get("path", "")).strip()
+        if not raw_frame_path:
+            continue
+        frame_path = _normalize_relative_path(raw_frame_path, config.videos_root)
+
+        raw_label = str(entry.get("label", "")).strip().lower()
+        label = raw_label if raw_label in EMOTION_LABELS else None
+        frame_order, frame_index, inferred_label = _frame_indices_from_path(frame_path)
+        if label is None and inferred_label in EMOTION_LABELS:
+            label = inferred_label
+
+        source_video_rel: Optional[str] = None
+        source_video_id: Optional[str] = None
+        if entry.get("source_video"):
+            source_video_rel = _normalize_relative_path(str(entry["source_video"]), config.videos_root)
+            source_video_id = source_video_id_by_path.get(source_video_rel)
+
+        payload_rows.append(
+            {
+                "run_id": run_id,
+                "split": "train",
+                "frame_path": frame_path,
+                "label": label,
+                "source_video_id": source_video_id,
+                "source_video_path": source_video_rel,
+                "frame_order": frame_order,
+                "frame_index": frame_index,
+                "extra_data": {
+                    "correlation_id": correlation_id,
+                    "idempotency_key": idempotency_key,
+                },
+            }
+        )
+
+    await db.execute(delete(ExtractedFrame).where(ExtractedFrame.run_id == run_id))
+    if payload_rows:
+        await db.execute(insert(ExtractedFrame), payload_rows)
+    await db.commit()
+    return len(payload_rows)
 
 
 # ============================================================================
@@ -890,6 +993,7 @@ async def rebuild_manifest(
 async def prepare_run_frames(
     request: PrepareRunFramesRequest,
     config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
 ) -> PrepareRunFramesResponse:
     """Extract run-scoped random frames from train videos and generate manifests.
@@ -935,6 +1039,15 @@ async def prepare_run_frames(
         train_manifest_path = config.manifests_path / f"{run_id}_train.jsonl"
         test_manifest_path = config.manifests_path / f"{run_id}_test.jsonl"
         train_run_root = config.videos_root / "train" / "run" / run_id
+        persisted_frames = 0
+        if not request.dry_run:
+            persisted_frames = await _persist_extracted_frame_metadata(
+                db=db,
+                config=config,
+                run_id=run_id,
+                correlation_id=correlation_id,
+                idempotency_key=idempotency_key,
+            )
 
         logger.info(
             "prepare_run_frames_completed",
@@ -944,6 +1057,7 @@ async def prepare_run_frames(
                 "train_count": result["train_count"],
                 "videos_processed": result["videos_processed"],
                 "frames_per_video": result["frames_per_video"],
+                "persisted_frames": persisted_frames,
                 "idempotency_key": idempotency_key,
                 "dry_run": request.dry_run,
             },

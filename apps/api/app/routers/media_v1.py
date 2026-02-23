@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import logging
+import re
+from pathlib import Path
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import AppConfig, get_config
+from ..db.models import ExtractedFrame, Video
 from ..deps import get_db
 from ...routers import media as legacy_media_router
 from ..schemas import (
@@ -25,11 +31,68 @@ from ..schemas import (
 router = APIRouter(prefix="/api/v1/media", tags=["media"])
 
 logger = logging.getLogger(__name__)
+EMOTION_LABELS = {"happy", "sad", "neutral"}
+FRAME_LABEL_RE = re.compile(r"^(happy|sad|neutral)_")
 
 
 def _get_correlation_id(request: Request) -> str:
     """Extract correlation ID from request headers."""
     return request.headers.get("X-Correlation-ID", "")
+
+
+def _infer_label_from_path(split: str, rel_path: Path) -> Optional[str]:
+    """Infer labels from train directory names and frame filename prefixes."""
+    if split != "train":
+        return None
+
+    parts = rel_path.parts
+    if len(parts) >= 3 and parts[0] == "train" and parts[1] in EMOTION_LABELS:
+        return parts[1]
+
+    match = FRAME_LABEL_RE.match(rel_path.name.lower())
+    if match:
+        return match.group(1)
+
+    return None
+
+
+async def _load_label_maps(
+    db: AsyncSession,
+    *,
+    file_paths: list[str],
+) -> tuple[Dict[str, str], Dict[str, str]]:
+    """Load labels from video and extracted_frame tables using relative file paths."""
+    if not file_paths:
+        return {}, {}
+
+    video_labels: Dict[str, str] = {}
+    frame_labels: Dict[str, str] = {}
+
+    try:
+        video_rows = await db.execute(
+            select(Video.file_path, Video.label).where(Video.file_path.in_(file_paths))
+        )
+        for file_path, label in video_rows.all():
+            if file_path and label:
+                video_labels[str(file_path)] = str(label)
+    except Exception:
+        # Keep media listing available even if DB session is unavailable/misaligned.
+        logger.warning("video table unavailable while resolving labels")
+
+    try:
+        frame_rows = await db.execute(
+            select(ExtractedFrame.frame_path, ExtractedFrame.label).where(
+                ExtractedFrame.frame_path.in_(file_paths)
+            )
+        )
+        for frame_path, label in frame_rows.all():
+            if frame_path and label:
+                frame_labels[str(frame_path)] = str(label)
+    except Exception:
+        # Backward-compatible fallback for environments pending the extracted_frame migration.
+        logger.warning("extracted_frame table unavailable while resolving labels")
+
+    return video_labels, frame_labels
 
 
 @router.get("/list", response_model=ListVideosResponse)
@@ -39,6 +102,7 @@ async def list_videos(
     limit: int = Query(50, ge=1, le=1000, description="Maximum number of videos to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     config: AppConfig = Depends(get_config),
+    db: AsyncSession = Depends(get_db),
 ) -> ListVideosResponse:
     """List videos from the specified split.
     
@@ -79,7 +143,7 @@ async def list_videos(
         )
         return create_success_response(data, _get_correlation_id(request))
 
-    videos = []
+    files = []
     try:
         iterator = root.rglob("*") if split == "train" else root.iterdir()
         for p in iterator:
@@ -88,15 +152,7 @@ async def list_videos(
             try:
                 st = p.stat()
                 rel = p.relative_to(config.videos_root)
-                videos.append(
-                    VideoMetadata(
-                        video_id=p.stem,
-                        file_path=str(rel),
-                        size_bytes=st.st_size,
-                        mtime=st.st_mtime,
-                        split=split,
-                    )
-                )
+                files.append((p, st, rel))
             except Exception as e:
                 # Skip unreadable entries but log the error
                 logger.warning(f"Failed to read video metadata: {p}", exc_info=e)
@@ -111,7 +167,26 @@ async def list_videos(
             }
         ) from e
 
-    # Apply offset/limit after collection
+    rel_file_paths = [str(rel) for _, _, rel in files]
+    video_labels, frame_labels = await _load_label_maps(db, file_paths=rel_file_paths)
+
+    videos = []
+    for p, st, rel in files:
+        rel_str = str(rel)
+        label = frame_labels.get(rel_str) or video_labels.get(rel_str) or _infer_label_from_path(split, rel)
+        if label not in EMOTION_LABELS:
+            label = None
+        videos.append(
+            VideoMetadata(
+                video_id=p.stem,
+                file_path=rel_str,
+                size_bytes=st.st_size,
+                mtime=st.st_mtime,
+                split=split,
+                label=label,
+            )
+        )
+
     total = len(videos)
     sliced = videos[offset : offset + limit]
     

@@ -580,12 +580,23 @@ def create_dataloaders(
     train_manifest_path = None
     val_manifest_path = None
     if run_id:
-        candidate_train_manifest = data_root / "manifests" / f"{run_id}_train.jsonl"
-        candidate_val_manifest = data_root / "manifests" / f"{run_id}_test.jsonl"
-        if candidate_train_manifest.exists():
-            train_manifest_path = str(candidate_train_manifest)
-        if candidate_val_manifest.exists() and candidate_val_manifest.stat().st_size > 0:
-            val_manifest_path = str(candidate_val_manifest)
+        manifest_root = data_root / "manifests"
+        candidate_train_manifests = [
+            manifest_root / f"{run_id}_train_ds.jsonl",
+            manifest_root / f"{run_id}_train.jsonl",
+        ]
+        candidate_val_manifests = [
+            manifest_root / f"{run_id}_valid_ds_labeled.jsonl",
+            manifest_root / f"{run_id}_test.jsonl",
+        ]
+        for candidate in candidate_train_manifests:
+            if candidate.exists() and candidate.stat().st_size > 0:
+                train_manifest_path = str(candidate)
+                break
+        for candidate in candidate_val_manifests:
+            if candidate.exists() and candidate.stat().st_size > 0:
+                val_manifest_path = str(candidate)
+                break
 
     train_dataset = EmotionDataset(
         data_dir=data_dir,

@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Integer,
     JSON,
     Index,
     Numeric,
@@ -65,6 +66,10 @@ class Video(TimestampMixin, Base):
     )
     label_events: Mapped[List["LabelEvent"]] = relationship(
         back_populates="video",
+        cascade="all, delete-orphan",
+    )
+    extracted_frames: Mapped[List["ExtractedFrame"]] = relationship(
+        back_populates="source_video",
         cascade="all, delete-orphan",
     )
 
@@ -156,6 +161,44 @@ class TrainingSelection(TimestampMixin, Base):
 
     training_run: Mapped[TrainingRun] = relationship(back_populates="selections")
     video: Mapped[Video] = relationship(back_populates="selections")
+
+
+class ExtractedFrame(TimestampMixin, Base):
+    """Frame-level metadata for run-scoped extraction outputs."""
+
+    __tablename__ = "extracted_frame"
+
+    frame_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    split: Mapped[str] = mapped_column(String(16), nullable=False, default="train")
+    frame_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(EmotionEnum, nullable=True)
+    source_video_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("video.video_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_video_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    frame_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    frame_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=dict, nullable=True)
+
+    source_video: Mapped[Optional[Video]] = relationship(back_populates="extracted_frames")
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "frame_path", name="uq_extracted_frame_run_path"),
+        CheckConstraint(
+            "split IN ('train', 'valid', 'test')",
+            name="chk_extracted_frame_split",
+        ),
+        CheckConstraint(
+            "(split = 'test' AND label IS NULL) OR (split IN ('train', 'valid'))",
+            name="chk_extracted_frame_test_unlabeled",
+        ),
+        Index("ix_extracted_frame_run_id", "run_id"),
+        Index("ix_extracted_frame_label", "label"),
+        Index("ix_extracted_frame_split", "split"),
+    )
 
 
 class PromotionLog(TimestampMixin, Base):

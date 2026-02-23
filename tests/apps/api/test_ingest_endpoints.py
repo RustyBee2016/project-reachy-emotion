@@ -15,10 +15,11 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from apps.api.app.main import app
 from apps.api.app.db.base import Base
-from apps.api.app.db.models import Video
+from apps.api.app.db.models import ExtractedFrame, Video
 from apps.api.app.deps import get_db, get_config_dep
 from apps.api.app.config import AppConfig, get_config
 
@@ -290,7 +291,7 @@ class TestPrepareRunFramesEndpoint:
     """Tests for POST /api/v1/ingest/prepare-run-frames."""
 
     @pytest.mark.asyncio
-    async def test_prepare_run_frames_success(self, client):
+    async def test_prepare_run_frames_success(self, client, db_session):
         """Return run metadata and output paths for successful extraction."""
 
         class FakePreparer:
@@ -298,8 +299,30 @@ class TestPrepareRunFramesEndpoint:
                 self.base_path = base_path
 
             def prepare_training_dataset(self, run_id=None, train_fraction=0.7, seed=None):
+                run = run_id or "run_0001"
+                manifests = Path(self.base_path) / "manifests"
+                run_root = Path(self.base_path) / "train" / "run" / run
+                manifests.mkdir(parents=True, exist_ok=True)
+                run_root.mkdir(parents=True, exist_ok=True)
+                train_manifest = manifests / f"{run}_train.jsonl"
+                test_manifest = manifests / f"{run}_test.jsonl"
+                with open(train_manifest, "w") as handle:
+                    for idx in range(30):
+                        label = ("happy", "sad", "neutral")[idx % 3]
+                        handle.write(
+                            json.dumps(
+                                {
+                                    "video_id": f"source_{idx:03d}",
+                                    "path": str(run_root / f"{label}_sample_f{idx % 10:02d}_idx{idx:05d}.jpg"),
+                                    "label": label,
+                                    "source_video": str(Path(self.base_path) / "train" / label / f"source_{idx:03d}.mp4"),
+                                }
+                            )
+                            + "\n"
+                        )
+                test_manifest.write_text("")
                 return {
-                    "run_id": run_id or "run_0001",
+                    "run_id": run,
                     "train_count": 30,
                     "test_count": 0,
                     "videos_processed": 3,
@@ -324,6 +347,10 @@ class TestPrepareRunFramesEndpoint:
         assert data["dataset_hash"] == "a" * 64
         assert data["seed"] == 123
         assert data["train_manifest_path"].endswith("run_0001_train.jsonl")
+        persisted = await db_session.execute(
+            select(ExtractedFrame).where(ExtractedFrame.run_id == "run_0001")
+        )
+        assert len(persisted.scalars().all()) == 30
 
     @pytest.mark.asyncio
     async def test_prepare_run_frames_validation_error(self, client):

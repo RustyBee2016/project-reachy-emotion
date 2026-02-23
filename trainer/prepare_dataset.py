@@ -303,6 +303,157 @@ class DatasetPreparer:
                 }
                 f.write(json.dumps(entry) + '\n')
 
+    def _load_run_train_labels(self, run_id: str) -> Dict[str, str]:
+        """Load frame labels from the run train manifest when available."""
+        labels: Dict[str, str] = {}
+        manifest_path = self.manifests_path / f"{run_id}_train.jsonl"
+        if not manifest_path.exists():
+            return labels
+
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                frame_path = str(entry.get("path", "")).strip()
+                label = str(entry.get("label", "")).strip().lower()
+                if not frame_path or label not in self.EMOTIONS:
+                    continue
+                normalized = Path(frame_path)
+                if normalized.is_absolute():
+                    try:
+                        normalized = normalized.relative_to(self.base_path)
+                    except ValueError:
+                        pass
+                labels[str(normalized)] = label
+                labels[normalized.name] = label
+        return labels
+
+    @staticmethod
+    def _strip_label_prefix(file_name: str) -> str:
+        for label in DatasetPreparer.EMOTIONS:
+            prefix = f"{label}_"
+            if file_name.startswith(prefix):
+                return file_name[len(prefix):]
+        return file_name
+
+    def split_run_dataset(
+        self,
+        run_id: str,
+        *,
+        train_ratio: float = 0.9,
+        seed: Optional[int] = None,
+        strip_valid_labels: bool = True,
+    ) -> Dict[str, Any]:
+        """Move run frames into train/valid dataset subfolders under the run root."""
+        normalized_run_id = self.resolve_run_id(run_id)
+        if not (0.0 < train_ratio < 1.0):
+            raise ValueError("train_ratio must be between 0 and 1 (exclusive)")
+
+        if seed is None:
+            seed = int(hashlib.md5(normalized_run_id.encode()).hexdigest(), 16) % (2**31)
+        rng = random.Random(seed)
+
+        run_root = self.train_runs_path / normalized_run_id
+        if not run_root.exists():
+            raise ValueError(f"Run root does not exist: {run_root}")
+
+        train_ds_dir = run_root / f"train_ds_{normalized_run_id}"
+        valid_ds_dir = run_root / f"valid_ds_{normalized_run_id}"
+        if train_ds_dir.exists():
+            shutil.rmtree(train_ds_dir)
+        if valid_ds_dir.exists():
+            shutil.rmtree(valid_ds_dir)
+        train_ds_dir.mkdir(parents=True, exist_ok=True)
+        valid_ds_dir.mkdir(parents=True, exist_ok=True)
+
+        flat_frames = sorted([p for p in run_root.glob("*.jpg") if p.is_file()])
+        if not flat_frames:
+            raise ValueError(
+                f"No frame files found directly under {run_root}. "
+                "Run extraction first or move files back before splitting."
+            )
+
+        label_map = self._load_run_train_labels(normalized_run_id)
+        buckets: Dict[str, List[Path]] = {label: [] for label in self.EMOTIONS}
+        unknown: List[Path] = []
+
+        for frame_path in flat_frames:
+            rel_key = str(frame_path.relative_to(self.base_path))
+            label = label_map.get(rel_key) or label_map.get(frame_path.name)
+            if label not in self.EMOTIONS:
+                name_lower = frame_path.name.lower()
+                label = next((em for em in self.EMOTIONS if name_lower.startswith(f"{em}_")), None)
+            if label in self.EMOTIONS:
+                buckets[label].append(frame_path)
+            else:
+                unknown.append(frame_path)
+
+        train_frames: List[tuple[Path, str]] = []
+        valid_frames: List[tuple[Path, Optional[str]]] = []
+        for label in self.EMOTIONS:
+            bucket = buckets[label]
+            rng.shuffle(bucket)
+            if not bucket:
+                continue
+            if len(bucket) == 1:
+                split_idx = 1
+            else:
+                split_idx = max(1, min(len(bucket) - 1, int(len(bucket) * train_ratio)))
+            train_frames.extend((path, label) for path in bucket[:split_idx])
+            valid_frames.extend((path, label) for path in bucket[split_idx:])
+
+        for frame_path in unknown:
+            train_frames.append((frame_path, "neutral"))
+
+        moved_train: List[Dict[str, Any]] = []
+        moved_valid_labeled: List[Dict[str, Any]] = []
+        moved_valid_unlabeled: List[Dict[str, Any]] = []
+
+        for src_path, label in train_frames:
+            dst_path = train_ds_dir / src_path.name
+            shutil.move(str(src_path), str(dst_path))
+            moved_train.append({"path": str(dst_path), "label": label})
+
+        for src_path, label in valid_frames:
+            target_name = self._strip_label_prefix(src_path.name) if strip_valid_labels else src_path.name
+            dst_path = valid_ds_dir / target_name
+            suffix_idx = 1
+            while dst_path.exists():
+                dst_path = valid_ds_dir / f"{Path(target_name).stem}_{suffix_idx:03d}{Path(target_name).suffix}"
+                suffix_idx += 1
+            shutil.move(str(src_path), str(dst_path))
+            moved_valid_labeled.append({"path": str(dst_path), "label": label})
+            moved_valid_unlabeled.append({"path": str(dst_path), "label": None})
+
+        train_manifest = self.manifests_path / f"{normalized_run_id}_train_ds.jsonl"
+        valid_labeled_manifest = self.manifests_path / f"{normalized_run_id}_valid_ds_labeled.jsonl"
+        valid_unlabeled_manifest = self.manifests_path / f"{normalized_run_id}_valid_ds_unlabeled.jsonl"
+        with open(train_manifest, "w", encoding="utf-8") as handle:
+            for row in moved_train:
+                handle.write(json.dumps(row) + "\n")
+        with open(valid_labeled_manifest, "w", encoding="utf-8") as handle:
+            for row in moved_valid_labeled:
+                handle.write(json.dumps(row) + "\n")
+        with open(valid_unlabeled_manifest, "w", encoding="utf-8") as handle:
+            for row in moved_valid_unlabeled:
+                handle.write(json.dumps(row) + "\n")
+
+        return {
+            "run_id": normalized_run_id,
+            "train_ratio": train_ratio,
+            "seed": seed,
+            "strip_valid_labels": strip_valid_labels,
+            "train_count": len(moved_train),
+            "valid_count": len(moved_valid_labeled),
+            "train_ds_dir": str(train_ds_dir),
+            "valid_ds_dir": str(valid_ds_dir),
+            "train_manifest": str(train_manifest),
+            "valid_labeled_manifest": str(valid_labeled_manifest),
+            "valid_unlabeled_manifest": str(valid_unlabeled_manifest),
+        }
+
     def calculate_dataset_hash(self, run_id: Optional[str] = None) -> str:
         """
         Calculate SHA256 hash of dataset for reproducibility.
