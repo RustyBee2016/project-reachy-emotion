@@ -470,6 +470,90 @@ class TestPrepareRunFramesEndpoint:
         assert all(row.label in {"happy", "sad", "neutral"} for row in valid_rows)
 
     @pytest.mark.asyncio
+    async def test_prepare_run_frames_face_crop_metadata_persisted(self, client, db_session):
+        """Face-crop manifest fields should persist into extracted_frame metadata."""
+
+        class FakePreparer:
+            def __init__(self, base_path: str):
+                self.base_path = base_path
+
+            def prepare_training_dataset(
+                self,
+                run_id=None,
+                train_fraction=0.7,
+                seed=None,
+                face_crop=False,
+                target_size=224,
+                face_confidence=0.6,
+            ):
+                run = run_id or "run_0004"
+                manifests = Path(self.base_path) / "manifests"
+                run_root = Path(self.base_path) / "train" / "run" / run
+                manifests.mkdir(parents=True, exist_ok=True)
+                run_root.mkdir(parents=True, exist_ok=True)
+                train_manifest = manifests / f"{run}_train.jsonl"
+                test_manifest = manifests / f"{run}_test.jsonl"
+                train_manifest.write_text(
+                    json.dumps(
+                        {
+                            "video_id": "source_001",
+                            "path": str(run_root / "happy_sample_f00_idx00000.jpg"),
+                            "label": "happy",
+                            "source_video": str(Path(self.base_path) / "train" / "happy" / "source_001.mp4"),
+                            "face_bbox": {"x": 10, "y": 12, "w": 80, "h": 90},
+                            "face_confidence": face_confidence,
+                            "face_detector": "opencv_dnn_res10_ssd",
+                            "face_crop": face_crop,
+                            "target_size": target_size,
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                test_manifest.write_text("", encoding="utf-8")
+                return {
+                    "run_id": run,
+                    "train_count": 1,
+                    "test_count": 0,
+                    "videos_processed": 1,
+                    "frames_per_video": 10,
+                    "seed": 1 if seed is None else seed,
+                    "dataset_hash": "c" * 64,
+                    "face_crop": face_crop,
+                    "target_size": target_size,
+                    "face_confidence": face_confidence,
+                }
+
+        fake_module = types.SimpleNamespace(DatasetPreparer=FakePreparer)
+        with patch.dict(sys.modules, {"trainer.prepare_dataset": fake_module}):
+            response = await client.post(
+                "/api/v1/ingest/prepare-run-frames",
+                json={
+                    "run_id": "run_0004",
+                    "face_crop": True,
+                    "face_target_size": 224,
+                    "face_confidence": 0.65,
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["face_crop"] is True
+        assert data["face_target_size"] == 224
+        assert data["face_confidence"] == pytest.approx(0.65, abs=1e-6)
+
+        persisted = await db_session.execute(
+            select(ExtractedFrame).where(ExtractedFrame.run_id == "run_0004")
+        )
+        row = persisted.scalars().first()
+        assert row is not None
+        assert isinstance(row.extra_data, dict)
+        assert row.extra_data.get("face_crop") is True
+        assert row.extra_data.get("target_size") == 224
+        assert row.extra_data.get("face_detector") == "opencv_dnn_res10_ssd"
+        assert isinstance(row.extra_data.get("face_bbox"), dict)
+
+    @pytest.mark.asyncio
     async def test_prepare_run_frames_validation_error(self, client):
         """Convert dataset preparer validation failures into HTTP 422."""
 

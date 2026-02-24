@@ -13,9 +13,22 @@ st.title("03 - Training")
 
 
 def _items_for_split(split: str) -> list[dict]:
-    data = api_client.list_videos(split=split, limit=1000, offset=0)
-    raw_items = data.get("items", []) if isinstance(data, dict) else []
-    return [it for it in raw_items if isinstance(it, dict)]
+    items: list[dict] = []
+    offset = 0
+    page_limit = 10
+    while True:
+        data = api_client.list_videos(split=split, limit=page_limit, offset=offset)
+        raw_items = data.get("items", []) if isinstance(data, dict) else []
+        if not isinstance(raw_items, list):
+            break
+        batch = [it for it in raw_items if isinstance(it, dict)]
+        items.extend(batch)
+        if not data.get("has_more"):
+            break
+        offset += len(batch)
+        if not batch:
+            break
+    return items
 
 
 def _as_dict(value: Any) -> Dict[str, Any]:
@@ -110,6 +123,10 @@ if "prepare_strip_valid_labels" not in st.session_state:
     st.session_state["prepare_strip_valid_labels"] = True
 if "prepare_persist_valid_metadata" not in st.session_state:
     st.session_state["prepare_persist_valid_metadata"] = True
+if "prepare_face_crop" not in st.session_state:
+    st.session_state["prepare_face_crop"] = False
+if "prepare_face_confidence" not in st.session_state:
+    st.session_state["prepare_face_confidence"] = 0.6
 
 run_id = st.text_input("Run ID (run_xxxx, optional)", key="train_run_id")
 sample_fraction = st.slider(
@@ -120,6 +137,20 @@ sample_fraction = st.slider(
     step=0.1,
 )
 dry_run = st.toggle("Dry run", value=True)
+face_crop = st.toggle(
+    "Enable face-crop extraction (OpenCV DNN)",
+    key="prepare_face_crop",
+    help="Detect faces with OpenCV DNN, crop to face ROI, resize to 224x224, and skip frames without faces.",
+)
+face_confidence = st.slider(
+    "Face detection confidence",
+    min_value=0.3,
+    max_value=0.95,
+    value=float(st.session_state["prepare_face_confidence"]),
+    step=0.05,
+    key="prepare_face_confidence",
+    disabled=not face_crop,
+)
 split_run = st.toggle(
     "Split run into train_ds/valid_ds",
     key="prepare_split_run",
@@ -167,6 +198,9 @@ with action_col2:
                 run_id=run_id or None,
                 train_fraction=sample_fraction,
                 dry_run=dry_run,
+                face_crop=face_crop,
+                face_target_size=224,
+                face_confidence=face_confidence,
                 split_run=split_run,
                 split_train_ratio=split_train_ratio,
                 strip_valid_labels=strip_valid_labels,

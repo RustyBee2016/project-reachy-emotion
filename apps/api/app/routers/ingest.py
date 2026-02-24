@@ -123,6 +123,22 @@ class PrepareRunFramesRequest(BaseModel):
         default=False,
         description="If true, validate and estimate outputs without writing frames/manifests.",
     )
+    face_crop: bool = Field(
+        default=False,
+        description="If true, use OpenCV DNN face detection and save cropped face frames only.",
+    )
+    face_target_size: int = Field(
+        default=224,
+        ge=64,
+        le=1024,
+        description="Face crop output size (square).",
+    )
+    face_confidence: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Minimum OpenCV DNN face detection confidence.",
+    )
     split_run: bool = Field(
         default=False,
         description=(
@@ -168,6 +184,9 @@ class PrepareRunFramesResponse(BaseModel):
     dataset_hash: str
     seed: int
     dry_run: bool = False
+    face_crop: bool = False
+    face_target_size: int = 224
+    face_confidence: float = 0.6
     split_run_applied: bool = False
     persisted_train_frames: int = 0
     persisted_valid_frames: int = 0
@@ -479,6 +498,21 @@ async def _persist_run_frame_metadata(
             if source_video_rel:
                 source_video_id = source_video_id_by_path.get(source_video_rel)
 
+            row_metadata: Dict[str, Any] = {
+                "correlation_id": correlation_id,
+                "idempotency_key": idempotency_key,
+            }
+            for key in (
+                "face_bbox",
+                "face_confidence",
+                "face_detector",
+                "face_crop",
+                "target_size",
+                "source_frame_shape",
+            ):
+                if key in entry:
+                    row_metadata[key] = entry[key]
+
             payload_rows.append(
                 {
                     "run_id": run_id,
@@ -489,10 +523,7 @@ async def _persist_run_frame_metadata(
                     "source_video_path": source_video_rel,
                     "frame_order": frame_order,
                     "frame_index": frame_index,
-                    "extra_data": {
-                        "correlation_id": correlation_id,
-                        "idempotency_key": idempotency_key,
-                    },
+                    "extra_data": row_metadata,
                 }
             )
         return payload_rows
@@ -1119,19 +1150,33 @@ async def prepare_run_frames(
             ) from exc
 
         preparer = DatasetPreparer(str(config.videos_root))
-        if request.dry_run:
-            result = preparer.plan_training_dataset(
-                run_id=request.run_id,
-                train_fraction=request.train_fraction,
-                seed=request.seed,
+        plan_kwargs: Dict[str, Any] = {
+            "run_id": request.run_id,
+            "train_fraction": request.train_fraction,
+            "seed": request.seed,
+        }
+        prepare_kwargs: Dict[str, Any] = dict(plan_kwargs)
+        if request.face_crop:
+            plan_kwargs.update(
+                {
+                    "face_crop": True,
+                    "target_size": request.face_target_size,
+                    "face_confidence": request.face_confidence,
+                }
             )
+            prepare_kwargs.update(
+                {
+                    "face_crop": True,
+                    "target_size": request.face_target_size,
+                    "face_confidence": request.face_confidence,
+                }
+            )
+
+        if request.dry_run:
+            result = preparer.plan_training_dataset(**plan_kwargs)
             status = "dry_run"
         else:
-            result = preparer.prepare_training_dataset(
-                run_id=request.run_id,
-                train_fraction=request.train_fraction,
-                seed=request.seed,
-            )
+            result = preparer.prepare_training_dataset(**prepare_kwargs)
             status = "ok"
 
         run_id = str(result["run_id"])
@@ -1194,6 +1239,9 @@ async def prepare_run_frames(
             dataset_hash=str(result["dataset_hash"]),
             seed=int(result["seed"]),
             dry_run=bool(request.dry_run),
+            face_crop=bool(result.get("face_crop", request.face_crop)),
+            face_target_size=int(result.get("target_size", request.face_target_size)),
+            face_confidence=float(result.get("face_confidence", request.face_confidence)),
             split_run_applied=split_run_applied,
             persisted_train_frames=persisted_train_frames,
             persisted_valid_frames=persisted_valid_frames,

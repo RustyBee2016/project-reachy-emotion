@@ -70,7 +70,7 @@ class TestCompleteE2EWorkflow:
         assert health["data"]["status"] == "healthy"
         
         # 2. List all videos in temp
-        response = e2e_client.get("/api/v1/media/list?split=temp&limit=100&offset=0")
+        response = e2e_client.get("/api/v1/media/list?split=temp&limit=10&offset=0")
         assert response.status_code == 200
         body = response.json()
         assert body["status"] == "success"
@@ -125,7 +125,7 @@ class TestCompleteE2EWorkflow:
         total_videos = 0
         
         for split in splits:
-            response = e2e_client.get(f"/api/v1/media/list?split={split}&limit=100&offset=0")
+            response = e2e_client.get(f"/api/v1/media/list?split={split}&limit=10&offset=0")
             assert response.status_code == 200
             body = response.json()
             count = body["data"]["pagination"]["total"]
@@ -137,12 +137,12 @@ class TestCompleteE2EWorkflow:
     def test_legacy_and_v1_consistency(self, e2e_client):
         """Test that legacy and v1 endpoints return consistent data."""
         # Get from v1
-        response_v1 = e2e_client.get("/api/v1/media/list?split=temp&limit=100&offset=0")
+        response_v1 = e2e_client.get("/api/v1/media/list?split=temp&limit=10&offset=0")
         body_v1 = response_v1.json()
         v1_items = body_v1["data"]["items"]
         
         # Get from legacy
-        response_legacy = e2e_client.get("/api/videos/list?split=temp&limit=100&offset=0")
+        response_legacy = e2e_client.get("/api/videos/list?split=temp&limit=10&offset=0")
         legacy_data = response_legacy.json()
         legacy_items = legacy_data["items"]
         
@@ -209,7 +209,7 @@ class TestSystemResilience:
         # Create a new split directory but leave it empty
         # (Already handled by fixture - train and test have only 1 video each)
         
-        response = e2e_client.get("/api/v1/media/list?split=train&limit=100&offset=0")
+        response = e2e_client.get("/api/v1/media/list?split=train&limit=10&offset=0")
         assert response.status_code == 200
         body = response.json()
         
@@ -218,14 +218,9 @@ class TestSystemResilience:
         assert body["data"]["pagination"]["total"] == 1
     
     def test_large_limit_handling(self, e2e_client):
-        """Test that large limits are handled correctly."""
+        """Test that limit above API cap is rejected."""
         response = e2e_client.get("/api/v1/media/list?split=temp&limit=1000&offset=0")
-        assert response.status_code == 200
-        body = response.json()
-        
-        # Should return all videos (3) even though limit is 1000
-        assert len(body["data"]["items"]) == 3
-        assert body["data"]["pagination"]["total"] == 3
+        assert response.status_code == 422
     
     def test_offset_beyond_total(self, e2e_client):
         """Test that offset beyond total returns empty results."""
@@ -259,7 +254,7 @@ class TestPerformanceBasics:
         import time
         
         start = time.time()
-        response = e2e_client.get("/api/v1/media/list?split=temp&limit=100&offset=0")
+        response = e2e_client.get("/api/v1/media/list?split=temp&limit=10&offset=0")
         duration = time.time() - start
         
         assert response.status_code == 200

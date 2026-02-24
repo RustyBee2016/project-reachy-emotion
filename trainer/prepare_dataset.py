@@ -8,11 +8,13 @@ import hashlib
 import random
 import re
 import shutil
+import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 import logging
 
 import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ class DatasetPreparer:
     EMOTIONS = ("happy", "sad", "neutral")
     FRAMES_PER_VIDEO = 10
     RUN_ID_PATTERN = re.compile(r"^run_\d{4}$")
+    FACE_DETECTOR_NAME = "opencv_dnn_res10_ssd"
     
     def __init__(self, base_path: str):
         """
@@ -36,18 +39,125 @@ class DatasetPreparer:
         self.train_path = self.base_path / 'train'
         self.train_runs_path = self.train_path / 'run'
         self.test_path = self.base_path / 'test'
+        self._face_net = None
         
         # Create directories
         self.manifests_path.mkdir(exist_ok=True)
         self.train_path.mkdir(exist_ok=True)
         self.train_runs_path.mkdir(parents=True, exist_ok=True)
         self.test_path.mkdir(exist_ok=True)
+
+    def _resolve_face_model_paths(self) -> Tuple[Path, Path]:
+        """Resolve OpenCV DNN face detector model paths."""
+        proto_env = os.getenv("REACHY_FACE_DNN_PROTO_PATH")
+        model_env = os.getenv("REACHY_FACE_DNN_MODEL_PATH")
+        if proto_env and model_env:
+            return Path(proto_env), Path(model_env)
+
+        project_root = Path(__file__).resolve().parents[1]
+        model_dir = project_root / "trainer" / "models" / "face_detector"
+        proto_candidates = [
+            model_dir / "deploy.prototxt",
+            model_dir / "deploy.prototxt.txt",
+        ]
+        model_candidates = [
+            model_dir / "res10_300x300_ssd_iter_140000.caffemodel",
+            model_dir / "res10_300x300_ssd_iter_140000_fp16.caffemodel",
+        ]
+        proto = next((p for p in proto_candidates if p.exists()), proto_candidates[0])
+        model = next((p for p in model_candidates if p.exists()), model_candidates[0])
+        return proto, model
+
+    def _get_face_net(self):
+        """Load the OpenCV DNN face detector network lazily."""
+        if self._face_net is not None:
+            return self._face_net
+
+        proto_path, model_path = self._resolve_face_model_paths()
+        if not proto_path.exists() or not model_path.exists():
+            raise ValueError(
+                "Face detector model files are missing. Set "
+                "REACHY_FACE_DNN_PROTO_PATH and REACHY_FACE_DNN_MODEL_PATH "
+                "or place deploy.prototxt and res10_300x300_ssd_iter_140000*.caffemodel "
+                "under trainer/models/face_detector/."
+            )
+
+        self._face_net = cv2.dnn.readNetFromCaffe(str(proto_path), str(model_path))
+        return self._face_net
+
+    def _detect_face_bbox(
+        self,
+        frame: np.ndarray,
+        *,
+        face_confidence: float,
+        margin_ratio: float = 0.2,
+    ) -> Optional[Dict[str, Any]]:
+        """Detect the best face bbox using OpenCV DNN. Returns None when not detected."""
+        net = self._get_face_net()
+        height, width = frame.shape[:2]
+        blob = cv2.dnn.blobFromImage(
+            cv2.resize(frame, (300, 300)),
+            1.0,
+            (300, 300),
+            (104.0, 177.0, 123.0),
+        )
+        net.setInput(blob)
+        detections = net.forward()
+        if detections is None or detections.shape[2] == 0:
+            return None
+
+        best = None
+        for idx in range(detections.shape[2]):
+            confidence = float(detections[0, 0, idx, 2])
+            if confidence < face_confidence:
+                continue
+            x1 = int(detections[0, 0, idx, 3] * width)
+            y1 = int(detections[0, 0, idx, 4] * height)
+            x2 = int(detections[0, 0, idx, 5] * width)
+            y2 = int(detections[0, 0, idx, 6] * height)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            if best is None or confidence > best["confidence"]:
+                best = {
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2,
+                    "confidence": confidence,
+                }
+
+        if best is None:
+            return None
+
+        box_w = best["x2"] - best["x1"]
+        box_h = best["y2"] - best["y1"]
+        expand_w = int(box_w * margin_ratio)
+        expand_h = int(box_h * margin_ratio)
+        x1 = max(0, best["x1"] - expand_w)
+        y1 = max(0, best["y1"] - expand_h)
+        x2 = min(width, best["x2"] + expand_w)
+        y2 = min(height, best["y2"] + expand_h)
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        return {
+            "x1": int(x1),
+            "y1": int(y1),
+            "x2": int(x2),
+            "y2": int(y2),
+            "w": int(x2 - x1),
+            "h": int(y2 - y1),
+            "confidence": float(best["confidence"]),
+        }
     
     def prepare_training_dataset(
         self,
         run_id: Optional[str] = None,
         train_fraction: float = 0.7,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        face_crop: bool = False,
+        target_size: int = 224,
+        face_confidence: float = 0.6,
     ) -> Dict[str, Any]:
         """
         Prepare frame-based training dataset for a run.
@@ -56,6 +166,9 @@ class DatasetPreparer:
             run_id: Run identifier (run_xxxx). Auto-generated if omitted.
             train_fraction: Deprecated compatibility argument (ignored)
             seed: Random seed for reproducibility
+            face_crop: Enable DNN face detection/cropping before saving frames
+            target_size: Output frame size (square)
+            face_confidence: Minimum face detection confidence
         
         Returns:
             Dictionary with run metadata
@@ -73,6 +186,9 @@ class DatasetPreparer:
             run_id=normalized_run_id,
             rng=rng,
             source_videos=source_videos,
+            face_crop=face_crop,
+            target_size=target_size,
+            face_confidence=face_confidence,
         )
 
         # Test preparation is intentionally empty for this frame-first train run workflow.
@@ -89,7 +205,10 @@ class DatasetPreparer:
             'frames_per_video': self.FRAMES_PER_VIDEO,
             'seed': seed,
             'train_fraction': train_fraction,
-            'dataset_hash': dataset_hash
+            'dataset_hash': dataset_hash,
+            'face_crop': bool(face_crop),
+            'target_size': int(target_size),
+            'face_confidence': float(face_confidence),
         }
 
     def plan_training_dataset(
@@ -97,6 +216,9 @@ class DatasetPreparer:
         run_id: Optional[str] = None,
         train_fraction: float = 0.7,
         seed: Optional[int] = None,
+        face_crop: bool = False,
+        target_size: int = 224,
+        face_confidence: float = 0.6,
     ) -> Dict[str, Any]:
         """Validate and estimate run outputs without writing frames/manifests."""
         normalized_run_id = self.resolve_run_id(run_id)
@@ -117,6 +239,9 @@ class DatasetPreparer:
             "train_fraction": train_fraction,
             "dataset_hash": "",
             "dry_run": True,
+            "face_crop": bool(face_crop),
+            "target_size": int(target_size),
+            "face_confidence": float(face_confidence),
         }
 
     def resolve_run_id(self, run_id: Optional[str] = None) -> str:
@@ -198,7 +323,10 @@ class DatasetPreparer:
         run_id: str,
         rng: random.Random,
         source_videos: Dict[str, List[Path]],
-    ) -> List[Dict[str, str]]:
+        face_crop: bool = False,
+        target_size: int = 224,
+        face_confidence: float = 0.6,
+    ) -> List[Dict[str, Any]]:
         """Extract random frames directly into train/run/<run_id>."""
         extracted: List[Dict[str, str]] = []
         run_root = self.train_runs_path / run_id
@@ -215,6 +343,9 @@ class DatasetPreparer:
                     output_dir=run_root,
                     label=label,
                     rng=rng,
+                    face_crop=face_crop,
+                    target_size=target_size,
+                    face_confidence=face_confidence,
                 )
                 extracted.extend(frame_entries)
 
@@ -228,7 +359,10 @@ class DatasetPreparer:
         output_dir: Path,
         label: str,
         rng: random.Random,
-    ) -> List[Dict[str, str]]:
+        face_crop: bool = False,
+        target_size: int = 224,
+        face_confidence: float = 0.6,
+    ) -> List[Dict[str, Any]]:
         """Extract N random frames from a video and save as JPEG files."""
         output_dir.mkdir(parents=True, exist_ok=True)
         cap = cv2.VideoCapture(str(video_path))
@@ -248,26 +382,56 @@ class DatasetPreparer:
             selected = sorted(rng.randrange(total_frames) for _ in range(num_frames))
 
         stem = video_path.stem
-        entries: List[Dict[str, str]] = []
+        entries: List[Dict[str, Any]] = []
         for order_idx, frame_idx in enumerate(selected):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             success, frame = cap.read()
             if not success:
                 continue
+            original_h, original_w = frame.shape[:2]
+
+            face_bbox: Optional[Dict[str, Any]] = None
+            if face_crop:
+                try:
+                    face_bbox = self._detect_face_bbox(
+                        frame,
+                        face_confidence=face_confidence,
+                    )
+                except Exception as exc:
+                    cap.release()
+                    raise ValueError(f"Face detection failed for {video_path}: {exc}") from exc
+                if face_bbox is None:
+                    # Requested policy: skip frames without detected faces.
+                    continue
+                crop = frame[face_bbox["y1"]:face_bbox["y2"], face_bbox["x1"]:face_bbox["x2"]]
+                if crop.size == 0:
+                    continue
+                frame = cv2.resize(crop, (int(target_size), int(target_size)), interpolation=cv2.INTER_AREA)
 
             frame_name = f"{label}_{stem}_f{order_idx:02d}_idx{frame_idx:05d}.jpg"
             frame_path = output_dir / frame_name
             if not cv2.imwrite(str(frame_path), frame):
                 continue
 
-            entries.append(
-                {
-                    "video_id": stem,
-                    "path": str(frame_path),
-                    "label": label,
-                    "source_video": str(video_path),
+            entry: Dict[str, Any] = {
+                "video_id": stem,
+                "path": str(frame_path),
+                "label": label,
+                "source_video": str(video_path),
+            }
+            if face_bbox is not None:
+                entry["face_bbox"] = {
+                    "x": int(face_bbox["x1"]),
+                    "y": int(face_bbox["y1"]),
+                    "w": int(face_bbox["w"]),
+                    "h": int(face_bbox["h"]),
                 }
-            )
+                entry["face_confidence"] = float(face_bbox["confidence"])
+                entry["face_detector"] = self.FACE_DETECTOR_NAME
+                entry["face_crop"] = True
+                entry["target_size"] = int(target_size)
+                entry["source_frame_shape"] = [int(original_h), int(original_w)]
+            entries.append(entry)
 
         cap.release()
         return entries
@@ -275,8 +439,8 @@ class DatasetPreparer:
     def _generate_manifests(
         self,
         run_id: str,
-        train_entries: List[Dict[str, str]],
-        test_entries: List[Dict[str, str]],
+        train_entries: List[Dict[str, Any]],
+        test_entries: List[Dict[str, Any]],
     ):
         """Generate JSONL manifest files for extracted-frame training runs."""
         # Train manifest
@@ -289,6 +453,16 @@ class DatasetPreparer:
                     'label': video['label'],
                     'source_video': video.get('source_video'),
                 }
+                for optional_key in (
+                    "face_bbox",
+                    "face_confidence",
+                    "face_detector",
+                    "face_crop",
+                    "target_size",
+                    "source_frame_shape",
+                ):
+                    if optional_key in video:
+                        entry[optional_key] = video[optional_key]
                 f.write(json.dumps(entry) + '\n')
         
         # Test manifest
@@ -301,7 +475,42 @@ class DatasetPreparer:
                     'label': video['label'],
                     'source_video': video.get('source_video'),
                 }
+                for optional_key in (
+                    "face_bbox",
+                    "face_confidence",
+                    "face_detector",
+                    "face_crop",
+                    "target_size",
+                    "source_frame_shape",
+                ):
+                    if optional_key in video:
+                        entry[optional_key] = video[optional_key]
                 f.write(json.dumps(entry) + '\n')
+
+    def _load_run_train_entry_map(self, run_id: str) -> Dict[str, Dict[str, Any]]:
+        """Map frame path/name to manifest entry for metadata-preserving splits."""
+        entry_map: Dict[str, Dict[str, Any]] = {}
+        manifest_path = self.manifests_path / f"{run_id}_train.jsonl"
+        if not manifest_path.exists():
+            return entry_map
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                frame_path = str(entry.get("path", "")).strip()
+                if not frame_path:
+                    continue
+                path_obj = Path(frame_path)
+                if path_obj.is_absolute():
+                    try:
+                        path_obj = path_obj.relative_to(self.base_path)
+                    except ValueError:
+                        pass
+                entry_map[str(path_obj)] = entry
+                entry_map[path_obj.name] = entry
+        return entry_map
 
     def _load_run_train_labels(self, run_id: str) -> Dict[str, str]:
         """Load frame labels from the run train manifest when available."""
@@ -376,6 +585,7 @@ class DatasetPreparer:
             )
 
         label_map = self._load_run_train_labels(normalized_run_id)
+        entry_map = self._load_run_train_entry_map(normalized_run_id)
         buckets: Dict[str, List[Path]] = {label: [] for label in self.EMOTIONS}
         unknown: List[Path] = []
 
@@ -411,10 +621,31 @@ class DatasetPreparer:
         moved_valid_labeled: List[Dict[str, Any]] = []
         moved_valid_unlabeled: List[Dict[str, Any]] = []
 
+        def _build_entry(src_path: Path, dst_path: Path, label_value: Optional[str]) -> Dict[str, Any]:
+            rel_key = str(src_path.relative_to(self.base_path))
+            base_entry = entry_map.get(rel_key) or entry_map.get(src_path.name) or {}
+            entry: Dict[str, Any] = {
+                "video_id": str(base_entry.get("video_id") or src_path.stem),
+                "path": str(dst_path),
+                "label": label_value,
+                "source_video": base_entry.get("source_video"),
+            }
+            for optional_key in (
+                "face_bbox",
+                "face_confidence",
+                "face_detector",
+                "face_crop",
+                "target_size",
+                "source_frame_shape",
+            ):
+                if optional_key in base_entry:
+                    entry[optional_key] = base_entry[optional_key]
+            return entry
+
         for src_path, label in train_frames:
             dst_path = train_ds_dir / src_path.name
             shutil.move(str(src_path), str(dst_path))
-            moved_train.append({"path": str(dst_path), "label": label})
+            moved_train.append(_build_entry(src_path, dst_path, label))
 
         for src_path, label in valid_frames:
             target_name = self._strip_label_prefix(src_path.name) if strip_valid_labels else src_path.name
@@ -424,8 +655,8 @@ class DatasetPreparer:
                 dst_path = valid_ds_dir / f"{Path(target_name).stem}_{suffix_idx:03d}{Path(target_name).suffix}"
                 suffix_idx += 1
             shutil.move(str(src_path), str(dst_path))
-            moved_valid_labeled.append({"path": str(dst_path), "label": label})
-            moved_valid_unlabeled.append({"path": str(dst_path), "label": None})
+            moved_valid_labeled.append(_build_entry(src_path, dst_path, label))
+            moved_valid_unlabeled.append(_build_entry(src_path, dst_path, None))
 
         train_manifest = self.manifests_path / f"{normalized_run_id}_train_ds.jsonl"
         valid_labeled_manifest = self.manifests_path / f"{normalized_run_id}_valid_ds_labeled.jsonl"

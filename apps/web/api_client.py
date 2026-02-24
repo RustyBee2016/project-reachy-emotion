@@ -182,7 +182,7 @@ def gateway_api_base() -> str:
 
 
 @retry_on_failure()
-def list_videos(split: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+def list_videos(split: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
     """List videos from the specified split.
     
     Uses the v1 API endpoint which returns standardized response format.
@@ -196,30 +196,51 @@ def list_videos(split: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         Dictionary with 'items', 'pagination' keys (unwrapped from v1 response)
     """
     url = f"{_base_url()}/api/v1/media/list"
-    resp = requests.get(
-        url,
-        headers=_headers(),
-        params={"split": split, "limit": limit, "offset": offset},
-        timeout=10,
-        verify=_request_verify(_base_url(), "API"),
-    )
-    resp.raise_for_status()
-    
-    # Parse v1 response format
-    body = resp.json()
-    if body.get("status") == "success" and "data" in body:
+    requested_limit = max(1, int(limit))
+    current_offset = max(0, int(offset))
+    page_limit = 10  # Backend-enforced request cap
+    items: list[dict] = []
+    total: Optional[int] = None
+    has_more = False
+
+    while len(items) < requested_limit:
+        batch_limit = min(page_limit, requested_limit - len(items))
+        resp = requests.get(
+            url,
+            headers=_headers(),
+            params={"split": split, "limit": batch_limit, "offset": current_offset},
+            timeout=10,
+            verify=_request_verify(_base_url(), "API"),
+        )
+        resp.raise_for_status()
+
+        body = resp.json()
+        if body.get("status") != "success" or "data" not in body:
+            # Fallback for unexpected format
+            return body
+
         data = body["data"]
-        # Return unwrapped data for backward compatibility
-        return {
-            "items": data["items"],
-            "total": data["pagination"]["total"],
-            "limit": data["pagination"]["limit"],
-            "offset": data["pagination"]["offset"],
-            "has_more": data["pagination"]["has_more"],
-        }
-    
-    # Fallback for unexpected format
-    return body
+        batch_items = data.get("items", [])
+        pagination = data.get("pagination", {})
+        if not isinstance(batch_items, list):
+            batch_items = []
+        items.extend(batch_items)
+        total = pagination.get("total") if isinstance(pagination.get("total"), int) else total
+        has_more = bool(pagination.get("has_more"))
+
+        # Advance by number returned to avoid skipping when source size changes.
+        current_offset += len(batch_items)
+        if not batch_items or not has_more:
+            break
+
+    resolved_total = total if isinstance(total, int) else len(items)
+    return {
+        "items": items,
+        "total": resolved_total,
+        "limit": requested_limit,
+        "offset": max(0, int(offset)),
+        "has_more": bool((max(0, int(offset)) + len(items)) < resolved_total),
+    }
 
 
 def promote(
@@ -335,6 +356,9 @@ def prepare_run_frames(
     train_fraction: float = 0.7,
     seed: Optional[int] = None,
     dry_run: bool = False,
+    face_crop: bool = False,
+    face_target_size: int = 224,
+    face_confidence: float = 0.6,
     split_run: bool = False,
     split_train_ratio: float = 0.9,
     strip_valid_labels: bool = True,
@@ -347,6 +371,9 @@ def prepare_run_frames(
     payload: Dict[str, Any] = {
         "train_fraction": train_fraction,
         "dry_run": bool(dry_run),
+        "face_crop": bool(face_crop),
+        "face_target_size": int(face_target_size),
+        "face_confidence": float(face_confidence),
         "split_run": bool(split_run),
         "split_train_ratio": split_train_ratio,
         "strip_valid_labels": bool(strip_valid_labels),

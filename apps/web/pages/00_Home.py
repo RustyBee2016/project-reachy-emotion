@@ -96,10 +96,26 @@ def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[s
 
 
 def _render_train_balance_counters() -> None:
+    def _iter_train_items() -> list[dict]:
+        items: list[dict] = []
+        offset = 0
+        page_limit = 10
+        while True:
+            listing = api_client.list_videos(split="train", limit=page_limit, offset=offset)
+            batch = listing.get("items", [])
+            if not isinstance(batch, list):
+                break
+            items.extend([it for it in batch if isinstance(it, dict)])
+            if not listing.get("has_more"):
+                break
+            offset += len(batch)
+            if not batch:
+                break
+        return items
+
     counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
     try:
-        listing = api_client.list_videos(split="train", limit=5000, offset=0)
-        for item in listing.get("items", []):
+        for item in _iter_train_items():
             label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
             if label in counts:
                 counts[label] += 1

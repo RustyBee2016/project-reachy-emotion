@@ -80,7 +80,7 @@ class TestEndToEndWorkflow:
         }
         
         for split in splits:
-            response = app_client.get(f"/api/v1/media/list?split={split}&limit=100&offset=0")
+            response = app_client.get(f"/api/v1/media/list?split={split}&limit=10&offset=0")
             assert response.status_code == 200
             
             body = response.json()
@@ -238,7 +238,7 @@ class TestErrorHandling:
         assert response.status_code == 422
         
         # Valid
-        response = app_client.get("/api/v1/media/list?split=temp&limit=50&offset=0")
+        response = app_client.get("/api/v1/media/list?split=temp&limit=10&offset=0")
         assert response.status_code == 200
     
     def test_negative_offset_rejected(self, app_client):

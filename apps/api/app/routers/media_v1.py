@@ -99,7 +99,7 @@ async def _load_label_maps(
 async def list_videos(
     request: Request,
     split: str = Query(..., pattern="^(temp|train|test|purged)$", description="Video split to list"),
-    limit: int = Query(50, ge=1, le=1000, description="Maximum number of videos to return"),
+    limit: int = Query(10, ge=1, le=10, description="Maximum number of videos to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     config: AppConfig = Depends(get_config),
     db: AsyncSession = Depends(get_db),
@@ -111,7 +111,7 @@ async def list_videos(
     
     Args:
         split: Video split (temp, train, test, purged)
-        limit: Maximum number of videos to return (1-1000)
+        limit: Maximum number of videos to return (1-10)
         offset: Pagination offset for retrieving subsequent pages
         config: Application configuration (injected)
         
