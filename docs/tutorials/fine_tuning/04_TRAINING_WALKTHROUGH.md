@@ -429,12 +429,13 @@ Resuming training run: efficientnet_b0_20260205_140501 from epoch 16
    from PIL import Image
    
    for split in ['train', 'val']:
-       for cls in ['happy', 'sad']:
+       for cls in ['happy', 'sad', 'neutral']:
            d = Path(f'data_test/{split}/{cls}')
            d.mkdir(parents=True, exist_ok=True)
            n = 100 if split == 'train' else 25
            for i in range(n):
-               color = (255, 255, 0) if cls == 'happy' else (0, 0, 255)
+               color_map = {'happy': (255, 255, 0), 'sad': (0, 0, 255), 'neutral': (160, 160, 160)}
+               color = color_map[cls]
                img = np.full((224, 224, 3), color, dtype=np.uint8)
                noise = np.random.randint(-30, 30, (224, 224, 3))
                img = np.clip(img + noise, 0, 255).astype(np.uint8)

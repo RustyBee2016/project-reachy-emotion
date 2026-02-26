@@ -246,14 +246,14 @@ train_loader, val_loader = create_dataloaders(
     batch_size=32,
     num_workers=4,
     input_size=224,
-    class_names=['happy', 'sad'],
+    class_names=['happy', 'sad', 'neutral'],
 )
 
 # Check batch
 images, labels = next(iter(train_loader))
 print(f"Images shape: {images.shape}")  # Should be [32, 3, 224, 224]
-print(f"Labels: {labels[:10]}")          # Should be 0s and 1s
-print(f"Unique labels: {labels.unique()}")  # Should be [0, 1]
+print(f"Labels: {labels[:10]}")          # Should include 0, 1, and 2
+print(f"Unique labels: {labels.unique()}")  # Should be [0, 1, 2]
 
 # Check class balance
 from collections import Counter
@@ -496,7 +496,7 @@ def plot_confusion_matrix(y_true, y_pred, class_names):
     plt.show()
 
 # Example usage (after getting predictions)
-# plot_confusion_matrix(y_true, y_pred, ['happy', 'sad'])
+# plot_confusion_matrix(y_true, y_pred, ['happy', 'sad', 'neutral'])
 ```
 
 ---

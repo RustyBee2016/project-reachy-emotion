@@ -187,10 +187,11 @@ All conditions met → POST to /training/start
   "run_id": "auto_20260205_143000",
   "config_file": "efficientnet_b0_emotion_3cls.yaml",
   "dataset_stats": {
-    "train_total": 500,
+    "train_total": 750,
     "train_happy": 250,
     "train_sad": 250,
-    "test_total": 100
+    "train_neutral": 250,
+    "test_total": 150
   }
 }
 ```
