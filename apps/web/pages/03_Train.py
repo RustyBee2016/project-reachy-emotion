@@ -180,7 +180,59 @@ persist_valid_metadata = st.toggle(
 if dry_run and split_run:
     st.caption("Dry run validates extraction only. Split/move and valid metadata persistence run when Dry run is OFF.")
 
-action_col1, action_col2, action_col3 = st.columns(3)
+st.caption(
+    "Source videos are read from local folders: "
+    "`videos/train/happy`, `videos/train/sad`, `videos/train/neutral`."
+)
+
+
+def _trigger_prepare_run(*, mode: str = "inherit") -> None:
+    if mode == "live":
+        effective_dry_run = False
+    elif mode == "dry_run":
+        effective_dry_run = True
+    else:
+        effective_dry_run = dry_run
+
+    if mode == "live" and dry_run:
+        st.info("Dry run toggle is ON, but manual execute runs in live mode.")
+    if mode == "dry_run" and not dry_run:
+        st.info("Dry run toggle is OFF, but manual validate runs in dry-run mode.")
+    try:
+        corr_id = str(uuid.uuid4())
+        resp = api_client.prepare_run_frames(
+            run_id=run_id or None,
+            train_fraction=sample_fraction,
+            dry_run=effective_dry_run,
+            face_crop=face_crop,
+            face_target_size=224,
+            face_confidence=face_confidence,
+            split_run=split_run,
+            split_train_ratio=split_train_ratio,
+            strip_valid_labels=strip_valid_labels,
+            persist_valid_metadata=bool(split_run and persist_valid_metadata),
+            correlation_id=corr_id,
+            idempotency_key=corr_id,
+        )
+        if mode == "dry_run":
+            st.success(f"Manual validate plan completed for run: {resp.get('run_id', 'unknown')}")
+        elif effective_dry_run:
+            st.success(f"Dry-run validated frame dataset plan for run: {resp.get('run_id', 'unknown')}")
+        elif mode == "live":
+            st.success(f"Manual execute live completed for run: {resp.get('run_id', 'unknown')}")
+        else:
+            st.success(f"Prepared frame dataset for run: {resp.get('run_id', 'unknown')}")
+        st.json(resp)
+    except Exception as exc:  # noqa: BLE001
+        if "404 Client Error" in str(exc) and "prepare-run-frames" in str(exc):
+            st.error(
+                "Frame extraction endpoint is missing on the running backend. "
+                "Restart fastapi-media with module apps.api.app.main:app, then retry."
+            )
+        st.error(f"Frame extraction failed: {exc}")
+
+
+action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
 with action_col1:
     if st.button("Rebuild Manifests", use_container_width=True):
         try:
@@ -192,36 +244,17 @@ with action_col1:
 
 with action_col2:
     if st.button("Prepare 10-Frame Run", use_container_width=True):
-        try:
-            corr_id = str(uuid.uuid4())
-            resp = api_client.prepare_run_frames(
-                run_id=run_id or None,
-                train_fraction=sample_fraction,
-                dry_run=dry_run,
-                face_crop=face_crop,
-                face_target_size=224,
-                face_confidence=face_confidence,
-                split_run=split_run,
-                split_train_ratio=split_train_ratio,
-                strip_valid_labels=strip_valid_labels,
-                persist_valid_metadata=bool(split_run and persist_valid_metadata),
-                correlation_id=corr_id,
-                idempotency_key=corr_id,
-            )
-            if dry_run:
-                st.success(f"Dry-run validated frame dataset plan for run: {resp.get('run_id', 'unknown')}")
-            else:
-                st.success(f"Prepared frame dataset for run: {resp.get('run_id', 'unknown')}")
-            st.json(resp)
-        except Exception as exc:  # noqa: BLE001
-            if "404 Client Error" in str(exc) and "prepare-run-frames" in str(exc):
-                st.error(
-                    "Frame extraction endpoint is missing on the running backend. "
-                    "Restart fastapi-media with module apps.api.app.main:app, then retry."
-                )
-            st.error(f"Frame extraction failed: {exc}")
+        _trigger_prepare_run(mode="inherit")
 
 with action_col3:
+    if st.button("Manual Validate Plan", use_container_width=True):
+        _trigger_prepare_run(mode="dry_run")
+
+with action_col4:
+    if st.button("Manual Execute Live", use_container_width=True):
+        _trigger_prepare_run(mode="live")
+
+with action_col5:
     if st.button("Generate New Run ID", use_container_width=True):
         st.session_state["train_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
         st.info("Generated run ID. Leave empty to auto-generate the next run_xxxx on the backend.")
