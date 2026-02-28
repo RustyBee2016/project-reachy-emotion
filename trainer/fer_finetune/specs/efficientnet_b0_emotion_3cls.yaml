@@ -55,7 +55,7 @@ monitor_metric: val_f1_macro
 mixed_precision: true
 
 # Checkpointing
-checkpoint_dir: /workspace/checkpoints/efficientnet_b0_3cls
+checkpoint_dir: /media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls
 save_best_only: true
 save_interval: 5
 
@@ -74,7 +74,7 @@ gate_b_min_f1_macro: 0.80
 gate_b_min_per_class_f1: 0.72
 
 # MLflow tracking
-mlflow_tracking_uri: file:///workspace/mlruns
+mlflow_tracking_uri: file:///media/rusty_admin/project_data/reachy_emotion/mlruns
 mlflow_experiment_name: efficientnet_b0_emotion_3cls
 
 # Reproducibility

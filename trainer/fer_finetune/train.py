@@ -524,7 +524,7 @@ class Trainer:
         """
         logger.info(f"Loading checkpoint: {checkpoint_path}")
         
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         
         # Load model state
         self.model.load_state_dict(checkpoint['model_state_dict'])

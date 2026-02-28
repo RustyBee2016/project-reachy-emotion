@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Dict, Tuple, Optional, List, Any
 from datetime import datetime
 import numpy as np
+import hashlib
 import json
 import logging
 
@@ -197,7 +198,7 @@ class EfficientNetTrainer:
         
         logger.info(f"Data loaders created: {len(self.train_loader)} train batches, "
                    f"{len(self.val_loader)} val batches")
-        
+
         # Compute class weights from training dataset
         if hasattr(self.train_loader.dataset, 'get_class_weights'):
             self.class_weights = self.train_loader.dataset.get_class_weights()
@@ -208,6 +209,24 @@ class EfficientNetTrainer:
                     label_smoothing=self.config.label_smoothing
                 )
                 logger.info(f"Class weights applied: {self.class_weights.cpu().numpy()}")
+
+        # Compute dataset hash for reproducibility (FR-TRACK-001)
+        self.dataset_hash = self._compute_dataset_hash()
+
+    def _compute_dataset_hash(self) -> str:
+        """Compute a deterministic hash from the training dataset file paths."""
+        h = hashlib.sha256()
+        dataset = getattr(self.train_loader, 'dataset', None)
+        if dataset is None:
+            return "unknown"
+        # For Subset (from random_split), reach into the underlying dataset
+        inner = getattr(dataset, 'dataset', dataset)
+        samples = getattr(inner, 'samples', [])
+        for s in sorted(samples, key=lambda x: str(x.get("path", ""))):
+            h.update(str(s.get("path", "")).encode())
+        digest = h.hexdigest()[:16]
+        logger.info(f"Dataset hash: {digest} ({len(samples)} samples)")
+        return digest
     
     def _mixup_data(
         self,
@@ -457,7 +476,7 @@ class EfficientNetTrainer:
         """Load training state from checkpoint."""
         logger.info(f"Loading checkpoint: {checkpoint_path}")
         
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.training_phase = checkpoint.get('training_phase', 1)
@@ -528,6 +547,7 @@ class EfficientNetTrainer:
                 mlflow.start_run(run_name=run_id)
                 mlflow.log_params(self.config.to_dict())
                 mlflow.log_param('model_type', 'efficientnet_b0_hsemotion')
+                mlflow.log_param('dataset_hash', getattr(self, 'dataset_hash', 'unknown'))
                 self.mlflow_run_id = mlflow.active_run().info.run_id
         except ImportError:
             logger.warning("MLflow not available, skipping tracking")
@@ -569,8 +589,8 @@ class EfficientNetTrainer:
                            f"ECE: {val_metrics.get('ece', 0):.4f}")
                 
                 if mlflow is not None:
-                    mlflow.log_metrics({f'train_{k}': v for k, v in train_metrics.items()}, step=epoch)
-                    mlflow.log_metrics({f'val_{k}': v for k, v in val_metrics.items()}, step=epoch)
+                    mlflow.log_metrics({f'train_{k}': v for k, v in train_metrics.items() if isinstance(v, (int, float))}, step=epoch)
+                    mlflow.log_metrics({f'val_{k}': v for k, v in val_metrics.items() if isinstance(v, (int, float))}, step=epoch)
                     mlflow.log_metric('learning_rate', current_lr, step=epoch)
                     mlflow.log_metric('training_phase', self.training_phase, step=epoch)
                 

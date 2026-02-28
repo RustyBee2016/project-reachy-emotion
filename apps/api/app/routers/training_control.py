@@ -33,8 +33,8 @@ router = APIRouter(tags=["training-control"])
 # ---------------------------------------------------------------------------
 _DEFAULT_CONFIG_YAML = "trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml"
 _DEFAULT_OUTPUT_DIR = "stats/results"
-_DEFAULT_CHECKPOINT_DIR = "/workspace/checkpoints/efficientnet_b0_3cls"
-_AFFECTNET_TEST_DATASET = "/videos/test/affectnet_test_dataset"
+_DEFAULT_CHECKPOINT_DIR = "/media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls"
+_AFFECTNET_TEST_DATASET = "/media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset"
 _DATA_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos"
 _RUN_DIR = "/media/rusty_admin/project_data/reachy_emotion/videos/train/run"
 _TRAIN_FRACTION = 0.9

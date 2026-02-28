@@ -1,0 +1,34 @@
+Albumentations not available, using torchvision transforms
+emotiefflib/hsemotion not installed, trying alternatives
+timm not installed, trying torchvision
+Using torchvision EfficientNet-B0 (ImageNet weights)
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:110: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  self.scaler = GradScaler() if config.mixed_precision else None
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/grad_scaler.py:31: UserWarning: torch.cuda.amp.GradScaler is enabled, but CUDA is not available.  Disabling.
+  super().__init__(
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/utils.py:178: FutureWarning: The filesystem tracking backend (e.g., './mlruns') will be deprecated in February 2026. Consider transitioning to a database backend (e.g., 'sqlite:///mlflow.db') to take advantage of the latest MLflow features. See https://github.com/mlflow/mlflow/issues/18534 for more details and migration guidance. For migrating existing data, https://github.com/mlflow/mlflow-export-import can be used.
+  return FileStore(store_uri, store_uri)
+2026/02/28 10:05:45 INFO mlflow.tracking.fluent: Experiment with name 'efficientnet_b0_emotion_3cls' does not exist. Creating a new experiment.
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:1118: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+Training error: Found empty input array (e.g., `y_true` or `y_pred`) while a minimum of 1 sample is required.
+Traceback (most recent call last):
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py", line 554, in train
+    train_metrics = self.train_epoch(epoch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py", line 310, in train_epoch
+    metrics = compute_metrics(all_labels, all_preds)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/evaluate.py", line 56, in compute_metrics
+    metrics['accuracy'] = accuracy_score(y_true, y_pred)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/sklearn/utils/_param_validation.py", line 218, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/sklearn/metrics/_classification.py", line 411, in accuracy_score
+    y_type, y_true, y_pred, sample_weight = _check_targets(
+                                            ^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/sklearn/metrics/_classification.py", line 113, in _check_targets
+    raise ValueError(
+ValueError: Found empty input array (e.g., `y_true` or `y_pred`) while a minimum of 1 sample is required.
+Training failed: {'run_id': 'curl_train_002', 'model_type': 'efficientnet_b0_hsemotion', 'status': 'error', 'epochs_completed': 0, 'best_metric': 0.0, 'gate_results': {}, 'resumed_from': None, 'error': 'Found empty input array (e.g., `y_true` or `y_pred`) while a minimum of 1 sample is required.'}

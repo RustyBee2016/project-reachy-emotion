@@ -10,6 +10,7 @@
 ## 🆕 New ML Engineers: Start Here!
 
 **[ML_PIPELINE_ONBOARDING_GUIDE.md](ML_PIPELINE_ONBOARDING_GUIDE.md)** — Comprehensive 4-6 hour guide covering:
+
 - EfficientNet-B0 (HSEmotion) architecture overview
 - Quick start inference with pre-trained model
 - Training with synthetic video data
@@ -19,6 +20,7 @@
 ## 👨‍🏫 Technical Trainers: Preparation Guide
 
 **[TRAIN_THE_TRAINER.md](TRAIN_THE_TRAINER.md)** — 2-3 hour preparation guide covering:
+
 - Pre-session environment verification
 - Curriculum structure and session breakdown
 - Key concepts to emphasize with teaching analogies
@@ -50,8 +52,11 @@ Before starting, ensure you have:
 - [ ] Access to Ubuntu 1 (training server with GPU)
 
 **Not required** (you'll learn these):
+
 - Deep learning experience
+
 - PyTorch knowledge
+
 - [ ] Understanding of EfficientNet architecture
 
 ---
@@ -60,31 +65,31 @@ Before starting, ensure you have:
 
 ### Core Training Pipeline (Required)
 
-| Guide | Topic | Duration | Difficulty |
-|-------|-------|----------|------------|
-| [01_WHAT_IS_FINE_TUNING.md](01_WHAT_IS_FINE_TUNING.md) | Concepts & Theory | 1-2 hours | Beginner |
-| [02_ENVIRONMENT_SETUP.md](02_ENVIRONMENT_SETUP.md) | Setup & Dependencies | 1-2 hours | Beginner |
-| [03_DATA_PREPARATION.md](03_DATA_PREPARATION.md) | Dataset Preparation | 2-3 hours | Beginner |
-| [04_TRAINING_WALKTHROUGH.md](04_TRAINING_WALKTHROUGH.md) | Running Training | 3-4 hours | Intermediate |
-| [05_MONITORING_DEBUGGING.md](05_MONITORING_DEBUGGING.md) | MLflow & Debugging | 2-3 hours | Intermediate |
-| [06_EVALUATION_GATE_A.md](06_EVALUATION_GATE_A.md) | Evaluation & Gate A | 2-3 hours | Intermediate |
-| [07_EXPORT_DEPLOYMENT.md](07_EXPORT_DEPLOYMENT.md) | Export to ONNX | 1-2 hours | Intermediate |
+| Guide                                                    | Topic                | Duration  | Difficulty   |
+| -------------------------------------------------------- | -------------------- | --------- | ------------ |
+| [01_WHAT_IS_FINE_TUNING.md](01_WHAT_IS_FINE_TUNING.md)   | Concepts & Theory    | 1-2 hours | Beginner     |
+| [02_ENVIRONMENT_SETUP.md](02_ENVIRONMENT_SETUP.md)       | Setup & Dependencies | 1-2 hours | Beginner     |
+| [03_DATA_PREPARATION.md](03_DATA_PREPARATION.md)         | Dataset Preparation  | 2-3 hours | Beginner     |
+| [04_TRAINING_WALKTHROUGH.md](04_TRAINING_WALKTHROUGH.md) | Running Training     | 3-4 hours | Intermediate |
+| [05_MONITORING_DEBUGGING.md](05_MONITORING_DEBUGGING.md) | MLflow & Debugging   | 2-3 hours | Intermediate |
+| [06_EVALUATION_GATE_A.md](06_EVALUATION_GATE_A.md)       | Evaluation & Gate A  | 2-3 hours | Intermediate |
+| [07_EXPORT_DEPLOYMENT.md](07_EXPORT_DEPLOYMENT.md)       | Export to ONNX       | 1-2 hours | Intermediate |
 
 ### Practical Guides (Highly Recommended)
 
-| Guide | Topic | Duration | Difficulty |
-|-------|-------|----------|------------|
-| [08_QUICK_START_HANDS_ON.md](08_QUICK_START_HANDS_ON.md) | First Inference & Training | 30-45 min | Beginner |
-| [09_WEB_UI_DATA_WORKFLOW.md](09_WEB_UI_DATA_WORKFLOW.md) | Web UI for Data Curation | 1-2 hours | Beginner |
-| [10_WORKED_EXAMPLE_COMPLETE_RUN.md](10_WORKED_EXAMPLE_COMPLETE_RUN.md) | Complete Training Reference | Reference | Intermediate |
-| [03_hsemotion_finetuning_lessons.md](03_hsemotion_finetuning_lessons.md) | 5-Lesson Line-by-Line HSEmotion Training Curriculum | 1-2 days | Beginner |
+| Guide                                                                    | Topic                                               | Duration  | Difficulty   |
+| ------------------------------------------------------------------------ | --------------------------------------------------- | --------- | ------------ |
+| [08_QUICK_START_HANDS_ON.md](08_QUICK_START_HANDS_ON.md)                 | First Inference & Training                          | 30-45 min | Beginner     |
+| [09_WEB_UI_DATA_WORKFLOW.md](09_WEB_UI_DATA_WORKFLOW.md)                 | Web UI for Data Curation                            | 1-2 hours | Beginner     |
+| [10_WORKED_EXAMPLE_COMPLETE_RUN.md](10_WORKED_EXAMPLE_COMPLETE_RUN.md)   | Complete Training Reference                         | Reference | Intermediate |
+| [03_hsemotion_finetuning_lessons.md](03_hsemotion_finetuning_lessons.md) | 5-Lesson Line-by-Line HSEmotion Training Curriculum | 1-2 days  | Beginner     |
 
 ### Advanced Topics (Production)
 
-| Guide | Topic | Duration | Difficulty |
-|-------|-------|----------|------------|
-| [11_NVIDIA_TAO_TOOLKIT_GUIDE.md](11_NVIDIA_TAO_TOOLKIT_GUIDE.md) | TAO for Jetson Deployment | 3-4 hours | Advanced |
-| [12_N8N_ORCHESTRATION_GUIDE.md](12_N8N_ORCHESTRATION_GUIDE.md) | Automated Training Pipelines | 2-3 hours | Intermediate |
+| Guide                                                            | Topic                        | Duration  | Difficulty   |
+| ---------------------------------------------------------------- | ---------------------------- | --------- | ------------ |
+| [11_NVIDIA_TAO_TOOLKIT_GUIDE.md](11_NVIDIA_TAO_TOOLKIT_GUIDE.md) | TAO for Jetson Deployment    | 3-4 hours | Advanced     |
+| [12_N8N_ORCHESTRATION_GUIDE.md](12_N8N_ORCHESTRATION_GUIDE.md)   | Automated Training Pipelines | 2-3 hours | Intermediate |
 
 **Total Core**: ~15-20 hours over 2-3 weeks  
 **Total with Advanced**: ~25-30 hours over 3-4 weeks
@@ -132,20 +137,22 @@ trainer/
 
 ### Gate A Requirements
 
-| Metric | Threshold | Description |
-|--------|-----------|-------------|
-| Macro F1 | ≥ 0.84 | Average F1 across all classes |
-| Balanced Accuracy | ≥ 0.85 | Average recall per class |
-| Per-class F1 | ≥ 0.75 (floor: 0.70) | Each class must perform well |
-| ECE | ≤ 0.08 | Calibration error |
-| Brier | ≤ 0.16 | Probability prediction error |
+| Metric            | Threshold            | Description                   |
+| ----------------- | -------------------- | ----------------------------- |
+| Macro F1          | ≥ 0.84               | Average F1 across all classes |
+| Balanced Accuracy | ≥ 0.85               | Average recall per class      |
+| Per-class F1      | ≥ 0.75 (floor: 0.70) | Each class must perform well  |
+| ECE               | ≤ 0.08               | Calibration error             |
+| Brier             | ≤ 0.16               | Probability prediction error  |
 
 ---
 
 ## Learning Path
 
 ### Fast Track (1 week)
+
 For engineers who need to get productive quickly:
+
 - **Day 1**: Guide 08 (Quick Start Hands-On) — 45 min
 - **Day 2**: Guide 01 (What is Fine-Tuning) + Guide 02 (Environment Setup) — 3 hours
 - **Day 3**: Guide 09 (Web UI Data Workflow) + Guide 03 (Data Preparation) — 4 hours
@@ -154,23 +161,28 @@ For engineers who need to get productive quickly:
 ### Standard Track (2-3 weeks)
 
 **Week 1: Foundations**
+
 - Day 1: Guide 08 (Quick Start) — Get hands-on immediately
 - Day 2-3: Guide 01 (What is Fine-Tuning) — Understand concepts
 - Day 4: Guide 02 (Environment Setup) — Set up your machine
 - Day 5: Guide 09 (Web UI Data Workflow) — Learn data curation
 
 **Week 2: Training**
+
 - Day 1-2: Guide 03 (Data Preparation) — Prepare datasets
 - Day 3-4: Guide 04 (Training Walkthrough) — Run training
 - Day 5: Guide 05 (Monitoring & Debugging) — Track experiments
 
 **Week 3: Evaluation & Production**
+
 - Day 1-2: Guide 06 (Evaluation & Gate A) — Validate models
 - Day 3: Guide 07 (Export & Deployment) — Export to ONNX
 - Day 4-5: Guide 10 (Worked Example) — Reference a complete run
 
 ### Advanced Track (Week 4+)
+
 For production deployment to Jetson:
+
 - Day 1-2: Guide 11 (NVIDIA TAO Toolkit) — Production training
 - Day 3: Guide 12 (n8n Orchestration) — Automated pipelines
 
@@ -178,17 +190,17 @@ For production deployment to Jetson:
 
 ## Glossary
 
-| Term | Definition |
-|------|------------|
-| **Fine-tuning** | Adapting a pre-trained model to a new task |
-| **Transfer learning** | Using knowledge from one task to help another |
-| **Backbone** | The main feature extraction part of the network |
-| **Head** | The classification layer at the end |
-| **Epoch** | One complete pass through the training data |
-| **Batch** | A small group of samples processed together |
-| **Learning rate** | How big the update steps are during training |
-| **Checkpoint** | A saved snapshot of the model during training |
-| **Gate A** | Quality requirements for model deployment |
+| Term                  | Definition                                      |
+| --------------------- | ----------------------------------------------- |
+| **Fine-tuning**       | Adapting a pre-trained model to a new task      |
+| **Transfer learning** | Using knowledge from one task to help another   |
+| **Backbone**          | The main feature extraction part of the network |
+| **Head**              | The classification layer at the end             |
+| **Epoch**             | One complete pass through the training data     |
+| **Batch**             | A small group of samples processed together     |
+| **Learning rate**     | How big the update steps are during training    |
+| **Checkpoint**        | A saved snapshot of the model during training   |
+| **Gate A**            | Quality requirements for model deployment       |
 
 ---
 

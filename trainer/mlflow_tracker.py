@@ -25,7 +25,7 @@ class MLflowTracker:
         self.run = None
         
         # Set tracking URI from environment or use default
-        tracking_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://localhost:5000')
+        tracking_uri = os.getenv('MLFLOW_TRACKING_URI', 'file:///media/rusty_admin/project_data/reachy_emotion/mlruns')
         mlflow.set_tracking_uri(tracking_uri)
         
         # Create or set experiment

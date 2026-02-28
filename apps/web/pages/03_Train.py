@@ -274,11 +274,11 @@ ml_run_id = st.text_input(
 )
 ml_checkpoint = st.text_input(
     "Checkpoint path (required for Validate/Test; defaults to best_model.pth)",
-    value="/workspace/checkpoints/efficientnet_b0_3cls/best_model.pth",
+    value="/media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls/best_model.pth",
     key="ml_checkpoint_input",
 )
 
-AFFECTNET_TEST_DIR = "/videos/test/affectnet_test_dataset"
+AFFECTNET_TEST_DIR = "/media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset"
 
 
 def _launch_ml_run(mode: str) -> None:

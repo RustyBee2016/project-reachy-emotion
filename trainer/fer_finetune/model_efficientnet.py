@@ -224,7 +224,7 @@ class HSEmotionEfficientNet(nn.Module):
             model = models.efficientnet_b0(weights=None)
             model.classifier = nn.Identity()
         
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
         
         # Handle different checkpoint formats
         if 'state_dict' in checkpoint:
@@ -425,7 +425,7 @@ def load_pretrained_model(
     """Load a trained EfficientNet-B0 model from checkpoint."""
     import torch
 
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     config = checkpoint.get("config", {})
 
     model = create_efficientnet_model(

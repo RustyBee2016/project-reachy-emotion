@@ -225,7 +225,7 @@ def export_for_deployment(
     model_name: str = "emotion_classifier",
     precision: str = "fp16",
     input_size: int = 224,
-    num_classes: int = 2,
+    num_classes: int = 3,
 ) -> Dict[str, str]:
     """
     Complete export pipeline for deployment.
@@ -239,7 +239,7 @@ def export_for_deployment(
         model_name: Name for exported model
         precision: Target precision for TensorRT
         input_size: Input image size
-        num_classes: Number of classes
+        num_classes: Number of classes (3 for Phase 1: happy/sad/neutral)
     
     Returns:
         Dictionary of exported file paths
@@ -321,7 +321,7 @@ def export_efficientnet_for_deployment(
     model_name: str = "emotion_efficientnet",
     precision: str = "fp16",
     input_size: int = 224,
-    num_classes: int = 2,
+    num_classes: int = 3,
 ) -> Dict[str, str]:
     """
     Complete export pipeline for EfficientNet-B0 emotion classifier deployment.
@@ -335,7 +335,7 @@ def export_efficientnet_for_deployment(
         model_name: Name for exported model
         precision: Target precision for TensorRT ("fp16" or "fp32")
         input_size: Input image size (default 224 for EfficientNet-B0)
-        num_classes: Number of classes (2 for binary, 8 for full emotions)
+        num_classes: Number of classes (3 for Phase 1: happy/sad/neutral)
     
     Returns:
         Dictionary of exported file paths and metadata
@@ -357,7 +357,7 @@ def export_efficientnet_for_deployment(
     )
     
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     
     # Handle different checkpoint formats
     if 'model_state_dict' in checkpoint:
@@ -395,10 +395,12 @@ def export_efficientnet_for_deployment(
         'input_size': input_size,
         'num_classes': num_classes,
         'precision': precision,
-        'class_names': ['happy', 'sad'] if num_classes == 2 else [
-            'anger', 'contempt', 'disgust', 'fear', 
-            'happy', 'neutral', 'sad', 'surprise'
-        ],
+        'class_names': ['happy', 'sad', 'neutral'] if num_classes == 3 else (
+            ['happy', 'sad'] if num_classes == 2 else [
+                'anger', 'contempt', 'disgust', 'fear',
+                'happy', 'neutral', 'sad', 'surprise'
+            ]
+        ),
         'normalization': {
             'mean': [0.485, 0.456, 0.406],  # ImageNet normalization
             'std': [0.229, 0.224, 0.225],

@@ -9,7 +9,7 @@ Handles:
 """
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset, random_split
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Callable, Any
 import numpy as np
@@ -669,45 +669,80 @@ def create_dataloaders(
         train_data_dir = data_dir
         train_split = "train"
 
+    has_dedicated_val = roots.uses_run_scoped_val or bool(val_manifest_path)
+
     if roots.uses_run_scoped_val and not val_manifest_path:
         val_data_dir = str(roots.val_root)
         val_split = ""
-    else:
-        val_data_dir = data_dir if val_manifest_path else str(roots.val_root)
+    elif val_manifest_path:
+        val_data_dir = data_dir
         val_split = "test"
+    else:
+        val_data_dir = None
+        val_split = None
 
-    train_dataset = EmotionDataset(
-        data_dir=train_data_dir,
-        split=train_split,
-        transform=get_train_transforms(input_size),
-        class_names=class_names,
-        frame_sampling=frame_sampling_train,
-        frames_per_video=frames_per_video,
-        manifest_path=train_manifest_path,
-    )
+    # -----------------------------------------------------------------
+    # When no dedicated validation directory exists (default fallback),
+    # perform a 90/10 random split on the training data itself so that
+    # we always have a validation set during training.
+    # -----------------------------------------------------------------
+    if has_dedicated_val:
+        train_dataset = EmotionDataset(
+            data_dir=train_data_dir,
+            split=train_split,
+            transform=get_train_transforms(input_size),
+            class_names=class_names,
+            frame_sampling=frame_sampling_train,
+            frames_per_video=frames_per_video,
+            manifest_path=train_manifest_path,
+        )
 
-    val_dataset = EmotionDataset(
-        data_dir=val_data_dir,
-        split=val_split,
-        transform=get_val_transforms(input_size),
-        class_names=class_names,
-        frame_sampling=frame_sampling_val,
-        frames_per_video=frames_per_video,
-        manifest_path=val_manifest_path,
-    )
-    
+        val_dataset = EmotionDataset(
+            data_dir=val_data_dir,  # type: ignore[arg-type]
+            split=val_split or "",
+            transform=get_val_transforms(input_size),
+            class_names=class_names,
+            frame_sampling=frame_sampling_val,
+            frames_per_video=frames_per_video,
+            manifest_path=val_manifest_path,
+        )
+    else:
+        # Build a single dataset from videos/train, then split 90/10
+        full_dataset = EmotionDataset(
+            data_dir=train_data_dir,
+            split=train_split,
+            transform=get_train_transforms(input_size),
+            class_names=class_names,
+            frame_sampling=frame_sampling_train,
+            frames_per_video=frames_per_video,
+            manifest_path=train_manifest_path,
+        )
+        n_total = len(full_dataset)
+        n_val = max(1, int(n_total * 0.1))
+        n_train = n_total - n_val
+        logger.info(
+            f"No dedicated val dir — splitting train data 90/10: "
+            f"{n_train} train, {n_val} val (from {n_total} total)"
+        )
+        generator = torch.Generator().manual_seed(42)
+        train_subset, val_subset = random_split(
+            full_dataset, [n_train, n_val], generator=generator,
+        )
+        train_dataset = train_subset  # type: ignore[assignment]
+        val_dataset = val_subset  # type: ignore[assignment]
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=True,
-        drop_last=True,  # Important for batch norm stability
+        drop_last=len(train_dataset) > batch_size,
     )
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size * 2,  # Larger batch for validation
+        batch_size=batch_size * 2,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,

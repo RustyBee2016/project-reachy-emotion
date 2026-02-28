@@ -323,61 +323,90 @@ def main() -> int:
             )
             raise
 
-    preds = _collect_predictions(
-        checkpoint_path=checkpoint_path,
-        data_root=config.data.data_root,
-        class_names=config.data.class_names,
-        input_size=config.model.input_size,
-        batch_size=config.data.batch_size,
-        num_workers=config.data.num_workers,
-        run_id=args.run_id,
-        frames_per_video=max(1, int(config.data.frames_per_video)),
-    )
-
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    pred_path = output_dir / f"{args.run_id}_predictions.npz"
-    np.savez(
-        pred_path,
-        y_true=preds["y_true"],
-        y_pred=preds["y_pred"],
-        y_prob=preds["y_prob"],
-        class_names=np.array(config.data.class_names),
-    )
-
-    gate_report = evaluate_predictions(
-        preds["y_true"],
-        preds["y_pred"],
-        preds["y_prob"],
-        config.data.class_names,
-        GateAThresholds(),
-    )
-    gate_path = output_dir / f"{args.run_id}_gate_a.json"
-    gate_path.write_text(json.dumps(gate_report, indent=2))
-
-    _emit_training_completed(
-        contract_client,
-        run_id=args.run_id,
-        train_result=train_result,
-        gate_report=gate_report,
-        pred_path=str(pred_path),
-        gate_path=str(gate_path),
-        event_type="evaluation.completed" if args.skip_train else "training.completed",
-        source="agent6.evaluation_agent" if args.skip_train else "agent5.training_orchestrator",
-        strict=args.strict_contract_updates,
-    )
-
-    print(
-        json.dumps(
-            {
-                "predictions": str(pred_path),
-                "gate_report": str(gate_path),
-                "overall_pass": gate_report["overall_pass"],
-            },
-            indent=2,
+    # -----------------------------------------------------------------
+    # Evaluation phase — wrapped so any crash updates the DB to "failed"
+    # -----------------------------------------------------------------
+    try:
+        preds = _collect_predictions(
+            checkpoint_path=checkpoint_path,
+            data_root=config.data.data_root,
+            class_names=config.data.class_names,
+            input_size=config.model.input_size,
+            batch_size=config.data.batch_size,
+            num_workers=0,  # avoid multiprocessing deadlocks on small datasets
+            run_id=args.run_id,
+            frames_per_video=max(1, int(config.data.frames_per_video)),
         )
-    )
-    return 0
+
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pred_path = output_dir / f"{args.run_id}_predictions.npz"
+        np.savez(
+            pred_path,
+            y_true=preds["y_true"],
+            y_pred=preds["y_pred"],
+            y_prob=preds["y_prob"],
+            class_names=np.array(config.data.class_names),
+        )
+
+        gate_report = evaluate_predictions(
+            preds["y_true"],
+            preds["y_pred"],
+            preds["y_prob"],
+            config.data.class_names,
+            GateAThresholds(),
+        )
+        gate_path = output_dir / f"{args.run_id}_gate_a.json"
+        gate_path.write_text(json.dumps(gate_report, indent=2))
+
+        # Export to ONNX when Gate A passes
+        onnx_path: Optional[str] = None
+        if gate_report["overall_pass"]:
+            from trainer.fer_finetune.export import export_efficientnet_for_deployment
+
+            export_dir = output_dir / "export"
+            export_result = export_efficientnet_for_deployment(
+                checkpoint_path=str(checkpoint_path),
+                output_dir=str(export_dir),
+                num_classes=len(config.data.class_names),
+                input_size=config.model.input_size,
+            )
+            onnx_path = export_result.get("onnx_path")
+            print(json.dumps({"onnx_export": export_result}, indent=2))
+
+        _emit_training_completed(
+            contract_client,
+            run_id=args.run_id,
+            train_result=train_result,
+            gate_report=gate_report,
+            pred_path=str(pred_path),
+            gate_path=str(gate_path),
+            event_type="evaluation.completed" if args.skip_train else "training.completed",
+            source="agent6.evaluation_agent" if args.skip_train else "agent5.training_orchestrator",
+            strict=args.strict_contract_updates,
+        )
+
+        print(
+            json.dumps(
+                {
+                    "predictions": str(pred_path),
+                    "gate_report": str(gate_path),
+                    "overall_pass": gate_report["overall_pass"],
+                    "onnx_path": onnx_path,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    except Exception as exc:
+        _emit_training_failed(
+            contract_client,
+            run_id=args.run_id,
+            error_message=f"Evaluation failed: {exc}",
+            strict=args.strict_contract_updates,
+        )
+        raise
 
 
 if __name__ == "__main__":

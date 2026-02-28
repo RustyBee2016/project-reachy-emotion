@@ -8,18 +8,18 @@ Wants=postgresql.service
 Type=simple
 User=rusty_admin
 Group=rusty_admin
-WorkingDirectory=%h/projects/reachy_08.4.2_frames_01
+WorkingDirectory=%h/projects/reachy_08.4.2
 
 # Load environment variables from .env file
-EnvironmentFile=-%h/projects/reachy_08.4.2_frames_01/apps/api/.env
+EnvironmentFile=-%h/projects/reachy_08.4.2/apps/api/.env
 
 # Start command
 # Working directory establishes the base path (locate apps/ package including 'apps' object for FastAPI)
-WorkingDirectory=%h/projects/reachy_08.4.2_frames_01/
+WorkingDirectory=%h/projects/reachy_08.4.2/
 # Guarantees /apps can be found even if working directory changes; provides permanent base path
-Environment=PYTHONPATH=%h/projects/reachy_08.4.2_frames_01/
+Environment=PYTHONPATH=%h/projects/reachy_08.4.2/
 # Uses Python interpreter inside project virtual environment; loads Uvicorn module; calls FastAPI object
-ExecStart=%h/projects/reachy_08.4.2_frames_01/venv/bin/python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8083
+ExecStart=%h/projects/reachy_08.4.2/venv/bin/python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8083
 
 # Health check after startup (wait 3 seconds then check)
 ExecStartPost=/bin/sleep 3

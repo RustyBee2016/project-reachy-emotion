@@ -143,7 +143,7 @@ class TrainingConfig:
     mixed_precision: bool = True
     
     # Checkpointing
-    checkpoint_dir: str = "/workspace/checkpoints"
+    checkpoint_dir: str = "/media/rusty_admin/project_data/reachy_emotion/checkpoints"
     save_best_only: bool = True
     save_interval: int = 5
     
@@ -161,7 +161,7 @@ class TrainingConfig:
     gate_b_min_per_class_f1: float = 0.72
     
     # MLflow tracking
-    mlflow_tracking_uri: str = "file:///workspace/mlruns"
+    mlflow_tracking_uri: str = "file:///media/rusty_admin/project_data/reachy_emotion/mlruns"
     mlflow_experiment_name: str = "resnet50_emotion_finetune"
     
     # Reproducibility

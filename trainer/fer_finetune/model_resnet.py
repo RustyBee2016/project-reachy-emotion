@@ -178,7 +178,7 @@ class EmotionClassifier(nn.Module):
     
     def _load_custom_weights(self, model: nn.Module, weights_path: str):
         """Load custom pretrained weights (e.g., AffectNet+RAF-DB)."""
-        checkpoint = torch.load(weights_path, map_location='cpu')
+        checkpoint = torch.load(weights_path, map_location='cpu', weights_only=False)
         
         # Handle different checkpoint formats
         if 'state_dict' in checkpoint:
@@ -346,7 +346,7 @@ def load_pretrained_model(
     Returns:
         Loaded model in eval mode
     """
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
     # Extract config from checkpoint
     config = checkpoint.get('config', {})
