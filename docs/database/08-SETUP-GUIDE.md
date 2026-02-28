@@ -109,10 +109,10 @@ Step 1                Step 2                Step 3                Step 4
                                                               └──────────────┘
 ```
 
-1. **`enums.py`** — Defines allowed values for `split` (`temp`, `dataset_all`, `train`, `test`, `purged`),
-   `label` (`neutral`, `happy`, `sad`, `angry`, `surprise`, `fearful`), and `target_split`.
+1. **`enums.py`** — Defines allowed values for `split` (`temp`, `train`, `test`, `purged`),
+   `label` (`neutral`, `happy`, `sad`), and `target_split` (`train`, `test`).
    Uses `native_enum=False`, meaning PostgreSQL enforces these via CHECK constraints rather than
-   native ENUM types.
+   native ENUM types. Note: `dataset_all` was deprecated and removed from the split enum.
 
 2. **`models.py`** — Each Python class (e.g., `class Video(TimestampMixin, Base)`) maps to one
    database table. Columns, types, constraints, indexes, and relationships are all declared here.
@@ -140,7 +140,7 @@ You will see two sets of schema files in the repository. Here is how they relate
 | **Schema definition** | `alembic/versions/001_phase1_schema.sql` | `apps/api/app/db/models.py` + `enums.py` |
 | **Migration tool** | `psql -f <file>.sql` | `alembic upgrade head` |
 | **Stored procedures** | `alembic/versions/002_stored_procedures.sql` | Python services (`PromoteService`, `VideoRepository`) |
-| **Agent tables** | `alembic/versions/003_missing_tables.sql` | Defined in `models.py`; migration pending |
+| **Agent tables** | `alembic/versions/003_missing_tables.sql` (DEPRECATED) | `20260227_000005_missing_orm_tables.py` |
 | **Status** | Retained for historical reference; header says DEPRECATED | Active; used by the application |
 
 **Why do the legacy SQL files still exist?**
@@ -152,30 +152,23 @@ set up a new database — use `alembic upgrade head` instead.
 
 ## Tables Created by Alembic
 
-The current Alembic migration (`202510280000_initial_schema.py`) creates these **4 core tables**:
+The Alembic migration chain (7 revisions) creates **11 tables**:
 
-| # | Table | Purpose |
-|---|-------|---------|
-| 1 | `video` | Every video file registered in the system — metadata, split, label, checksum |
-| 2 | `training_run` | Each ML training experiment — strategy, fractions, seed, metrics, status |
-| 3 | `training_selection` | Which videos were selected for a specific training run (train/test assignment) |
-| 4 | `promotion_log` | Audit trail of every video promotion between splits |
+| # | Table | Migration | Purpose |
+|---|-------|-----------|---------|
+| 1 | `video` | `202510280000` | Every video file — metadata, split, label, checksum |
+| 2 | `training_run` | `202510280000` | Each ML training experiment — strategy, metrics, status |
+| 3 | `training_selection` | `202510280000` | Which videos were selected for a specific training run |
+| 4 | `promotion_log` | `202510280000` | Audit trail of video promotions between splits |
+| 5 | `extracted_frame` | `20260223_000003` | Per-run frame extraction metadata for manifests |
+| 6 | `label_event` | `20260227_000005` | Audit trail of labeling actions (label, relabel, discard) |
+| 7 | `run_link` | `20260227_000005` | MLflow run-to-dataset lineage link |
+| 8 | `audit_log` | `20260227_000005` | Privacy-sensitive operations (purge, access, export) |
+| 9 | `deployment_log` | `20260227_000005` | Model deployments to Jetson (engine version, metrics) |
+| 10 | `obs_samples` | `20260227_000005` | Time-series observability metrics |
+| 11 | `reconcile_report` | `20260227_000005` | Filesystem/database consistency check results |
 
-**5 additional tables** are defined in `models.py` but do not yet have Alembic migration revisions:
-
-| # | Table | Purpose | Defined in `models.py` |
-|---|-------|---------|----------------------|
-| 5 | `label_event` | Audit trail of labeling actions (label, relabel, discard) | Yes (line 198) |
-| 6 | `deployment_log` | Tracks model deployments to Jetson (engine version, metrics) | Yes (line 233) |
-| 7 | `audit_log` | Privacy-sensitive operations (purge, access, export) | Yes (line 270) |
-| 8 | `obs_samples` | Time-series observability metrics from all agents | Yes (line 305) |
-| 9 | `reconcile_report` | Filesystem/database consistency check results | Yes (line 327) |
-
-> **Next step for the team:** Generate the missing migration to create tables 5–9:
-> ```bash
-> alembic -c apps/api/app/db/alembic/alembic.ini revision --autogenerate -m "add agent workflow tables"
-> alembic -c apps/api/app/db/alembic/alembic.ini upgrade head
-> ```
+All tables are fully managed by Alembic migrations. Run `alembic upgrade head` to create them.
 
 ### How to Locate Tables in the Database
 

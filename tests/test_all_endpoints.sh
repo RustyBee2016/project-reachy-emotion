@@ -66,9 +66,11 @@ run_test "List Videos (temp)" \
     "http://10.0.4.130:8083/api/v1/media/list?split=temp&limit=5" \
     "200"
 
-# Test 4: List Videos (dataset_all split)
-run_test "List Videos (dataset_all)" \
-    "http://10.0.4.130:8083/api/v1/media/list?split=dataset_all&limit=5" \
+# Test 4: List Videos (train split)
+# NOTE: dataset_all split was deprecated and removed from the schema.
+# Videos are now promoted directly to train/<label>.
+run_test "List Videos (train)" \
+    "http://10.0.4.130:8083/api/v1/media/list?split=train&limit=5" \
     "200"
 
 # Test 5: Video Metadata (luma_1)

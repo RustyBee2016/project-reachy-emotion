@@ -24,7 +24,7 @@ been **resolved** as part of the v08.4.2 schema reconfiguration.
 | 2 | Split enum 'purged' mismatch | 🔴 CRITICAL | ✅ Resolved | `enums.py` and Alembic migration both include `purged` |
 | 3 | Check constraint inconsistency | 🔴 CRITICAL | ✅ Resolved | Alembic migration now includes `purged` in constraint |
 | 4 | Missing check constraint in SQL | 🔴 CRITICAL | ✅ Resolved (architecture) | Constraint in Alembic migration; SQL file deprecated |
-| 5 | Missing SQLAlchemy models | 🔴 CRITICAL | ⚠️ By Design | 3 legacy-only tables intentionally excluded from ORM |
+| 5 | Missing SQLAlchemy models | 🔴 CRITICAL | ✅ Resolved | All ORM models now have Alembic migrations (20260227_000005) |
 | 6 | Video model missing columns | 🔴 CRITICAL | ✅ Resolved | `extra_data` and `deleted_at` now present |
 | 7 | TrainingRun model incomplete | 🔴 CRITICAL | ✅ Resolved | All 15+ columns now present |
 | 8 | UUID vs String type mismatch | 🔴 CRITICAL | ✅ Resolved (by design) | `String(36)` used intentionally for SQLite test compatibility |
@@ -291,7 +291,11 @@ The resolution established a single authoritative path:
 
 ## Remaining Action Items
 
-| Item | Description | Priority |
-|------|-------------|----------|
-| Generate migration for tables 5–9 | `label_event`, `deployment_log`, `audit_log`, `obs_samples`, `reconcile_report` are defined in `models.py` but lack Alembic migration revisions | High |
-| Fix stratification bug (Issue #12) | Update `002_stored_procedures.sql` to use per-label sampling, or document that the Python service is the recommended path | Low |
+| Item | Description | Priority | Status |
+|------|-------------|----------|--------|
+| Generate migration for tables 5–9 | `label_event`, `deployment_log`, `audit_log`, `obs_samples`, `reconcile_report` + `run_link` | High | ✅ Done — migration `20260227_000005` |
+| Composite indexes for stats queries | `(split, label)` on video, `(run_id, label)` on extracted_frame | High | ✅ Done — migration `20260227_000004` |
+| Deprecate `dataset_all` split | Migrate legacy rows, update test scripts, deprecate SQL files | High | ✅ Done — migration `20260227_000006` |
+| Add `updated_at` trigger | DB-level trigger on `video` and `training_run` (PG only) | Medium | ✅ Done — migration `20260227_000006` |
+| Statistics views | `v_label_distribution` and `v_run_frame_stats` (PG only) | Medium | ✅ Done — migration `20260227_000006` |
+| Fix stratification bug (Issue #12) | Update `002_stored_procedures.sql` to use per-label sampling, or document that the Python service is the recommended path | Low | Open (legacy SQL file now deprecated) |

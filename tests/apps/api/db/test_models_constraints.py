@@ -107,3 +107,113 @@ def test_training_selection_cascade(engine) -> None:
 
         remaining = session.execute(select(models.TrainingSelection)).scalars().all()
         assert not remaining
+
+
+# ============================================================================
+# R2: RunLink roundtrip
+# ============================================================================
+
+
+def test_run_link_roundtrip(engine) -> None:
+    """RunLink can be inserted and read back with all columns."""
+    with Session(engine) as session:
+        link = models.RunLink(
+            mlflow_run_id="run_abc123",
+            dataset_hash="e" * 64,
+            snapshot_ref="@snap-2026-02-27",
+        )
+        session.add(link)
+        session.commit()
+
+        result = session.execute(
+            select(models.RunLink).where(
+                models.RunLink.mlflow_run_id == "run_abc123"
+            )
+        ).scalar_one()
+        assert result.dataset_hash == "e" * 64
+        assert result.snapshot_ref == "@snap-2026-02-27"
+        assert result.created_at is not None
+
+
+# ============================================================================
+# R1: LabelEvent action constraint
+# ============================================================================
+
+
+def test_label_event_action_constraint(engine) -> None:
+    """label_event.action must be one of the five allowed values."""
+    with Session(engine) as session:
+        valid = models.LabelEvent(
+            label="happy",
+            action="label_only",
+        )
+        session.add(valid)
+        session.commit()
+        assert valid.event_id is not None
+
+    with Session(engine) as session:
+        invalid = models.LabelEvent(
+            label="sad",
+            action="invalid_action",
+        )
+        session.add(invalid)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+# ============================================================================
+# R8: DeploymentLog stage constraint
+# ============================================================================
+
+
+def test_deployment_log_stage_constraint(engine) -> None:
+    """deployment_log.target_stage must be shadow|canary|rollout."""
+    with Session(engine) as session:
+        valid = models.DeploymentLog(
+            engine_path="/engines/emotionnet_v1.engine",
+            target_stage="shadow",
+            status="pending",
+        )
+        session.add(valid)
+        session.commit()
+        assert valid.id is not None
+
+    with Session(engine) as session:
+        invalid = models.DeploymentLog(
+            engine_path="/engines/bad.engine",
+            target_stage="production",
+            status="pending",
+        )
+        session.add(invalid)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+# ============================================================================
+# R8: ReconcileReport trigger_type constraint
+# ============================================================================
+
+
+def test_reconcile_report_trigger_constraint(engine) -> None:
+    """reconcile_report.trigger_type must be scheduled|manual|webhook."""
+    with Session(engine) as session:
+        valid = models.ReconcileReport(
+            trigger_type="scheduled",
+            orphan_count=0,
+            missing_count=0,
+            mismatch_count=0,
+        )
+        session.add(valid)
+        session.commit()
+        assert valid.id is not None
+
+    with Session(engine) as session:
+        invalid = models.ReconcileReport(
+            trigger_type="cron",
+            orphan_count=0,
+            missing_count=0,
+            mismatch_count=0,
+        )
+        session.add(invalid)
+        with pytest.raises(IntegrityError):
+            session.commit()

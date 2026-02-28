@@ -1,3 +1,12 @@
+-- DEPRECATED: This file is retained for historical reference only.
+-- Schema and stored procedures are now managed by SQLAlchemy models + Alembic migrations.
+-- See: apps/api/app/db/models.py
+-- See: apps/api/app/db/alembic/versions/
+-- DO NOT use this file to create or modify the database schema.
+-- Several stored procedures below reference the deprecated 'dataset_all' split
+-- which has been removed from the active schema.
+--
+-- Original header:
 -- Stored Procedures for Business Logic
 -- Run after Alembic migration (alembic upgrade head)
 --

@@ -41,7 +41,7 @@ fi
 
 echo ""
 echo "3️⃣  Checking video directories..."
-for split in temp dataset_all train test; do
+for split in temp train test; do
     dir="$VIDEOS_ROOT/$split"
     if [ -d "$dir" ]; then
         count=$(find "$dir" -type f -name "*.mp4" 2>/dev/null | wc -l)
@@ -53,17 +53,17 @@ done
 
 echo ""
 echo "4️⃣  Querying database for recent videos..."
-echo "   Recent videos in dataset_all:"
+echo "   Recent videos in train:"
 psql -U "$DB_USER" -d "$DB_NAME" -c "
-SELECT 
+SELECT
     video_id::text AS id,
     split,
     label,
     size_bytes,
     created_at
-FROM video 
-WHERE split = 'dataset_all'
-ORDER BY created_at DESC 
+FROM video
+WHERE split = 'train'
+ORDER BY created_at DESC
 LIMIT 5;
 " 2>/dev/null || echo -e "${RED}❌ Query failed${NC}"
 
@@ -92,16 +92,16 @@ SELECT
     label,
     COUNT(*) as count
 FROM video
-WHERE split = 'dataset_all' AND label IS NOT NULL
+WHERE split = 'train' AND label IS NOT NULL
 GROUP BY label
 ORDER BY count DESC;
 " 2>/dev/null || echo -e "${RED}❌ Query failed${NC}"
 
 echo ""
 echo "7️⃣  Filesystem vs Database consistency check..."
-# Count files in dataset_all
-fs_count=$(find "$VIDEOS_ROOT/dataset_all" -type f -name "*.mp4" 2>/dev/null | wc -l)
-db_count=$(psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM video WHERE split = 'dataset_all';" 2>/dev/null | xargs)
+# Count files in train (all label subdirectories)
+fs_count=$(find "$VIDEOS_ROOT/train" -type f -name "*.mp4" 2>/dev/null | wc -l)
+db_count=$(psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM video WHERE split = 'train';" 2>/dev/null | xargs)
 
 echo "   Filesystem: $fs_count videos"
 echo "   Database:   $db_count records"

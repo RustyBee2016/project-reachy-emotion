@@ -11,6 +11,38 @@ from sqlalchemy import create_engine, inspect
 ALEMBIC_INI = Path(__file__).resolve().parents[4] / "apps" / "api" / "app" / "db" / "alembic.ini"
 ALEMBIC_SCRIPT = Path(__file__).resolve().parents[4] / "apps" / "api" / "app" / "db" / "alembic"
 
+# All tables expected after running the full migration chain to head.
+EXPECTED_TABLES = {
+    # Initial schema (202510280000)
+    "video",
+    "training_run",
+    "training_selection",
+    "promotion_log",
+    # 20260223_000003
+    "extracted_frame",
+    # 20260227_000005
+    "label_event",
+    "run_link",
+    "audit_log",
+    "deployment_log",
+    "obs_samples",
+    "reconcile_report",
+}
+
+# Tables created by the initial migration (full downgrade removes only these).
+INITIAL_TABLES = {"video", "training_run", "training_selection", "promotion_log"}
+
+# Tables from migrations with no-op downgrades (persist after downgrade to base).
+NOOP_DOWNGRADE_TABLES = {
+    "extracted_frame",
+    "label_event",
+    "run_link",
+    "audit_log",
+    "deployment_log",
+    "obs_samples",
+    "reconcile_report",
+}
+
 
 def _alembic_config(url: str) -> Config:
     cfg = Config(str(ALEMBIC_INI))
@@ -28,6 +60,14 @@ def _table_names(url: str) -> list[str]:
         engine.dispose()
 
 
+def _index_names(url: str, table: str) -> set[str]:
+    engine = create_engine(url, future=True)
+    try:
+        return {idx["name"] for idx in inspect(engine).get_indexes(table)}
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize("dialect", ["sqlite"])
 def test_migration_upgrade_and_downgrade(tmp_path, dialect: str) -> None:
     db_path = tmp_path / "alembic_test.db"
@@ -35,11 +75,28 @@ def test_migration_upgrade_and_downgrade(tmp_path, dialect: str) -> None:
 
     cfg = _alembic_config(url)
 
+    # --- Upgrade to head ---
     command.upgrade(cfg, "head")
     tables = set(_table_names(url))
-    assert {"video", "training_run", "training_selection", "promotion_log"} <= tables
+    assert EXPECTED_TABLES <= tables, f"Missing tables: {EXPECTED_TABLES - tables}"
 
+    # --- Verify composite indexes (R3, R4) ---
+    video_indexes = _index_names(url, "video")
+    assert "ix_video_split_label" in video_indexes
+
+    frame_indexes = _index_names(url, "extracted_frame")
+    assert "ix_extracted_frame_run_label" in frame_indexes
+
+    # --- Downgrade to base ---
     command.downgrade(cfg, "base")
     remaining_tables = set(_table_names(url))
     remaining_tables.discard("alembic_version")
-    assert not remaining_tables
+
+    # The initial migration's downgrade removes INITIAL_TABLES.
+    # Tables from no-op downgrades persist — this is by design.
+    assert not (remaining_tables & INITIAL_TABLES), (
+        f"Initial tables should be dropped: {remaining_tables & INITIAL_TABLES}"
+    )
+    assert remaining_tables <= NOOP_DOWNGRADE_TABLES, (
+        f"Unexpected tables after downgrade: {remaining_tables - NOOP_DOWNGRADE_TABLES}"
+    )

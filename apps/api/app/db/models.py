@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     select,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID as PGUUID  # type: ignore[attr-defined]
@@ -230,6 +231,25 @@ class PromotionLog(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_promotion_log_video_time", "video_id", "created_at"),
         Index("ix_promotion_log_idempotency", "idempotency_key"),
+    )
+
+
+class RunLink(Base):
+    """MLflow run-to-dataset lineage link.
+
+    No TimestampMixin — run_link has only created_at (no updated_at) per
+    the requirements spec and live DB schema.
+    """
+
+    __tablename__ = "run_link"
+
+    mlflow_run_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    dataset_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_ref: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 

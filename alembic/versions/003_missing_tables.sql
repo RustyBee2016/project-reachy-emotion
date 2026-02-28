@@ -1,6 +1,14 @@
+-- DEPRECATED: This file is retained for historical reference only.
+-- These tables are now managed by SQLAlchemy models + Alembic migration
+-- 20260227_000005_missing_orm_tables.py.
+-- See: apps/api/app/db/models.py
+-- See: apps/api/app/db/alembic/versions/20260227_000005_missing_orm_tables.py
+-- DO NOT use this file to create or modify the database schema.
+--
+-- Original header:
 -- Phase 3 Database Schema Migration
 -- Missing tables required by n8n workflows (Agents 2, 7, 8, 9)
--- Run with: psql -d reachy_emotion -f 003_missing_tables.sql
+-- Previously run with: psql -d reachy_emotion -f 003_missing_tables.sql
 
 BEGIN;
 
