@@ -140,13 +140,44 @@ class EmotionDataset(Dataset):
         return samples
     
     def _collect_samples(self) -> List[Dict]:
-        """Collect all samples from the split directory."""
+        """Collect all samples from the split directory.
+
+        Supports two layouts:
+        1. **Class-subdirectory**: ``split_dir/{class_name}/*.{jpg,mp4,...}``
+        2. **Flat label-prefix**: ``split_dir/{class_name}_*.{jpg,mp4,...}``
+           (used by run-scoped ``train_ds_<run_id>`` directories)
+
+        The method tries class-subdirectories first; if none exist it falls
+        back to flat label-prefix collection.
+        """
         samples = []
         
         if not self.split_dir.exists():
             logger.warning(f"Split directory does not exist: {self.split_dir}")
             return samples
+
+        # Check whether class subdirectories exist
+        has_class_dirs = any(
+            (self.split_dir / cn).is_dir() for cn in self.class_names
+        )
+
+        if has_class_dirs:
+            samples = self._collect_class_dir_samples()
+        else:
+            samples = self._collect_flat_prefix_samples()
+
+        # Log class distribution
+        class_counts: Dict[str, int] = {}
+        for sample in samples:
+            cn = sample["class_name"]
+            class_counts[cn] = class_counts.get(cn, 0) + 1
+        logger.info(f"  Class distribution: {class_counts}")
         
+        return samples
+
+    def _collect_class_dir_samples(self) -> List[Dict]:
+        """Collect from ``split_dir/{class_name}/`` subdirectories."""
+        samples: List[Dict] = []
         for class_name in self.class_names:
             class_dir = self.split_dir / class_name
             if not class_dir.exists():
@@ -173,14 +204,44 @@ class EmotionDataset(Dataset):
                         "label": class_idx,
                         "class_name": class_name,
                     })
-        
-        # Log class distribution
-        class_counts = {}
-        for sample in samples:
-            cn = sample["class_name"]
-            class_counts[cn] = class_counts.get(cn, 0) + 1
-        logger.info(f"  Class distribution: {class_counts}")
-        
+        return samples
+
+    def _collect_flat_prefix_samples(self) -> List[Dict]:
+        """Collect from a flat directory where filenames are prefixed with the
+        class label, e.g. ``happy_luma_20260220_*.jpg``.
+
+        This is the layout produced by frame-extraction runs that create
+        ``train_ds_<run_id>/`` and ``valid_ds_<run_id>/`` directories.
+        """
+        samples: List[Dict] = []
+        IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+        VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
+
+        for path in sorted(self.split_dir.iterdir()):
+            if not path.is_file():
+                continue
+            suffix = path.suffix.lower()
+            if suffix not in IMAGE_EXTS and suffix not in VIDEO_EXTS:
+                continue
+            sample_type = "video" if suffix in VIDEO_EXTS else "image"
+
+            # Match filename against known class prefixes
+            fname_lower = path.name.lower()
+            matched_class: Optional[str] = None
+            for class_name in self.class_names:
+                if fname_lower.startswith(f"{class_name}_"):
+                    matched_class = class_name
+                    break
+
+            if matched_class is None:
+                continue  # skip files that don't match any class prefix
+
+            samples.append({
+                "path": path,
+                "type": sample_type,
+                "label": self.class_to_idx[matched_class],
+                "class_name": matched_class,
+            })
         return samples
     
     def __len__(self) -> int:
@@ -598,9 +659,26 @@ def create_dataloaders(
                 val_manifest_path = str(candidate)
                 break
 
+    # When run-scoped roots are resolved (e.g. train_ds_run_0101/), pass the
+    # directory directly and use split="" so EmotionDataset reads from the
+    # root itself rather than appending a split subdirectory.
+    if roots.uses_run_scoped_train and not train_manifest_path:
+        train_data_dir = str(roots.train_root)
+        train_split = ""
+    else:
+        train_data_dir = data_dir
+        train_split = "train"
+
+    if roots.uses_run_scoped_val and not val_manifest_path:
+        val_data_dir = str(roots.val_root)
+        val_split = ""
+    else:
+        val_data_dir = data_dir if val_manifest_path else str(roots.val_root)
+        val_split = "test"
+
     train_dataset = EmotionDataset(
-        data_dir=data_dir,
-        split="train",
+        data_dir=train_data_dir,
+        split=train_split,
         transform=get_train_transforms(input_size),
         class_names=class_names,
         frame_sampling=frame_sampling_train,
@@ -609,8 +687,8 @@ def create_dataloaders(
     )
 
     val_dataset = EmotionDataset(
-        data_dir=data_dir if val_manifest_path else str(roots.val_root),
-        split="test",
+        data_dir=val_data_dir,
+        split=val_split,
         transform=get_val_transforms(input_size),
         class_names=class_names,
         frame_sampling=frame_sampling_val,

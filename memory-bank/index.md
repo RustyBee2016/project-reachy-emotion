@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-02-18
+**Last Updated**: 2026-02-28
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -41,6 +41,11 @@ This index provides curated entry points to project context, decisions, and refe
 - **Storage**: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
 - **Training Code**: `trainer/fer_finetune/` module, `trainer/train_efficientnet.py`
 - **Config**: `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`
+- **Data Root**: `/media/rusty_admin/project_data/reachy_emotion/videos`
+- **Run-Scoped Datasets**: `videos/train/run/run_XXXX/` with `train_ds_run_XXXX/` and `valid_ds_run_XXXX/` subdirs
+- **Train/Val Split**: 90/10 (0.9 train, 0.1 validation)
+- **Dataset Layouts**: Flat label-prefix (`happy_*.jpg`) and class-subdirectory (`happy/*.jpg`) both supported
+- **Web UI Launch**: `apps/web/pages/03_Train.py` → `POST /api/v1/training/launch` → subprocess `trainer.run_efficientnet_pipeline`
 - **n8n Workflows**: `n8n/workflows/ml-agentic-ai_v.2/`
   - `05_training_orchestrator_efficientnet.json`
   - `06_evaluation_agent_efficientnet.json`
@@ -94,8 +99,18 @@ This index provides curated entry points to project context, decisions, and refe
 - **Setup Guide**: `docs/database/08-SETUP-GUIDE.md` — Alembic-based setup (legacy SQL deprecated)
 - **Known Issues**: `docs/database/07-KNOWN-ISSUES.md` — 12 of 13 issues resolved; 1 legacy-only open
 - **Schema Source of Truth**: `apps/api/app/db/models.py` + `enums.py` + Alembic migration `202510280000_initial_schema.py`
-- **Tables**: 9 Alembic-managed (4 in initial migration, 5 pending migration) + 3 legacy-only
-- **Last Updated**: 2026-02-10 — All modules updated to reflect SQLAlchemy/Alembic as single authoritative path; all Known Issue warnings replaced with resolved notes.
+- **Tables**: 12 Alembic-managed (all migrations applied through `20260228_000008`)
+- **Alembic Head**: `20260228_000008` — training_run CHECK constraints added
+- **Last Updated**: 2026-02-28 — All modules updated; all CHECK constraints reconciled with live DB.
+
+---
+
+## Environment & Virtual Environment
+- **Project venv**: `/home/rusty_admin/projects/reachy_08.4.2/venv/` (Python 3.12.3)
+- **Wrong venv**: `/home/rusty_admin/venvs/tao/` — legacy TAO toolkit, NOT for this project
+- **start_media_api.sh**: Explicitly uses project venv Python
+- **training_control.py**: Resolves `project_root/venv/bin/python` for ML subprocess spawning
+- **systemd service**: Points to `reachy_08.4.2_frames_01/venv/bin/python` (separate deploy variant)
 
 ---
 

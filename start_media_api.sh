@@ -34,7 +34,12 @@ echo ""
 
 # Start the server
 cd "$(dirname "$0")"
-uvicorn apps.api.app.main:app \
+VENV_PYTHON="$(dirname "$0")/venv/bin/python"
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo "ERROR: Project venv not found at $VENV_PYTHON" >&2
+    exit 1
+fi
+"$VENV_PYTHON" -m uvicorn apps.api.app.main:app \
     --host "$HOST" \
     --port "$PORT" \
     --workers "$WORKERS" \

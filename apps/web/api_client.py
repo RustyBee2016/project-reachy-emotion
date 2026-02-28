@@ -513,6 +513,69 @@ def request_generation(prompt: str, correlation_id: str, params: Optional[Dict[s
     return resp.json()
 
 
+@retry_on_failure()
+def launch_ml_run(
+    *,
+    mode: str = "train",
+    run_id: Optional[str] = None,
+    config_path: Optional[str] = None,
+    checkpoint: Optional[str] = None,
+    test_data_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Launch a training, validation, or test run on the backend.
+
+    Args:
+        mode: 'train', 'validate', or 'test'
+        run_id: Optional run identifier (auto-generated if omitted)
+        config_path: Path to training YAML config (relative to project root)
+        checkpoint: Checkpoint path (required for validate/test unless default exists)
+        test_data_dir: Override test data directory (defaults to AffectNet test dataset for test mode)
+
+    Returns:
+        Response dict with run_id, status, pid, and message
+    """
+    url = f"{_base_url()}/api/v1/training/launch"
+    payload: Dict[str, Any] = {"mode": mode}
+    if run_id:
+        payload["run_id"] = run_id
+    if config_path:
+        payload["config_path"] = config_path
+    if checkpoint:
+        payload["checkpoint"] = checkpoint
+    if test_data_dir:
+        payload["test_data_dir"] = test_data_dir
+
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def get_training_log(run_id: str, mode: str = "train", tail: int = 100) -> str:
+    """Read the tail of a training run's log file.
+
+    This is a convenience helper that reads the log file locally if available,
+    or returns an empty string if not found.
+    """
+    import subprocess
+    log_name = f"{run_id}_{mode}.log"
+    log_path = f"logs/{log_name}"
+    try:
+        result = subprocess.run(
+            ["tail", f"-n{tail}", log_path],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.stdout
+    except Exception:
+        return ""
+
+
 def reject_video(video_id: str, correlation_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
     url = f"{_gateway_base()}/api/privacy/redact/{video_id}"
     payload: Dict[str, Any] = {"correlation_id": correlation_id}

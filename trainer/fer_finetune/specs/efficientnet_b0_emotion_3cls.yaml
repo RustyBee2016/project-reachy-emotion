@@ -20,7 +20,7 @@ model:
 
 # Data settings
 data:
-  data_root: /media/project_data/reachy_emotion/videos
+  data_root: /media/rusty_admin/project_data/reachy_emotion/videos
   train_dir: train
   val_dir: test
   batch_size: 32

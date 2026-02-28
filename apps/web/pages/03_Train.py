@@ -260,6 +260,74 @@ with action_col5:
         st.info("Generated run ID. Leave empty to auto-generate the next run_xxxx on the backend.")
 
 st.divider()
+st.subheader("ML Runs — EfficientNet-B0 (Frozen Backbone)")
+st.caption(
+    "Launch training, validation, or test runs using the EfficientNet-B0 model "
+    "with HSEmotion pretrained weights (`enet_b0_8_best_vgaf`). "
+    "All runs use frozen-backbone settings from `efficientnet_b0_emotion_3cls.yaml`."
+)
+
+ml_run_id = st.text_input(
+    "ML Run ID (auto-generated if empty)",
+    value=st.session_state.get("train_run_id", ""),
+    key="ml_run_id_input",
+)
+ml_checkpoint = st.text_input(
+    "Checkpoint path (required for Validate/Test; defaults to best_model.pth)",
+    value="/workspace/checkpoints/efficientnet_b0_3cls/best_model.pth",
+    key="ml_checkpoint_input",
+)
+
+AFFECTNET_TEST_DIR = "/videos/test/affectnet_test_dataset"
+
+
+def _launch_ml_run(mode: str) -> None:
+    """Trigger a training, validation, or test run via the backend."""
+    try:
+        resp = api_client.launch_ml_run(
+            mode=mode,
+            run_id=ml_run_id or None,
+            checkpoint=ml_checkpoint or None,
+            test_data_dir=AFFECTNET_TEST_DIR if mode == "test" else None,
+        )
+        st.success(f"{mode.capitalize()} run launched: {resp.get('run_id', 'unknown')}")
+        st.json(resp)
+    except Exception as exc:  # noqa: BLE001
+        if "422" in str(exc) and "checkpoint" in str(exc).lower():
+            st.error(
+                "No checkpoint found. Run a training job first, or provide "
+                "an explicit checkpoint path above."
+            )
+        elif "404" in str(exc):
+            st.error(
+                "Training launch endpoint not found. Restart the Media Mover API "
+                "with the latest code, then retry."
+            )
+        else:
+            st.error(f"{mode.capitalize()} run failed to launch: {exc}")
+
+
+ml_col1, ml_col2, ml_col3 = st.columns(3)
+with ml_col1:
+    st.markdown("**Training Run**")
+    st.caption("Full pipeline: train → evaluate → Gate A")
+    if st.button("🚀 Start Training", use_container_width=True, type="primary"):
+        _launch_ml_run("train")
+
+with ml_col2:
+    st.markdown("**Validation Run**")
+    st.caption("Evaluate checkpoint on validation split")
+    if st.button("📊 Start Validation", use_container_width=True):
+        _launch_ml_run("validate")
+
+with ml_col3:
+    st.markdown("**Test Run (AffectNet)**")
+    st.caption(f"Evaluate on `{AFFECTNET_TEST_DIR}`")
+    if st.button("🧪 Start Test", use_container_width=True):
+        _launch_ml_run("test")
+
+
+st.divider()
 st.subheader("Training Status")
 pipeline_id = st.text_input("Pipeline ID", value=st.session_state.get("train_run_id", ""))
 if st.button("Refresh Training Status"):

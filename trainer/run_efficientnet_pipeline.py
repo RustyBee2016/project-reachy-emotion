@@ -263,6 +263,12 @@ def main() -> int:
     from trainer.gate_a_validator import GateAThresholds, evaluate_predictions
 
     config = TrainingConfig.from_yaml(args.config)
+
+    # Allow env-var override of the evaluation data root (used by test mode)
+    test_data_dir = os.getenv("REACHY_TEST_DATA_DIR")
+    if test_data_dir and args.skip_train:
+        config.data.data_root = test_data_dir
+
     contract_client: Optional[GatewayContractClient] = None
     if not args.no_contract_updates:
         contract_client = GatewayContractClient(base_url=args.gateway_base)

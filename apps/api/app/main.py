@@ -32,6 +32,7 @@ from .routers import (
     media_v1,
     metrics,
     promote,
+    training_control,
     websocket_cues,
 )
 from .config import load_and_validate_config
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(gateway_upstream.router)
     app.include_router(ingest.router)
+    app.include_router(training_control.router)
     
     # Register legacy routers for backward compatibility if enabled.
     if config.enable_legacy_endpoints:
