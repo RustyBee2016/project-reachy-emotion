@@ -77,6 +77,7 @@ Before starting, ensure you have:
 | [08_QUICK_START_HANDS_ON.md](08_QUICK_START_HANDS_ON.md) | First Inference & Training | 30-45 min | Beginner |
 | [09_WEB_UI_DATA_WORKFLOW.md](09_WEB_UI_DATA_WORKFLOW.md) | Web UI for Data Curation | 1-2 hours | Beginner |
 | [10_WORKED_EXAMPLE_COMPLETE_RUN.md](10_WORKED_EXAMPLE_COMPLETE_RUN.md) | Complete Training Reference | Reference | Intermediate |
+| [03_hsemotion_finetuning_lessons.md](03_hsemotion_finetuning_lessons.md) | 5-Lesson Line-by-Line HSEmotion Training Curriculum | 1-2 days | Beginner |
 
 ### Advanced Topics (Production)
 
