@@ -63,7 +63,7 @@ def _table_names(url: str) -> list[str]:
 def _index_names(url: str, table: str) -> set[str]:
     engine = create_engine(url, future=True)
     try:
-        return {idx["name"] for idx in inspect(engine).get_indexes(table)}
+        return {idx["name"] for idx in inspect(engine).get_indexes(table) if idx["name"]}
     finally:
         engine.dispose()
 
@@ -80,8 +80,27 @@ def test_migration_upgrade_and_downgrade(tmp_path, dialect: str) -> None:
     tables = set(_table_names(url))
     assert EXPECTED_TABLES <= tables, f"Missing tables: {EXPECTED_TABLES - tables}"
 
-    # --- Verify composite indexes (R3, R4) ---
+    # --- Verify backfilled single-column indexes ---
     video_indexes = _index_names(url, "video")
+    assert "ix_video_split" in video_indexes
+    assert "ix_video_label" in video_indexes
+
+    tr_indexes = _index_names(url, "training_run")
+    assert "ix_training_run_status" in tr_indexes
+    assert "ix_training_run_created" in tr_indexes
+
+    pl_indexes = _index_names(url, "promotion_log")
+    assert "ix_promotion_log_idempotency" in pl_indexes
+
+    # --- Verify video.zfs_snapshot column (000007) ---
+    engine = create_engine(url, future=True)
+    try:
+        video_cols = {c["name"] for c in inspect(engine).get_columns("video")}
+    finally:
+        engine.dispose()
+    assert "zfs_snapshot" in video_cols, "video.zfs_snapshot column missing after upgrade"
+
+    # --- Verify new composite indexes (R3, R4) ---
     assert "ix_video_split_label" in video_indexes
 
     frame_indexes = _index_names(url, "extracted_frame")

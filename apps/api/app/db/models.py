@@ -56,6 +56,9 @@ class Video(TimestampMixin, Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    zfs_snapshot: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
 
     promotions: Mapped[List["PromotionLog"]] = relationship(
         back_populates="video",
@@ -262,7 +265,7 @@ class LabelEvent(Base):
     """Audit log for labeling actions (Labeling Agent - Agent 2)."""
     __tablename__ = "label_event"
 
-    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     video_id: Mapped[Optional[str]] = mapped_column(
         String(36),
         ForeignKey("video.video_id", ondelete="SET NULL"),
@@ -297,7 +300,7 @@ class DeploymentLog(Base):
     """Tracks model deployments (Deployment Agent - Agent 7)."""
     __tablename__ = "deployment_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     engine_path: Mapped[str] = mapped_column(String(500), nullable=False)
     model_version: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     target_stage: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -337,7 +340,7 @@ class AuditLog(Base):
     """General audit log for privacy operations (Privacy Agent - Agent 8)."""
     __tablename__ = "audit_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False, default="video")
     entity_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
@@ -364,7 +367,7 @@ class ObsSample(Base):
     """Time-series metrics storage (Observability Agent - Agent 9)."""
     __tablename__ = "obs_samples"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
@@ -385,7 +388,7 @@ class ReconcileReport(Base):
     """Filesystem/database reconciliation reports (Reconciler Agent - Agent 4)."""
     __tablename__ = "reconcile_report"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,

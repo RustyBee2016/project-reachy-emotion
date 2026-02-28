@@ -100,17 +100,37 @@ Acceptance checks:
 - No unmanaged extra objects remain for active runtime schema.
 - ORM + Alembic + live DB all agree on `run_link` and `video.zfs_snapshot`.
 
-## Execution Status (Updated 2026-02-27)
+## Execution Status (Updated 2026-02-28)
 
-The planned revisions A/B/C were superseded by the actual implementation:
+The planned revisions A/B/C were superseded by the actual implementation, plus a
+fourth migration to close constraint drift gaps discovered during live DB verification:
 
 | Planned | Actual Migration | Status |
 |---------|-----------------|--------|
 | Revision A (constraints/indexes) | `20260227_000004_composite_indexes.py` | ✅ Implemented |
 | Revision B (agent tables) | `20260227_000005_missing_orm_tables.py` | ✅ Implemented |
 | Revision C (legacy alignment) | `20260227_000006_cleanup_view_trigger.py` | ✅ Implemented |
+| Constraint reconciliation | `20260228_000007_constraint_reconciliation.py` | ✅ Implemented |
 
-Additional work completed beyond the original plan:
+### Migration 000007 — Constraint Reconciliation Details
+
+Addresses live DB drift that migrations 000004–000006 did not cover:
+
+1. **Gap 1 — `video` constraint swap:**
+   - Drops legacy `ck_video_split` (allowed `temp, train, test` only, no label policy)
+   - Adds `chk_video_split_label_policy` with full split↔label enforcement + `purged` split
+   - Uses `NOT VALID` + `VALIDATE CONSTRAINT` for safety
+
+2. **Gap 2 — `promotion_log` constraint tightening:**
+   - Replaces `promotion_log_from_split_check` → `chk_promotion_from_split` (4-value: `temp|train|test|purged`)
+   - Replaces `promotion_log_to_split_check` → `chk_promotion_to_split` (4-value)
+   - Replaces `promotion_log_intended_label_check` → `chk_promotion_intended_label` (3-class: `neutral|happy|sad`)
+
+3. **Gap 3 — `video.zfs_snapshot` ORM adoption:**
+   - `ADD COLUMN IF NOT EXISTS` (no-op on live DB where column already exists)
+   - `Video` ORM model updated with `zfs_snapshot: Mapped[Optional[str]]`
+
+### Additional work completed beyond the original plan:
 - `RunLink` ORM model added to `models.py` (not just compatibility table — full model)
 - `dataset_all` data migration (R6)
 - `updated_at` trigger function (R7, PostgreSQL only)
@@ -118,6 +138,8 @@ Additional work completed beyond the original plan:
 - Legacy SQL files `002` and `003` formally deprecated with headers
 - Backup file `api_client_BAK.py` deleted
 - Test scripts updated to remove `dataset_all` references
+- `BigInteger` → `Integer` for Phase 3 ORM model PKs (SQLite autoincrement fix)
+- 5 missing single-column indexes backfilled in migration 000004
 
 ## Original Execution Order and Gates (Superseded)
 1. Gate A: approve this plan document.

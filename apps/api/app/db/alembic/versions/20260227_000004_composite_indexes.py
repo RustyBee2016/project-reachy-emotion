@@ -1,7 +1,14 @@
-"""Add composite indexes for Phase 1 statistical queries.
+"""Reconcile missing indexes and add composite indexes for Phase 1.
 
-- ix_video_split_label on video(split, label) — label distribution queries
-- ix_extracted_frame_run_label on extracted_frame(run_id, label) — per-run stats
+Backfills single-column indexes that were defined in the initial migration
+but never created on the live DB (bootstrapped from legacy SQL):
+- ix_video_split, ix_video_label
+- ix_training_run_status, ix_training_run_created
+- ix_promotion_log_idempotency
+
+Adds new composite indexes for Phase 1 statistical queries:
+- ix_video_split_label on video(split, label)
+- ix_extracted_frame_run_label on extracted_frame(run_id, label)
 
 Revision ID: 20260227_000004
 Revises: 20260223_000003
@@ -33,6 +40,21 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
+    # --- Backfill missing single-column indexes from initial migration ---
+    # These were defined in 202510280000 but never applied to the live DB
+    # because it was bootstrapped from legacy SQL then stamped at head.
+    if not _index_exists(inspector, "video", "ix_video_split"):
+        op.create_index("ix_video_split", "video", ["split"])
+    if not _index_exists(inspector, "video", "ix_video_label"):
+        op.create_index("ix_video_label", "video", ["label"])
+    if not _index_exists(inspector, "training_run", "ix_training_run_status"):
+        op.create_index("ix_training_run_status", "training_run", ["status"])
+    if not _index_exists(inspector, "training_run", "ix_training_run_created"):
+        op.create_index("ix_training_run_created", "training_run", ["created_at"])
+    if not _index_exists(inspector, "promotion_log", "ix_promotion_log_idempotency"):
+        op.create_index("ix_promotion_log_idempotency", "promotion_log", ["idempotency_key"])
+
+    # --- New composite indexes (R3, R4) ---
     # R3: composite index (split, label) on video for label distribution queries
     if not _index_exists(inspector, "video", "ix_video_split_label"):
         op.create_index("ix_video_split_label", "video", ["split", "label"])
@@ -47,5 +69,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_extracted_frame_run_label", table_name="extracted_frame")
-    op.drop_index("ix_video_split_label", table_name="video")
+    # Only drop the NEW composite indexes introduced by this migration.
+    # The backfilled single-column indexes (ix_video_split, ix_video_label,
+    # ix_training_run_status, ix_training_run_created, ix_promotion_log_idempotency)
+    # are also defined in the initial migration (202510280000) which handles
+    # dropping them in its own downgrade.  Dropping them here would conflict
+    # on SQLite where the initial migration already creates them.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    for table, idx in [
+        ("extracted_frame", "ix_extracted_frame_run_label"),
+        ("video", "ix_video_split_label"),
+    ]:
+        if _index_exists(inspector, table, idx):
+            op.drop_index(idx, table_name=table)
