@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import (
@@ -31,6 +31,11 @@ try:  # pragma: no cover - SQLAlchemy 2.0+ provides `sqlalchemy.Uuid`
     from sqlalchemy import Uuid as SAUuid
 except ImportError:  # pragma: no cover
     SAUuid = PGUUID  # fallback for older SQLAlchemy versions
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now, replacing deprecated datetime.utcnow()."""
+    return datetime.now(timezone.utc)
 
 
 class Video(TimestampMixin, Base):
@@ -279,7 +284,7 @@ class LabelEvent(Base):
     correlation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=_utcnow,
         nullable=False,
     )
 
@@ -306,7 +311,7 @@ class DeploymentLog(Base):
     target_stage: Mapped[str] = mapped_column(String(50), nullable=False)
     deployed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=_utcnow,
         nullable=False,
     )
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
@@ -350,7 +355,7 @@ class AuditLog(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=_utcnow,
         nullable=False,
     )
     extra_data: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict, nullable=True)
@@ -370,7 +375,7 @@ class ObsSample(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=_utcnow,
         nullable=False,
     )
     src: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -391,7 +396,7 @@ class ReconcileReport(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=_utcnow,
         nullable=False,
     )
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)

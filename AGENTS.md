@@ -48,7 +48,7 @@ Conflicts between automation and policy defer to the human project owner (Russ).
   PostgreSQL 16 cluster (local) at `10.0.4.130:5432` using the `reachy_dev` role against the `reachy_emotion` database. Stores metadata, video URLs, hashes, and promotion logs.  
 - **Storage:**  
   Local SSD under `/media/project_data/reachy_emotion/videos/` with subfolders:  
-  `temp/`, `dataset_all/`, `train/`, `test/`, `thumbs/`, and `manifests/`.  
+  `temp/`, `train/`, `test/`, `thumbs/`, and `manifests/`.  
 - **Networking:**  
   Static LAN IPs — Ubuntu 1 (10.0.4.130), Ubuntu 2 (10.0.4.140), Jetson (10.0.4.150).  
 - **Model:**  
@@ -85,19 +85,19 @@ Manage user-assisted classification and dataset promotion.
 
 **Updated Responsibilities (v08.4.2):**
 - Enforce 3-class labeling policy (`happy`, `sad`, `neutral`) for accepted clips.  
-- Stage accepted clips from `videos/temp/` into `videos/dataset_all/` with explicit labels.  
+- Stage accepted clips from `videos/temp/` into `videos/train/<emotion_label>` with explicit labels.  
 - Enforce the **no-label rule** for sampled `test` outputs.  
 - Interface with the web UI to update per-class counts and 1:1:1 balance status (happy, sad, neutral).  
 - Coordinate with the Database API to apply the `chk_split_label` constraint and maintain per-split quotas.  
-- Log each promotion event (`temp → dataset_all`, then sampling events to `train/test`) with `intended_emotion`, timestamp, and `sha256`.  
+- Log each promotion event (`temp → train/<emotion_label>`, then sampling events to `train/test`) with `intended_emotion`, timestamp, and `sha256`.  
 
 ### Agent 3 — Promotion / Curation Agent
 **Purpose:**  
 Oversee controlled movement of media between filesystem stages.
 
 **Updated Responsibilities:**
-- Stage accepted clips into `videos/dataset_all/` using `POST /api/v1/promote/stage`.  
-- Orchestrate per-run randomized sampling into `videos/train/` and `videos/test/` using `POST /api/v1/promote/sample`.  
+- Promote accepted clips directly into `videos/train/<emotion_label>/` using `POST /api/v1/media/promote` (canonical endpoint). Legacy `/api/v1/promote/stage` is a deprecated shim that returns an error.  
+- Orchestrate per-run frame extraction and train/valid splitting via `DatasetPreparer` into `videos/train/run/<run_ID>/train_ds_<run_ID>/` and `videos/train/run/<run_ID>/valid_ds_<run_ID>/`. Legacy `/api/v1/promote/sample` is a deprecated shim that returns an error.  
 - Verify `label IS NULL` policy for sampled `test` outputs and class-balance constraints across all 3 classes.  
 - Keep promotion state synchronized with filesystem operations and audit logs.  
 - Notify the UI of the updated ratio and readiness status (via WebSocket or polling).  
@@ -241,7 +241,7 @@ Execute physical gestures on the Reachy Mini robot based on emotion context and 
 ## Orchestration Policy
 - **Retries:** Exponential backoff with jitter; `max_attempts = 5` for transient errors.  
 - **Idempotency:** All write operations (promotion, delete, train) must include `Idempotency-Key`.  
-  - Staging/sampling calls use Media Mover promote v1 endpoints (`POST /api/v1/promote/stage`, `POST /api/v1/promote/sample`) with compatibility fallback support only where required.
+  - Promotion calls use `POST /api/v1/media/promote` (canonical) with legacy `/api/media/promote` fallback. The old `/api/v1/promote/stage` and `/api/v1/promote/sample` endpoints are deprecated shims (raise `PromotionValidationError`).
 - **Circuit Breakers:** Trip on high latency or error spikes to protect upstreams (e.g. LM Studio).  
 - **Queue Discipline:** Default FIFO per agent; limit concurrency per agent role.  
 - **Dead Letter Queue:** Failed tasks beyond retries require human review.  
@@ -250,7 +250,7 @@ Execute physical gestures on the Reachy Mini robot based on emotion context and 
 ---
 
 ## Approval Rules
-- **Dataset Promotions:** Require human confirmation (`temp → dataset_all`, then run-scoped sampling to `train/test`).  
+- **Dataset Promotions:** Require human confirmation (`temp → train/<emotion_label>/` via promote endpoint, then run-scoped frame extraction to `train/run/<run_ID>/train_ds_<run_ID>/` and `train/run/<run_ID>/valid_ds_<run_ID>/` via DatasetPreparer).  
 - **Model Deployments:** Require two-stage approval (`shadow → canary`, `canary → rollout`).  
 - **Privacy Policy Changes:** Require explicit owner consent.  
 

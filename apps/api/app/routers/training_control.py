@@ -33,12 +33,21 @@ router = APIRouter(tags=["training-control"])
 # ---------------------------------------------------------------------------
 _DEFAULT_CONFIG_YAML = "trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml"
 _DEFAULT_OUTPUT_DIR = "stats/results"
-_DEFAULT_CHECKPOINT_DIR = "/media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls"
-_AFFECTNET_TEST_DATASET = "/media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset"
-_DATA_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos"
-_RUN_DIR = "/media/rusty_admin/project_data/reachy_emotion/videos/train/run"
 _TRAIN_FRACTION = 0.9
 _VAL_FRACTION = 0.1
+
+
+def _default_checkpoint_dir(config: AppConfig) -> Path:
+    """Checkpoint directory derived from config.videos_root's parent."""
+    return config.videos_root.parent / "checkpoints" / "efficientnet_b0_3cls"
+
+
+def _affectnet_test_dataset(config: AppConfig) -> Path:
+    return config.test_path / "affectnet_test_dataset"
+
+
+def _run_dir(config: AppConfig) -> Path:
+    return config.train_path / "run"
 
 
 def _project_root() -> Path:
@@ -46,21 +55,16 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
-def _next_run_id() -> str:
-    """Generate the next sequential run_XXXX ID by scanning existing run dirs."""
-    run_dir = Path(_RUN_DIR)
-    if not run_dir.exists():
-        return "run_0001"
-    existing = []
-    for d in run_dir.iterdir():
-        if d.is_dir() and d.name.startswith("run_"):
-            try:
-                num = int(d.name.split("_", 1)[1])
-                existing.append(num)
-            except (ValueError, IndexError):
-                continue
-    next_num = max(existing, default=0) + 1
-    return f"run_{next_num:04d}"
+def _next_run_id(config: AppConfig) -> str:
+    """Generate the next sequential run_XXXX ID.
+
+    Delegates to ``DatasetPreparer.resolve_run_id()`` so that training
+    control and dataset preparation always agree on the next identifier.
+    """
+    from trainer.prepare_dataset import DatasetPreparer  # lazy to avoid heavy cv2 import at module load
+
+    preparer = DatasetPreparer(str(config.videos_root))
+    return preparer.resolve_run_id(None)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +135,7 @@ async def launch_training(
             detail={"error": "invalid_mode", "message": f"mode must be train, validate, or test; got '{mode}'"},
         )
 
-    run_id = (body.run_id or "").strip() or _next_run_id()
+    run_id = (body.run_id or "").strip() or _next_run_id(config)
     config_path = body.config_path or _DEFAULT_CONFIG_YAML
     project_root = _project_root()
 
@@ -139,7 +143,7 @@ async def launch_training(
     checkpoint = body.checkpoint
     if mode in {"validate", "test"} and not checkpoint:
         # Default to best_model.pth in standard checkpoint dir
-        default_ckpt = Path(_DEFAULT_CHECKPOINT_DIR) / "best_model.pth"
+        default_ckpt = _default_checkpoint_dir(config) / "best_model.pth"
         if default_ckpt.exists():
             checkpoint = str(default_ckpt)
         else:
@@ -176,7 +180,7 @@ async def launch_training(
     # or we patch the config YAML on the fly.  Simpler: use an env override.
     env = {**os.environ}
     if mode == "test":
-        test_dir = body.test_data_dir or _AFFECTNET_TEST_DATASET
+        test_dir = body.test_data_dir or str(_affectnet_test_dataset(config))
         env["REACHY_TEST_DATA_DIR"] = test_dir
 
     if mode == "validate" and body.test_data_dir:
@@ -187,7 +191,7 @@ async def launch_training(
     now = datetime.now(timezone.utc)
     row = await session.get(models.TrainingRun, run_id)
     if row is None:
-        run_data_path = str(Path(_RUN_DIR) / run_id) if mode == "train" else None
+        run_data_path = str(_run_dir(config) / run_id) if mode == "train" else None
         row = models.TrainingRun(
             run_id=run_id,
             strategy=f"web_ui_{mode}",

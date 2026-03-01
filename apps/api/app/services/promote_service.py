@@ -242,7 +242,7 @@ class PromoteService:
         if strategy not in {"balanced_random"}:
             raise PromotionValidationError(f"Unsupported sampling strategy '{strategy}'.")
 
-    def _balanced_sample(
+    def _balanced_sample(  # DEAD CODE — retained for reference; unreachable via deprecated sample_split()
         self,
         candidates: Sequence[VideoRecord],
         desired_total: int,

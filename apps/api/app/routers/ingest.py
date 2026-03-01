@@ -13,7 +13,7 @@ import os
 import re
 import subprocess
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -922,9 +922,8 @@ async def register_local_video(
         thumb_path = config.thumbs_path / f"{video_id}.jpg"
         await generate_thumbnail(file_path, thumb_path)
 
-        # NOTE: production databases can have legacy timestamp columns without defaults;
-        # insert explicit UTC-naive timestamps for cross-schema compatibility.
-        now = datetime.utcnow()
+        # NOTE: insert explicit timezone-aware UTC timestamps.
+        now = datetime.now(timezone.utc)
         insert_values = {
             "video_id": video_id,
             "file_path": stored_rel_path,

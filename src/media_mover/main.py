@@ -1,7 +1,15 @@
 """Ubuntu 1 — Media Mover API (FastAPI)
 
-Responsible for safe file promotions from /videos/temp → /videos/{train|test}.
-This is a stub implementation that only validates input and simulates success.
+⚠️  STUB — NOT USED IN PRODUCTION.
+The production promote handler lives in ``apps/api/routers/media.py`` and is
+served by the main FastAPI application (``apps/api/app/main.py``).
+
+This stub validates input and simulates success but does NOT perform real
+file moves or database updates.  It also computes an incorrect destination
+path for train promotions (missing ``/<label>/`` subdirectory).
+
+Retained only for early-stage integration smoke-tests against external
+callers (e.g. n8n workflow dry-runs).
 """
 from __future__ import annotations
 

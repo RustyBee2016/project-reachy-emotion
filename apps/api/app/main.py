@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
+import httpx
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.error(f"Configuration validation failed: {e}")
         raise
     
+    # Create a shared HTTP client for gateway proxy operations.
+    app.state.http_client = httpx.AsyncClient()
+    logger.info("Shared httpx.AsyncClient created")
+
     # Start thumbnail watcher service (for temp thumbnails).
     try:
         _thumbnail_watcher = ThumbnailWatcherService(
@@ -77,6 +83,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     
     yield
     
+    # Cleanup: close shared HTTP client.
+    if hasattr(app.state, "http_client") and app.state.http_client is not None:
+        await app.state.http_client.aclose()
+        logger.info("Shared httpx.AsyncClient closed")
+
     # Cleanup: stop thumbnail watcher.
     if _thumbnail_watcher:
         try:

@@ -64,7 +64,7 @@ class VideoRepository:
         rows = (await self._session.execute(stmt)).scalars().all()
         return [self._to_record(row) for row in rows]
 
-    async def fetch_train_pool_for_sampling(
+    async def fetch_train_pool_for_sampling(  # DEAD CODE — retained for reference
         self,
         *,
         exclude_ids: Collection[str] | None = None,
@@ -72,7 +72,8 @@ class VideoRepository:
         """Compatibility hook retained for deprecated sample endpoint.
 
         Runtime sampling now relies on run-scoped frame dataset preparation
-        from train/<label> sources.
+        from train/<label> sources.  This method is unreachable because
+        ``PromoteService.sample_split()`` raises before invoking it.
         """
 
         _ = exclude_ids

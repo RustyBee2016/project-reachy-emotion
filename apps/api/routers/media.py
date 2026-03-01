@@ -6,8 +6,9 @@ import logging
 import shutil
 import subprocess
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Dict, List
 
 from fastapi import Depends, APIRouter, HTTPException, Request, Query
@@ -19,6 +20,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from ..app.config import AppConfig, get_config
 from ..app.db.models import PromotionLog, Video
 from ..app.deps import get_db
+from ..app.fs import FileMover, FileMoverError
+from ..app.metrics import (
+    PROMOTION_FILESYSTEM_FAILURES,
+    PROMOTION_OPERATION_COUNTER,
+    PROMOTION_OPERATION_DURATION,
+)
 from ..app.routers import health as health_router
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,7 +63,7 @@ async def promote(
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     body: Dict[str, Any] = await request.json()
-    legacy_path_used = request.url.path.endswith(LEGACY_PROMOTE_PATH) and not request.url.path.endswith(CANONICAL_PROMOTE_PATH)
+    legacy_path_used = request.url.path == LEGACY_PROMOTE_PATH
 
     payload = body
     adapter_mode = "legacy"
@@ -195,8 +202,10 @@ async def promote(
                 if not temp_root.exists() or not temp_root.is_dir():
                     continue
                 for stem in candidate_stems:
+                    _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
                     wildcard_matches = sorted(
-                        [p for p in temp_root.glob(f"{stem}.*") if p.is_file()],
+                        [p for p in temp_root.glob(f"{stem}.*")
+                         if p.is_file() and p.suffix.lower() in _VIDEO_EXTENSIONS],
                         key=lambda p: str(p),
                     )
                     if wildcard_matches:
@@ -214,8 +223,16 @@ async def promote(
             with existing_path.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
+            logger.warning(
+                "media_mover_promote_auto_register",
+                extra={
+                    "file_path": str(existing_path),
+                    "correlation_id": payload.get("correlation_id", ""),
+                    "message": "Auto-registering file found on disk; bypasses ingest agent metadata extraction",
+                },
+            )
             video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             new_video_id = str(uuid.uuid4())
             insert_values = {
                 "video_id": new_video_id,
@@ -270,6 +287,36 @@ async def promote(
             },
         )
 
+    # --- Idempotency check (FIX #4) ---
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if idempotency_key:
+        existing_log = (await db.execute(
+            select(PromotionLog).where(PromotionLog.idempotency_key == idempotency_key)
+        )).scalar_one_or_none()
+        if existing_log is not None:
+            cached_video = await db.get(Video, existing_log.video_id)
+            cached_dst = str(config.videos_root / cached_video.file_path) if cached_video else ""
+            logger.info(
+                "media_mover_promote_idempotent_replay",
+                extra={
+                    "idempotency_key": idempotency_key,
+                    "video_id": existing_log.video_id,
+                    "correlation_id": payload.get("correlation_id", ""),
+                },
+            )
+            return _promote_json_response(
+                status_code=200,
+                legacy_path_used=legacy_path_used,
+                content={
+                    "status": "ok",
+                    "video_id": existing_log.video_id,
+                    "dst": cached_dst,
+                    "dry_run": False,
+                    "adapter_mode": adapter_mode,
+                    "idempotent_replay": True,
+                },
+            )
+
     src = config.videos_root / str(video.file_path)
     dst_name = Path(str(video.file_path)).name
     if target_split == "train":
@@ -288,7 +335,7 @@ async def promote(
     dry_run = bool(payload.get("dry_run", body.get("dry_run", False)))
 
     logger.info(
-        "media_mover_promote_stub",
+        "media_mover_promote_request",
         extra={
             "clip": clip,
             "target": payload["target"],
@@ -325,8 +372,69 @@ async def promote(
             },
         )
 
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dst))
+    # --- Atomic file move via FileMover (FIX #10) with Prometheus metrics ---
+    # DESIGN NOTE (FIX #3): The file is moved *before* the DB commit. If the
+    # process crashes between the move and the commit, the filesystem and
+    # database will be out of sync. This is an accepted trade-off: the
+    # Reconciler Agent (Agent 4) detects and repairs such drift during its
+    # scheduled reconciliation runs.  The structured "promote_pending" /
+    # "promote_committed" log pair below enables the reconciler to identify
+    # incomplete promotions by searching for "pending" entries without a
+    # matching "committed" entry.
+    logger.info(
+        "media_mover_promote_pending",
+        extra={
+            "video_id": video_id,
+            "from_split": str(getattr(video.split, "value", video.split)),
+            "to_split": target_split,
+            "label": train_label,
+            "correlation_id": payload.get("correlation_id", ""),
+        },
+    )
+    file_mover = FileMover(config.videos_root)
+    transition = None
+    promote_start = perf_counter()
+    try:
+        if target_split == "train" and train_label:
+            transition = file_mover.stage_to_train(
+                video_id=video_id,
+                file_path=str(video.file_path),
+                label=train_label,
+            )
+        else:
+            # For test split, use direct move (FileMover.stage_to_train is train-specific)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(src, dst)
+            transition = None  # no FileMover transition to rollback for test
+        PROMOTION_OPERATION_COUNTER.labels(action="promote", outcome="success").inc()
+    except FileMoverError as exc:
+        PROMOTION_OPERATION_COUNTER.labels(action="promote", outcome="error").inc()
+        PROMOTION_FILESYSTEM_FAILURES.labels(action="promote").inc()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "filesystem_error",
+                "message": str(exc),
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        ) from exc
+    except OSError as exc:
+        PROMOTION_OPERATION_COUNTER.labels(action="promote", outcome="error").inc()
+        PROMOTION_FILESYSTEM_FAILURES.labels(action="promote").inc()
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "filesystem_error",
+                "message": f"File move failed: {exc}",
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        ) from exc
+    finally:
+        PROMOTION_OPERATION_DURATION.labels(action="promote").observe(perf_counter() - promote_start)
+
+    # Compute actual destination from transition or manual move
+    if transition is not None:
+        dst = config.videos_root / transition.destination
 
     from_split = str(getattr(video.split, "value", video.split))
     video.split = target_split
@@ -339,9 +447,10 @@ async def promote(
             from_split=from_split,
             to_split=target_split,
             intended_label=train_label if target_split == "train" else None,
-            actor="gateway_legacy_promote",
+            actor="media_mover_promote",
             dry_run=False,
             success=True,
+            idempotency_key=idempotency_key,
             correlation_id=payload.get("correlation_id"),
             extra_data={"adapter_mode": adapter_mode},
         )
@@ -350,10 +459,13 @@ async def promote(
         await db.commit()
     except SQLAlchemyError as exc:
         await db.rollback()
+        # Compensating rollback: reverse the file move
         try:
-            if dst.exists() and not src.exists():
+            if transition is not None:
+                file_mover.rollback([transition])
+            elif dst.exists() and not src.exists():
                 src.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(dst), str(src))
+                os.replace(dst, src)
         except Exception:
             logger.exception(
                 "media_mover_promote_compensation_failed",
@@ -372,6 +484,18 @@ async def promote(
                 "correlation_id": payload.get("correlation_id", ""),
             },
         ) from exc
+
+    logger.info(
+        "media_mover_promote_committed",
+        extra={
+            "video_id": video_id,
+            "from_split": from_split,
+            "to_split": target_split,
+            "label": train_label,
+            "dst": str(dst),
+            "correlation_id": payload.get("correlation_id", ""),
+        },
+    )
 
     return _promote_json_response(
         status_code=200,

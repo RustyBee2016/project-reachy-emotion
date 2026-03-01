@@ -331,6 +331,19 @@ class DatasetPreparer:
         extracted: List[Dict[str, str]] = []
         run_root = self.train_runs_path / run_id
         if run_root.exists():
+            # Guard: refuse to overwrite a run that has already been split
+            # into train/valid datasets.  Call prune_run_artifacts() first
+            # if intentional re-extraction is needed.
+            completed_markers = [
+                d for d in run_root.iterdir()
+                if d.is_dir() and (d.name.startswith("train_ds_") or d.name.startswith("valid_ds_"))
+            ]
+            if completed_markers:
+                raise ValueError(
+                    f"Run {run_id} already contains split datasets "
+                    f"({', '.join(d.name for d in completed_markers)}). "
+                    f"Call prune_run_artifacts('{run_id}') before re-extracting."
+                )
             shutil.rmtree(run_root)
         run_root.mkdir(parents=True, exist_ok=True)
 
@@ -688,6 +701,16 @@ class DatasetPreparer:
     def calculate_dataset_hash(self, run_id: Optional[str] = None) -> str:
         """
         Calculate SHA256 hash of dataset for reproducibility.
+
+        NOTE: This hash is based on *relative file paths and file sizes*, not
+        file contents.  This is a deliberate speed-vs-accuracy trade-off:
+        hashing large image sets by content is slow, while path+size is fast
+        and sufficient to detect structural changes (added/removed/renamed
+        files or significant content edits).  Two files at the same path with
+        identical sizes but different pixel data will produce the same hash.
+        For Gate A reproducibility audits requiring content-level guarantees,
+        consider extending this method with an optional ``hash_contents=True``
+        parameter.
         
         Returns:
             Hex string of dataset hash

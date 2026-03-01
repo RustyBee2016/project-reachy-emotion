@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-02-28
+**Last Updated**: 2026-02-28 (promotion pipeline audit fixes applied)
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -14,6 +14,7 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## Key Design Decisions
+- **[Decision: Promotion Pipeline Audit & Fixes](./decisions/008-promotion-pipeline-audit-fixes.md)** — 14 fixes across media.py, gateway, training control, DatasetPreparer, DB models (2026-02-28).
 - **[Decision: Reachy Gesture & LLM Integration](./decisions/007-reachy-gesture-llm-integration.md)** — GPT-5.2 empathetic responses with gesture keyword system for Reachy Mini (2026-01-11).
 - **[Decision: ResNet-50 AffectNet+RAF-DB Model](./decisions/006-resnet50-affectnet-rafdb.md)** — Replaced EmotionNet with ResNet-50 pretrained on FER datasets (2025-11-29).
 - **[Decision: Endpoint System v1 Rewrite](./decisions/005-endpoint-system-v1.md)** — Centralized config, versioned API, standardized responses, retry logic (2025-11-14).

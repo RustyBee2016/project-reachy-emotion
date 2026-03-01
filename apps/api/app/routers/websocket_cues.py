@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -141,13 +141,14 @@ def create_cue_message(
     Returns:
         Cue message dictionary
     """
-    expires_at = (datetime.utcnow() + timedelta(seconds=expires_in_seconds)).isoformat() + "Z"
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(seconds=expires_in_seconds)).isoformat()
     
     cue = {
         "type": cue_type,
         "correlation_id": correlation_id or str(uuid4()),
         "expires_at": expires_at,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": now.isoformat(),
     }
     
     if text is not None:
@@ -199,7 +200,7 @@ async def websocket_cues_endpoint(websocket: WebSocket, device_id: str):
         welcome = {
             "type": "connection_established",
             "device_id": device_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "server_version": "0.08.4.3",
         }
         await websocket.send_json(welcome)
@@ -217,7 +218,7 @@ async def websocket_cues_endpoint(websocket: WebSocket, device_id: str):
                     # Respond to heartbeat
                     await websocket.send_json({
                         "type": "pong",
-                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                        "timestamp": datetime.now(timezone.utc).isoformat()
                     })
                 
                 elif msg_type == "ack":

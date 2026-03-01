@@ -18,8 +18,20 @@ from pythonjsonlogger.json import JsonFormatter
 # Ubuntu 1 Media Mover base URL
 MEDIA_MOVER_URL = os.getenv("GATEWAY_MEDIA_MOVER_URL", "http://10.0.4.130:8083")
 
-# Proxy client (reuse for efficiency)
-client = httpx.AsyncClient()
+# Module-level fallback client (used if app.state.http_client is not set).
+# Prefer the lifespan-managed client via get_http_client(request).
+_fallback_client: httpx.AsyncClient | None = None
+
+
+def get_http_client(request: Request) -> httpx.AsyncClient:
+    """Return the lifespan-managed httpx client, falling back to a module-level singleton."""
+    global _fallback_client
+    app_client = getattr(request.app.state, "http_client", None)
+    if app_client is not None:
+        return app_client
+    if _fallback_client is None:
+        _fallback_client = httpx.AsyncClient()
+    return _fallback_client
 
 # Embedded JSON Schemas (v1)
 EMOTION_EVENT_SCHEMA: Dict[str, Any] = {
@@ -208,7 +220,7 @@ async def post_promotion(
             )
         
         # Use app.state for config and HTTP client if available
-        http_client = getattr(request.app.state, "http_client", client)
+        http_client = get_http_client(request)
         media_mover_url = getattr(request.app.state, "config", None)
         base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
         
@@ -274,7 +286,7 @@ async def relabel_video(
     ensure_api_version(x_api_version)
     if not idempotency_key:
         raise HTTPException(status_code=400, detail=error_payload("validation_error", "Idempotency-Key required"))
-    http_client = getattr(request.app.state, "http_client", client)
+    http_client = get_http_client(request)
     body = await request.json()
     url = f"{MEDIA_MOVER_URL}/api/relabel"
     response = await http_client.post(url, json=body, headers={"Idempotency-Key": idempotency_key})
@@ -353,7 +365,7 @@ _generation_status: Dict[str, Dict[str, Any]] = {}
 @router.get("/api/training/status/{pipeline_id}")
 async def get_training_status(pipeline_id: str, request: Request):
     """Get training status for a pipeline run from Media Mover DB-backed API."""
-    http_client = getattr(request.app.state, "http_client", client)
+    http_client = get_http_client(request)
     media_mover_url = getattr(request.app.state, "config", None)
     base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
     url = f"{base_url}/api/training/status/{pipeline_id}"
@@ -366,7 +378,7 @@ async def update_training_status(pipeline_id: str, request: Request):
     """Update training status for a pipeline run via Media Mover DB-backed API."""
     try:
         body = await request.json()
-        http_client = getattr(request.app.state, "http_client", client)
+        http_client = get_http_client(request)
         media_mover_url = getattr(request.app.state, "config", None)
         base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
         url = f"{base_url}/api/training/status/{pipeline_id}"
@@ -386,7 +398,7 @@ async def ingest_media_file(
 ):
     """Proxy direct multipart upload to Media Mover ingest endpoint."""
     corr_id = correlation_id or str(uuid.uuid4())
-    http_client = getattr(request.app.state, "http_client", client)
+    http_client = get_http_client(request)
     media_cfg = getattr(request.app.state, "config", None)
     base_url = media_cfg.media_mover_url if media_cfg and hasattr(media_cfg, "media_mover_url") else MEDIA_MOVER_URL
 
@@ -451,7 +463,7 @@ async def redact_video(
     corr_id = body.get("correlation_id")
     reason = body.get("reason")
 
-    http_client = getattr(request.app.state, "http_client", client)
+    http_client = get_http_client(request)
     media_cfg = getattr(request.app.state, "config", None)
     base_url = media_cfg.media_mover_url if media_cfg and hasattr(media_cfg, "media_mover_url") else MEDIA_MOVER_URL
 
@@ -471,7 +483,7 @@ async def redact_video(
 @router.get("/api/deployment/status/{pipeline_id}")
 async def get_deployment_status(pipeline_id: str, request: Request):
     """Get deployment status for a pipeline run from Media Mover DB-backed API."""
-    http_client = getattr(request.app.state, "http_client", client)
+    http_client = get_http_client(request)
     media_mover_url = getattr(request.app.state, "config", None)
     base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
     url = f"{base_url}/api/deployment/status/{pipeline_id}"
@@ -484,7 +496,7 @@ async def update_deployment_status(pipeline_id: str, request: Request):
     """Update deployment status via Media Mover DB-backed API."""
     try:
         body = await request.json()
-        http_client = getattr(request.app.state, "http_client", client)
+        http_client = get_http_client(request)
         media_mover_url = getattr(request.app.state, "config", None)
         base_url = media_mover_url.media_mover_url if media_mover_url and hasattr(media_mover_url, "media_mover_url") else MEDIA_MOVER_URL
         url = f"{base_url}/api/deployment/status/{pipeline_id}"
