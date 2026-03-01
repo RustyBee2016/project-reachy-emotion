@@ -502,7 +502,17 @@ async def get_training_status(
 ) -> Dict[str, object]:
     """Get persisted training status from DB."""
     if pipeline_id == "latest":
-        stmt = select(models.TrainingRun).order_by(desc(models.TrainingRun.updated_at)).limit(1)
+        # Deterministic "latest" ordering:
+        # updated_at ties can occur when inserts share the same DB timestamp resolution.
+        stmt = (
+            select(models.TrainingRun)
+            .order_by(
+                desc(models.TrainingRun.updated_at),
+                desc(models.TrainingRun.created_at),
+                desc(models.TrainingRun.run_id),
+            )
+            .limit(1)
+        )
         row = (await session.execute(stmt)).scalars().first()
         if row is None:
             return {"status": "unknown"}
