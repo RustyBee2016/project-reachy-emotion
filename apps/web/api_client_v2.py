@@ -322,7 +322,9 @@ class ReachyAPIClient:
             normalized_label = label.strip().lower()
         if normalized_split == 'train':
             if normalized_label not in {'happy', 'sad', 'neutral'}:
-                raise ValueError("train promotions require label in {happy, sad, neutral}")
+                raise ValueError(
+    "label required for train promotions; expected one of {happy, sad, neutral}"
+)
         else:
             normalized_label = None
         
