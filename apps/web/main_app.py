@@ -44,6 +44,7 @@ def main():
         - 03_Train: Rebuild manifests, sample splits, and inspect training state.
         - 04_Deploy: Track deployment state and submit deployment intents.
         - 05_Video_Management: Batch selection and promotion operations.
+        - 06_Dashboard: Review run results for training/validation/test (training first).
         """
     )
 
