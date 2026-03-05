@@ -36,24 +36,96 @@ TRAINING_RESULTS_PLACEHOLDER = {
     },
 }
 
+VALIDATION_RESULTS_PLACEHOLDER = {
+    "run_type": "validation",
+    "run_id": "run_0002",
+    "gate_a_metrics": {
+        "accuracy": 0.9375,
+        "precision_macro": 0.9401,
+        "recall_macro": 0.9350,
+        "f1_macro": 0.9369,
+        "balanced_accuracy": 0.9350,
+        "f1_class_0": 0.9412,
+        "f1_happy": 0.9412,
+        "f1_class_1": 0.9326,
+        "f1_sad": 0.9326,
+        "confusion_matrix": [[45, 3], [2, 46]],
+        "ece": 0.061200000000000004,
+        "brier": 0.0843,
+        "mce": 0.1178,
+    },
+    "gate_a_gates": {
+        "macro_f1": True,
+        "balanced_accuracy": True,
+        "per_class_f1": True,
+        "ece": True,
+        "brier": True,
+    },
+}
+
+TEST_RESULTS_PLACEHOLDER = {
+    "run_type": "test",
+    "run_id": "run_0003",
+    "gate_a_metrics": {
+        "accuracy": 0.9023,
+        "precision_macro": 0.9054,
+        "recall_macro": 0.8998,
+        "f1_macro": 0.9017,
+        "balanced_accuracy": 0.8998,
+        "f1_class_0": 0.9070,
+        "f1_happy": 0.9070,
+        "f1_class_1": 0.8963,
+        "f1_sad": 0.8963,
+        "confusion_matrix": [[58, 7], [6, 57]],
+        "ece": 0.0894,
+        "brier": 0.1299,
+        "mce": 0.1731,
+    },
+    "gate_a_gates": {
+        "macro_f1": True,
+        "balanced_accuracy": True,
+        "per_class_f1": False,
+        "ece": False,
+        "brier": False,
+    },
+}
+
 INTERPRETATION_DIR = Path(__file__).resolve().parents[3] / "stats" / "interpretations"
 INTERPRETATION_FILE_MAP = {
-    "macro_f1": "macro_f1.md",
-    "balanced_accuracy": "balanced_accuracy.md",
-    "per_class_f1": "per_class_f1.md",
-    "ece": "ece.md",
-    "brier": "brier.md",
-    "mce": "mce.md",
+    "Accuracy": "accuracy.md",
+    "Precision (Macro)": "precision.md",
+    "Recall (Macro)": "recall.md",
+    "F1 (Macro)": "macro_f1.md",
+    "Balanced Accuracy": "balanced_accuracy.md",
+    "F1 (per Class)": "per_class_f1.md",
+    "ECE": "ece.md",
+    "Brier": "brier.md",
+    "MCE": "mce.md",
+}
+MOST_USEFUL_METRICS = {
+    "F1 (Macro)",
+    "Balanced Accuracy",
+    "F1 (per Class)",
+}
+
+GATE_LABEL_MAP = {
+    "macro_f1": "F1 (Macro)",
+    "balanced_accuracy": "Balanced Accuracy",
+    "per_class_f1": "F1 (per Class)",
+    "ece": "ECE",
+    "brier": "Brier",
+    "mce": "MCE",
 }
 
 
 def _render_gate_flags(gates: dict[str, bool]) -> None:
     st.markdown("**Gate A Checks**")
     for gate_name, passed in gates.items():
+        display_name = GATE_LABEL_MAP.get(gate_name, gate_name)
         if passed:
-            st.success(f"{gate_name}: pass")
+            st.success(f"{display_name}: pass")
         else:
-            st.error(f"{gate_name}: fail")
+            st.error(f"{display_name}: fail")
 
 
 def _render_confusion_matrix_rows(matrix: list[list[int]]) -> None:
@@ -202,10 +274,10 @@ def _render_confusion_matrix(matrix: list[list[int]]) -> None:
         _render_confusion_matrix_heatmap(matrix)
 
 
-def _read_interpretation(metric_key: str) -> str:
-    file_name = INTERPRETATION_FILE_MAP.get(metric_key)
+def _read_interpretation(metric_name: str) -> str:
+    file_name = INTERPRETATION_FILE_MAP.get(metric_name)
     if not file_name:
-        return f"No interpretation mapping found for '{metric_key}'."
+        return f"No interpretation mapping found for '{metric_name}'."
     file_path = INTERPRETATION_DIR / file_name
     if not file_path.exists():
         return f"Interpretation file not found: {file_path}"
@@ -214,26 +286,34 @@ def _read_interpretation(metric_key: str) -> str:
 
 def _render_statistical_interpretations() -> None:
     st.markdown("**Statistical Interpretations**")
-    metric_key = st.selectbox(
+    metric_names = list(INTERPRETATION_FILE_MAP.keys())
+    display_options = [
+        f"🟢 {name}" if name in MOST_USEFUL_METRICS else name
+        for name in metric_names
+    ]
+    display_to_metric = dict(zip(display_options, metric_names))
+    selected_display = st.selectbox(
         "Select Statistic",
-        options=list(INTERPRETATION_FILE_MAP.keys()),
-        index=0,
+        options=display_options,
+        index=display_options.index("🟢 F1 (Macro)") if "🟢 F1 (Macro)" in display_options else 0,
         key="dashboard_stat_interpretation_metric",
     )
-    interpretation_text = _read_interpretation(metric_key)
+    metric_name = display_to_metric[selected_display]
+    interpretation_text = _read_interpretation(metric_name)
     st.text_area(
         "Interpretation",
         value=interpretation_text,
         height=250,
         disabled=True,
     )
+    st.caption("🟢 indicates highest-priority metrics for model selection.")
 
 
-def _render_training_dashboard(payload: dict) -> None:
+def _render_run_dashboard(payload: dict, title: str) -> None:
     metrics = payload.get("gate_a_metrics", {})
     gates = payload.get("gate_a_gates", {})
 
-    st.subheader("Training Run Results")
+    st.subheader(title)
     st.write(f"Run ID: `{payload.get('run_id', 'unknown')}`")
 
     top_cols = st.columns(5)
@@ -266,8 +346,8 @@ run_type = st.selectbox(
 )
 
 if run_type == "Training Run":
-    _render_training_dashboard(TRAINING_RESULTS_PLACEHOLDER)
+    _render_run_dashboard(TRAINING_RESULTS_PLACEHOLDER, "Training Run Results")
 elif run_type == "Validation Run":
-    st.info("Validation dashboard view is not implemented yet.")
+    _render_run_dashboard(VALIDATION_RESULTS_PLACEHOLDER, "Validation Run Results")
 else:
-    st.info("Test dashboard view is not implemented yet.")
+    _render_run_dashboard(TEST_RESULTS_PLACEHOLDER, "Test Run Results")
