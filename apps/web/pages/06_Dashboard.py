@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 st.set_page_config(page_title="Dashboard", layout="wide")
@@ -32,6 +34,16 @@ TRAINING_RESULTS_PLACEHOLDER = {
         "ece": False,
         "brier": False,
     },
+}
+
+INTERPRETATION_DIR = Path(__file__).resolve().parents[3] / "stats" / "interpretations"
+INTERPRETATION_FILE_MAP = {
+    "macro_f1": "macro_f1.md",
+    "balanced_accuracy": "balanced_accuracy.md",
+    "per_class_f1": "per_class_f1.md",
+    "ece": "ece.md",
+    "brier": "brier.md",
+    "mce": "mce.md",
 }
 
 
@@ -190,6 +202,33 @@ def _render_confusion_matrix(matrix: list[list[int]]) -> None:
         _render_confusion_matrix_heatmap(matrix)
 
 
+def _read_interpretation(metric_key: str) -> str:
+    file_name = INTERPRETATION_FILE_MAP.get(metric_key)
+    if not file_name:
+        return f"No interpretation mapping found for '{metric_key}'."
+    file_path = INTERPRETATION_DIR / file_name
+    if not file_path.exists():
+        return f"Interpretation file not found: {file_path}"
+    return file_path.read_text(encoding="utf-8").strip() or "(empty interpretation file)"
+
+
+def _render_statistical_interpretations() -> None:
+    st.markdown("**Statistical Interpretations**")
+    metric_key = st.selectbox(
+        "Select Statistic",
+        options=list(INTERPRETATION_FILE_MAP.keys()),
+        index=0,
+        key="dashboard_stat_interpretation_metric",
+    )
+    interpretation_text = _read_interpretation(metric_key)
+    st.text_area(
+        "Interpretation",
+        value=interpretation_text,
+        height=250,
+        disabled=True,
+    )
+
+
 def _render_training_dashboard(payload: dict) -> None:
     metrics = payload.get("gate_a_metrics", {})
     gates = payload.get("gate_a_gates", {})
@@ -214,6 +253,7 @@ def _render_training_dashboard(payload: dict) -> None:
         _render_confusion_matrix(metrics.get("confusion_matrix", []))
     with detail_cols[1]:
         _render_gate_flags(gates)
+        _render_statistical_interpretations()
 
     st.markdown("**Raw Payload**")
     st.json(payload)
