@@ -127,6 +127,11 @@ if "prepare_face_crop" not in st.session_state:
     st.session_state["prepare_face_crop"] = False
 if "prepare_face_confidence" not in st.session_state:
     st.session_state["prepare_face_confidence"] = 0.6
+if "pending_generated_run_id" in st.session_state:
+    # Apply pending run-id updates before the text_input widget is created.
+    st.session_state["train_run_id"] = st.session_state.pop("pending_generated_run_id")
+if st.session_state.pop("generated_run_id_notice", False):
+    st.info("Generated run ID. Leave empty to auto-generate the next run_xxxx on the backend.")
 
 run_id = st.text_input("Run ID (run_xxxx, optional)", key="train_run_id")
 sample_fraction = st.slider(
@@ -256,8 +261,9 @@ with action_col4:
 
 with action_col5:
     if st.button("Generate New Run ID", use_container_width=True):
-        st.session_state["train_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
-        st.info("Generated run ID. Leave empty to auto-generate the next run_xxxx on the backend.")
+        st.session_state["pending_generated_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
+        st.session_state["generated_run_id_notice"] = True
+        st.rerun()
 
 st.divider()
 st.subheader("ML Runs — EfficientNet-B0 (Frozen Backbone)")
