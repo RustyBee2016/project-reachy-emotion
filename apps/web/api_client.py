@@ -557,6 +557,57 @@ def launch_ml_run(
 
 
 @retry_on_failure()
+def launch_finetune_run(
+    *,
+    mode: str = "train",
+    run_id: Optional[str] = None,
+    config_path: Optional[str] = None,
+    checkpoint: Optional[str] = None,
+    test_data_dir: Optional[str] = None,
+    config_overrides: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Launch a fine-tuning run with config overrides.
+
+    This extends launch_ml_run by accepting a dictionary of hyperparameter
+    overrides that the backend writes into a run-specific YAML before
+    spawning the training subprocess.
+
+    Args:
+        mode: 'train', 'validate', or 'test'
+        run_id: Optional run identifier (auto-generated if omitted)
+        config_path: Path to base training YAML config
+        checkpoint: Checkpoint path (required for validate/test)
+        test_data_dir: Override test data directory
+        config_overrides: Dict of hyperparameter overrides (flattened or nested)
+
+    Returns:
+        Response dict with run_id, status, pid, and message
+    """
+    url = f"{_base_url()}/api/v1/training/launch"
+    payload: Dict[str, Any] = {"mode": mode}
+    if run_id:
+        payload["run_id"] = run_id
+    if config_path:
+        payload["config_path"] = config_path
+    if checkpoint:
+        payload["checkpoint"] = checkpoint
+    if test_data_dir:
+        payload["test_data_dir"] = test_data_dir
+    if config_overrides:
+        payload["config_overrides"] = config_overrides
+
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
 def get_training_log(run_id: str, mode: str = "train", tail: int = 100) -> str:
     """Read the tail of a training run's log file.
 

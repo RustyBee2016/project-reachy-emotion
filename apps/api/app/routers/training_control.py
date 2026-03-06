@@ -14,7 +14,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
+
+import yaml
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -67,6 +69,43 @@ def _next_run_id(config: AppConfig) -> str:
     return preparer.resolve_run_id(None)
 
 
+def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge *overrides* into *base*, returning a new dict."""
+    merged = dict(base)
+    for key, value in overrides.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _write_run_config(
+    base_config_path: Path,
+    run_id: str,
+    overrides: Dict[str, Any],
+    project_root: Path,
+) -> Path:
+    """Write a run-specific YAML config by merging overrides into the base.
+
+    Returns the path to the newly written config file.
+    """
+    with open(base_config_path, "r") as fh:
+        base_data = yaml.safe_load(fh) or {}
+
+    merged = _deep_merge(base_data, overrides)
+
+    run_configs_dir = project_root / "trainer" / "fer_finetune" / "specs" / "runs"
+    run_configs_dir.mkdir(parents=True, exist_ok=True)
+    run_config_path = run_configs_dir / f"{run_id}_finetune.yaml"
+
+    with open(run_config_path, "w") as fh:
+        yaml.dump(merged, fh, default_flow_style=False, sort_keys=False)
+
+    logger.info("Wrote run-specific config: %s", run_config_path)
+    return run_config_path
+
+
 # ---------------------------------------------------------------------------
 # Request / response schemas
 # ---------------------------------------------------------------------------
@@ -92,6 +131,10 @@ class TrainingLaunchRequest(BaseModel):
     test_data_dir: Optional[str] = Field(
         None,
         description="Override test/validation data directory.",
+    )
+    config_overrides: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Hyperparameter overrides merged into the base YAML config for fine-tuning.",
     )
 
 
@@ -158,12 +201,22 @@ async def launch_training(
                 },
             )
 
+    # If config_overrides are provided, write a run-specific YAML
+    effective_config_path = project_root / config_path
+    if body.config_overrides:
+        effective_config_path = _write_run_config(
+            base_config_path=project_root / config_path,
+            run_id=run_id,
+            overrides=body.config_overrides,
+            project_root=project_root,
+        )
+
     # Build subprocess command — always use the project venv Python
     _venv_python = project_root / "venv" / "bin" / "python"
     python_exe = str(_venv_python) if _venv_python.exists() else sys.executable
     cmd = [
         python_exe, "-m", "trainer.run_efficientnet_pipeline",
-        "--config", str(project_root / config_path),
+        "--config", str(effective_config_path),
         "--run-id", run_id,
         "--output-dir", str(project_root / _DEFAULT_OUTPUT_DIR),
     ]
