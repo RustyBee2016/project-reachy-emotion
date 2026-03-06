@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from apps.web import api_client
+from apps.web.navigation_bar import render_navigation_bar
 
 st.set_page_config(page_title="Deploy", layout="wide")
+render_navigation_bar()
 st.title("04 - Deploy")
 
 pipeline_id = st.text_input("Pipeline ID", value="latest")

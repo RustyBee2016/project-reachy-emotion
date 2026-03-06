@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -37,6 +38,7 @@ _DEFAULT_CONFIG_YAML = "trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.
 _DEFAULT_OUTPUT_DIR = "stats/results"
 _TRAIN_FRACTION = 0.9
 _VAL_FRACTION = 0.1
+_VARIANT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 def _default_checkpoint_dir(config: AppConfig) -> Path:
@@ -67,6 +69,29 @@ def _next_run_id(config: AppConfig) -> str:
 
     preparer = DatasetPreparer(str(config.videos_root))
     return preparer.resolve_run_id(None)
+
+
+def _normalize_variant(variant: Optional[str]) -> str:
+    """Normalize and validate a model variant slug."""
+    value = (variant or "variant_1").strip().lower()
+    if not _VARIANT_PATTERN.fullmatch(value):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "invalid_variant",
+                "message": "variant must match ^[a-z0-9][a-z0-9_-]{0,63}$ (e.g., variant_1, variant_2)",
+            },
+        )
+    return value
+
+
+def _mode_to_run_type(mode: str) -> str:
+    """Map launch mode to canonical run-type label used in stats paths."""
+    if mode == "train":
+        return "training"
+    if mode == "validate":
+        return "validation"
+    return "test"
 
 
 def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,6 +141,10 @@ class TrainingLaunchRequest(BaseModel):
         None,
         description="Run identifier. Auto-generated if omitted.",
     )
+    variant: Optional[str] = Field(
+        None,
+        description="Model variant slug (e.g., variant_1, variant_2). Defaults to variant_1.",
+    )
     config_path: Optional[str] = Field(
         None,
         description="Path to training YAML config (relative to project root).",
@@ -142,6 +171,7 @@ class TrainingLaunchResponse(BaseModel):
     status: str
     run_id: str
     mode: str
+    variant: str
     message: str
     pid: Optional[int] = None
 
@@ -179,6 +209,8 @@ async def launch_training(
         )
 
     run_id = (body.run_id or "").strip() or _next_run_id(config)
+    variant = _normalize_variant(body.variant)
+    run_type = _mode_to_run_type(mode)
     config_path = body.config_path or _DEFAULT_CONFIG_YAML
     project_root = _project_root()
 
@@ -218,6 +250,8 @@ async def launch_training(
         python_exe, "-m", "trainer.run_efficientnet_pipeline",
         "--config", str(effective_config_path),
         "--run-id", run_id,
+        "--variant", variant,
+        "--run-type", run_type,
         "--output-dir", str(project_root / _DEFAULT_OUTPUT_DIR),
     ]
 
@@ -254,9 +288,12 @@ async def launch_training(
             started_at=now,
             metrics={
                 "mode": mode,
+                "run_type": run_type,
+                "variant": variant,
                 "config_path": config_path,
                 "train_val_split": f"{_TRAIN_FRACTION}/{_VAL_FRACTION}",
                 "run_data_path": run_data_path,
+                "artifacts_root": str(project_root / _DEFAULT_OUTPUT_DIR / variant / run_type / run_id),
             },
         )
         session.add(row)
@@ -265,6 +302,9 @@ async def launch_training(
         row.started_at = now
         merged = dict(row.metrics or {})
         merged["mode"] = mode
+        merged["run_type"] = run_type
+        merged["variant"] = variant
+        merged["artifacts_root"] = str(project_root / _DEFAULT_OUTPUT_DIR / variant / run_type / run_id)
         row.metrics = merged
     await session.commit()
 
@@ -272,7 +312,7 @@ async def launch_training(
     try:
         log_dir = project_root / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / f"{run_id}_{mode}.log"
+        log_file = log_dir / f"{variant}_{run_id}_{mode}.log"
 
         with open(log_file, "w") as lf:
             proc = subprocess.Popen(
@@ -293,6 +333,7 @@ async def launch_training(
             status="accepted",
             run_id=run_id,
             mode=mode,
+            variant=variant,
             message=f"{mode.capitalize()} run launched (pid={proc.pid}). Check /api/training/status/{run_id} for progress.",
             pid=proc.pid,
         )

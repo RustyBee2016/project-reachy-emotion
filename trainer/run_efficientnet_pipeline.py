@@ -9,11 +9,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
+
+_VARIANT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 class GatewayContractClient:
@@ -66,6 +69,8 @@ def _emit_training_started(
     *,
     run_id: str,
     config_path: str,
+    variant: str = "variant_1",
+    run_type: str = "training",
     strict: bool,
 ) -> None:
     if client is None:
@@ -75,7 +80,7 @@ def _emit_training_started(
         run_id=run_id,
         status="training",
         source="agent5.training_orchestrator",
-        metrics={"config_path": config_path},
+        metrics={"config_path": config_path, "variant": variant, "run_type": run_type},
     )
     _post_contract_payload(client, run_id=run_id, payload=payload, strict=strict)
 
@@ -85,6 +90,8 @@ def _emit_evaluation_started(
     *,
     run_id: str,
     checkpoint_path: str,
+    variant: str = "variant_1",
+    run_type: str = "training",
     strict: bool,
 ) -> None:
     if client is None:
@@ -94,7 +101,7 @@ def _emit_evaluation_started(
         run_id=run_id,
         status="evaluating",
         source="agent6.evaluation_agent",
-        metrics={"checkpoint_path": checkpoint_path},
+        metrics={"checkpoint_path": checkpoint_path, "variant": variant, "run_type": run_type},
     )
     _post_contract_payload(client, run_id=run_id, payload=payload, strict=strict)
 
@@ -109,6 +116,8 @@ def _emit_training_completed(
     gate_path: str,
     event_type: str = "training.completed",
     source: str = "agent5.training_orchestrator",
+    variant: str = "variant_1",
+    run_type: str = "training",
     strict: bool,
 ) -> None:
     if client is None:
@@ -120,6 +129,8 @@ def _emit_training_completed(
         "gate_a_passed": bool(gate_report.get("overall_pass")),
         "gate_a_metrics": gate_report.get("metrics", {}),
         "gate_a_gates": gate_report.get("gates", {}),
+        "variant": variant,
+        "run_type": run_type,
         "artifacts": {
             "predictions_npz": pred_path,
             "gate_a_report_json": gate_path,
@@ -140,6 +151,8 @@ def _emit_training_failed(
     *,
     run_id: str,
     error_message: str,
+    variant: str = "variant_1",
+    run_type: str = "training",
     strict: bool,
 ) -> None:
     if client is None:
@@ -149,7 +162,7 @@ def _emit_training_failed(
         run_id=run_id,
         status="failed",
         source="agent5.training_orchestrator",
-        metrics={},
+        metrics={"variant": variant, "run_type": run_type},
         error_message=error_message,
     )
     _post_contract_payload(client, run_id=run_id, payload=payload, strict=strict)
@@ -232,6 +245,62 @@ def _collect_predictions(
     }
 
 
+def _normalize_variant(variant: str) -> str:
+    normalized = variant.strip().lower()
+    if not _VARIANT_PATTERN.fullmatch(normalized):
+        raise SystemExit("Invalid --variant value. Expected ^[a-z0-9][a-z0-9_-]{0,63}$")
+    return normalized
+
+
+def _normalize_run_type(run_type: str) -> str:
+    normalized = run_type.strip().lower()
+    aliases = {
+        "train": "training",
+        "training": "training",
+        "validate": "validation",
+        "validation": "validation",
+        "test": "test",
+    }
+    if normalized not in aliases:
+        raise SystemExit("Invalid --run-type value. Expected one of: training, validation, test")
+    return aliases[normalized]
+
+
+def _resolve_artifact_dir(output_dir: str, variant: str, run_type: str, run_id: str) -> Path:
+    return Path(output_dir) / variant / run_type / run_id
+
+
+def _write_dashboard_run_payload(
+    *,
+    output_dir: str,
+    variant: str,
+    run_type: str,
+    run_id: str,
+    gate_report: Dict[str, Any],
+    predictions_path: Path,
+    gate_path: Path,
+    onnx_path: Optional[str],
+) -> Path:
+    dashboard_root = Path(output_dir) / "dashboard_runs" / variant / run_type
+    dashboard_root.mkdir(parents=True, exist_ok=True)
+    dashboard_payload_path = dashboard_root / f"{run_id}.json"
+    dashboard_payload = {
+        "run_id": run_id,
+        "model_variant": variant,
+        "run_type": run_type,
+        "gate_a_metrics": gate_report.get("metrics", {}),
+        "gate_a_gates": gate_report.get("gates", {}),
+        "overall_pass": bool(gate_report.get("overall_pass")),
+        "artifacts": {
+            "predictions_npz": str(predictions_path),
+            "gate_a_report_json": str(gate_path),
+            "onnx_path": onnx_path,
+        },
+    }
+    dashboard_payload_path.write_text(json.dumps(dashboard_payload, indent=2))
+    return dashboard_payload_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run complete EfficientNet pipeline")
     parser.add_argument("--config", default="trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml")
@@ -239,6 +308,16 @@ def main() -> int:
     parser.add_argument("--skip-train", action="store_true", help="Skip training and use existing checkpoint")
     parser.add_argument("--checkpoint", help="Checkpoint path when --skip-train is used")
     parser.add_argument("--output-dir", default="stats/results")
+    parser.add_argument(
+        "--variant",
+        default="variant_1",
+        help="Model variant slug used for output path partitioning (e.g., variant_1, variant_2)",
+    )
+    parser.add_argument(
+        "--run-type",
+        default="training",
+        help="Run type used for output path partitioning: training, validation, or test",
+    )
     parser.add_argument(
         "--gateway-base",
         default=os.getenv("REACHY_GATEWAY_BASE", "http://10.0.4.140:8000"),
@@ -255,6 +334,8 @@ def main() -> int:
         help="Fail pipeline when contract update calls fail",
     )
     args = parser.parse_args()
+    args.variant = _normalize_variant(args.variant)
+    args.run_type = _normalize_run_type(args.run_type)
 
     import numpy as np
 
@@ -287,6 +368,8 @@ def main() -> int:
             contract_client,
             run_id=args.run_id,
             checkpoint_path=str(checkpoint_path),
+            variant=args.variant,
+            run_type=args.run_type,
             strict=args.strict_contract_updates,
         )
     else:
@@ -294,6 +377,8 @@ def main() -> int:
             contract_client,
             run_id=args.run_id,
             config_path=args.config,
+            variant=args.variant,
+            run_type=args.run_type,
             strict=args.strict_contract_updates,
         )
         try:
@@ -304,6 +389,8 @@ def main() -> int:
                     contract_client,
                     run_id=args.run_id,
                     error_message=f"Training failed: {train_result}",
+                    variant=args.variant,
+                    run_type=args.run_type,
                     strict=args.strict_contract_updates,
                 )
                 raise SystemExit(f"Training failed: {train_result}")
@@ -312,6 +399,8 @@ def main() -> int:
                 contract_client,
                 run_id=args.run_id,
                 checkpoint_path=str(checkpoint_path),
+                variant=args.variant,
+                run_type=args.run_type,
                 strict=args.strict_contract_updates,
             )
         except Exception as exc:
@@ -319,6 +408,8 @@ def main() -> int:
                 contract_client,
                 run_id=args.run_id,
                 error_message=str(exc),
+                variant=args.variant,
+                run_type=args.run_type,
                 strict=args.strict_contract_updates,
             )
             raise
@@ -338,9 +429,14 @@ def main() -> int:
             frames_per_video=max(1, int(config.data.frames_per_video)),
         )
 
-        output_dir = Path(args.output_dir)
+        output_dir = _resolve_artifact_dir(
+            output_dir=args.output_dir,
+            variant=args.variant,
+            run_type=args.run_type,
+            run_id=args.run_id,
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
-        pred_path = output_dir / f"{args.run_id}_predictions.npz"
+        pred_path = output_dir / "predictions.npz"
         np.savez(
             pred_path,
             y_true=preds["y_true"],
@@ -356,7 +452,7 @@ def main() -> int:
             config.data.class_names,
             GateAThresholds(),
         )
-        gate_path = output_dir / f"{args.run_id}_gate_a.json"
+        gate_path = output_dir / "gate_a.json"
         gate_path.write_text(json.dumps(gate_report, indent=2))
 
         # Export to ONNX when Gate A passes
@@ -374,6 +470,17 @@ def main() -> int:
             onnx_path = export_result.get("onnx_path")
             print(json.dumps({"onnx_export": export_result}, indent=2))
 
+        dashboard_payload_path = _write_dashboard_run_payload(
+            output_dir=args.output_dir,
+            variant=args.variant,
+            run_type=args.run_type,
+            run_id=args.run_id,
+            gate_report=gate_report,
+            predictions_path=pred_path,
+            gate_path=gate_path,
+            onnx_path=onnx_path,
+        )
+
         _emit_training_completed(
             contract_client,
             run_id=args.run_id,
@@ -383,6 +490,8 @@ def main() -> int:
             gate_path=str(gate_path),
             event_type="evaluation.completed" if args.skip_train else "training.completed",
             source="agent6.evaluation_agent" if args.skip_train else "agent5.training_orchestrator",
+            variant=args.variant,
+            run_type=args.run_type,
             strict=args.strict_contract_updates,
         )
 
@@ -391,6 +500,7 @@ def main() -> int:
                 {
                     "predictions": str(pred_path),
                     "gate_report": str(gate_path),
+                    "dashboard_payload": str(dashboard_payload_path),
                     "overall_pass": gate_report["overall_pass"],
                     "onnx_path": onnx_path,
                 },
@@ -404,6 +514,8 @@ def main() -> int:
             contract_client,
             run_id=args.run_id,
             error_message=f"Evaluation failed: {exc}",
+            variant=args.variant,
+            run_type=args.run_type,
             strict=args.strict_contract_updates,
         )
         raise

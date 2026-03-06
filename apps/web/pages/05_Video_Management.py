@@ -7,6 +7,7 @@ import streamlit as st
 
 from apps.web import api_client
 from apps.web.components.video_player import render_video_or_thumb
+from apps.web.navigation_bar import render_navigation_bar
 
 
 def _is_uuid_identifier(value: str) -> bool:
@@ -17,6 +18,7 @@ def _is_uuid_identifier(value: str) -> bool:
         return False
 
 st.set_page_config(page_title="Video Management", layout="wide")
+render_navigation_bar()
 st.title("05 - Video Management")
 
 if "batch_selected" not in st.session_state:

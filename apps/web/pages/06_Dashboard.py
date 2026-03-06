@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import streamlit as st
+from apps.web.navigation_bar import render_navigation_bar
 
 st.set_page_config(page_title="Dashboard", layout="wide")
+render_navigation_bar()
 st.title("06 - Dashboard")
 st.caption("Run-level results dashboard (training, validation, test).")
 
@@ -22,7 +25,9 @@ TRAINING_RESULTS_PLACEHOLDER = {
         "f1_happy": 1.0,
         "f1_class_1": 1.0,
         "f1_sad": 1.0,
-        "confusion_matrix": [[1, 0], [0, 2]],
+        "f1_class_2": 1.0,
+        "f1_neutral": 1.0,
+        "confusion_matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         "ece": 0.48958078026771545,
         "brier": 0.3802821991121825,
         "mce": 0.5812406241893768,
@@ -49,7 +54,9 @@ VALIDATION_RESULTS_PLACEHOLDER = {
         "f1_happy": 0.9412,
         "f1_class_1": 0.9326,
         "f1_sad": 0.9326,
-        "confusion_matrix": [[45, 3], [2, 46]],
+        "f1_class_2": 0.9300,
+        "f1_neutral": 0.9300,
+        "confusion_matrix": [[30, 1, 2], [1, 31, 1], [2, 1, 27]],
         "ece": 0.061200000000000004,
         "brier": 0.0843,
         "mce": 0.1178,
@@ -76,7 +83,9 @@ TEST_RESULTS_PLACEHOLDER = {
         "f1_happy": 0.9070,
         "f1_class_1": 0.8963,
         "f1_sad": 0.8963,
-        "confusion_matrix": [[58, 7], [6, 57]],
+        "f1_class_2": 0.8940,
+        "f1_neutral": 0.8940,
+        "confusion_matrix": [[38, 3, 2], [2, 37, 4], [3, 3, 36]],
         "ece": 0.0894,
         "brier": 0.1299,
         "mce": 0.1731,
@@ -90,7 +99,38 @@ TEST_RESULTS_PLACEHOLDER = {
     },
 }
 
+# Variant-specific placeholders for dashboard run-type selection.
+VARIANT_1_TRAINING_RESULTS = {
+    **TRAINING_RESULTS_PLACEHOLDER,
+    "model_variant": "variant_1",
+}
+VARIANT_1_VALIDATION_RESULTS = {
+    **VALIDATION_RESULTS_PLACEHOLDER,
+    "model_variant": "variant_1",
+}
+VARIANT_1_TEST_RESULTS = {
+    **TEST_RESULTS_PLACEHOLDER,
+    "model_variant": "variant_1",
+}
+
+VARIANT_2_TRAINING_RESULTS = {
+    **TRAINING_RESULTS_PLACEHOLDER,
+    "run_id": "v2_run_0001",
+    "model_variant": "variant_2",
+}
+VARIANT_2_VALIDATION_RESULTS = {
+    **VALIDATION_RESULTS_PLACEHOLDER,
+    "run_id": "v2_run_0002",
+    "model_variant": "variant_2",
+}
+VARIANT_2_TEST_RESULTS = {
+    **TEST_RESULTS_PLACEHOLDER,
+    "run_id": "v2_run_0003",
+    "model_variant": "variant_2",
+}
+
 INTERPRETATION_DIR = Path(__file__).resolve().parents[3] / "stats" / "interpretations"
+DASHBOARD_RESULTS_ROOT = Path(__file__).resolve().parents[3] / "stats" / "results" / "dashboard_runs"
 INTERPRETATION_FILE_MAP = {
     "Accuracy": "accuracy.md",
     "Precision (Macro)": "precision.md",
@@ -262,14 +302,12 @@ def _render_confusion_matrix_heatmap(matrix: list[list[int]]) -> None:
 def _render_confusion_matrix(matrix: list[list[int]]) -> None:
     view = st.selectbox(
         "Confusion Matrix View",
-        options=["Rows", "TP/FP/FN/TN Template", "Heat Map"],
-        index=2,
+        options=["Rows", "Heat Map"],
+        index=1,
         key="dashboard_confusion_view",
     )
     if view == "Rows":
         _render_confusion_matrix_rows(matrix)
-    elif view == "TP/FP/FN/TN Template":
-        _render_confusion_matrix_template(matrix)
     else:
         _render_confusion_matrix_heatmap(matrix)
 
@@ -314,7 +352,8 @@ def _render_run_dashboard(payload: dict, title: str) -> None:
     gates = payload.get("gate_a_gates", {})
 
     st.subheader(title)
-    st.write(f"Run ID: `{payload.get('run_id', 'unknown')}`")
+    variant_label = payload.get("model_variant", "unknown")
+    st.write(f"Run ID: `{payload.get('run_id', 'unknown')}` — Model Variant: `{variant_label}`")
 
     top_cols = st.columns(5)
     top_cols[0].metric("Accuracy", f"{float(metrics.get('accuracy', 0.0)):.4f}")
@@ -339,15 +378,109 @@ def _render_run_dashboard(payload: dict, title: str) -> None:
     st.json(payload)
 
 
+RUN_TYPE_OPTIONS = {
+    "Variant 1 Training Run": {
+        "variant": "variant_1",
+        "run_type": "training",
+        "run_id": "run_0001",
+        "fallback_payload": VARIANT_1_TRAINING_RESULTS,
+    },
+    "Variant 1 Validation Run": {
+        "variant": "variant_1",
+        "run_type": "validation",
+        "run_id": "run_0002",
+        "fallback_payload": VARIANT_1_VALIDATION_RESULTS,
+    },
+    "Variant 1 Test Run": {
+        "variant": "variant_1",
+        "run_type": "test",
+        "run_id": "run_0003",
+        "fallback_payload": VARIANT_1_TEST_RESULTS,
+    },
+    "Variant 2 Training Run": {
+        "variant": "variant_2",
+        "run_type": "training",
+        "run_id": "run_1001",
+        "fallback_payload": VARIANT_2_TRAINING_RESULTS,
+    },
+    "Variant 2 Validation Run": {
+        "variant": "variant_2",
+        "run_type": "validation",
+        "run_id": "run_1002",
+        "fallback_payload": VARIANT_2_VALIDATION_RESULTS,
+    },
+    "Variant 2 Test Run": {
+        "variant": "variant_2",
+        "run_type": "test",
+        "run_id": "run_1003",
+        "fallback_payload": VARIANT_2_TEST_RESULTS,
+    },
+}
+
+
+def _run_result_path(variant: str, run_type: str, run_id: str) -> Path:
+    return DASHBOARD_RESULTS_ROOT / variant / run_type / f"{run_id}.json"
+
+
+def _latest_run_result_path(variant: str, run_type: str) -> Path | None:
+    run_dir = DASHBOARD_RESULTS_ROOT / variant / run_type
+    if not run_dir.exists():
+        return None
+    candidates = sorted(
+        run_dir.glob("*.json"),
+        key=lambda p: (p.stat().st_mtime, p.name),
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def _load_dashboard_payload(option_label: str) -> tuple[dict, Path | None]:
+    option = RUN_TYPE_OPTIONS[option_label]
+    variant = str(option["variant"])
+    run_type = str(option["run_type"])
+    run_id = str(option["run_id"])
+    fallback_payload = dict(option["fallback_payload"])
+    fallback_payload["model_variant"] = variant
+    fallback_payload["run_type"] = run_type
+    fallback_payload["run_id"] = run_id
+
+    result_path = _run_result_path(variant=variant, run_type=run_type, run_id=run_id)
+    if not result_path.exists():
+        latest_path = _latest_run_result_path(variant=variant, run_type=run_type)
+        if latest_path is None:
+            return fallback_payload, None
+        result_path = latest_path
+
+    try:
+        loaded = json.loads(result_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"Failed to parse dashboard run file at `{result_path}`: {exc}. Using fallback payload.")
+        return fallback_payload, None
+
+    if not isinstance(loaded, dict):
+        st.warning(f"Invalid dashboard run payload in `{result_path}` (expected JSON object). Using fallback payload.")
+        return fallback_payload, None
+
+    loaded.setdefault("model_variant", variant)
+    loaded.setdefault("run_type", run_type)
+    loaded.setdefault("run_id", result_path.stem)
+    return loaded, result_path
+
+
 run_type = st.selectbox(
     "Select Run Type",
-    options=["Training Run", "Validation Run", "Test Run"],
+    options=list(RUN_TYPE_OPTIONS.keys()),
     index=0,
 )
 
-if run_type == "Training Run":
-    _render_run_dashboard(TRAINING_RESULTS_PLACEHOLDER, "Training Run Results")
-elif run_type == "Validation Run":
-    _render_run_dashboard(VALIDATION_RESULTS_PLACEHOLDER, "Validation Run Results")
+selected_payload, selected_path = _load_dashboard_payload(run_type)
+selected_title = f"{run_type} Results"
+if selected_path is not None:
+    st.caption(f"Loaded run results from `{selected_path}`")
 else:
-    _render_run_dashboard(TEST_RESULTS_PLACEHOLDER, "Test Run Results")
+    st.warning(
+        "No matching run result file found for this selection. Showing fallback placeholder payload. "
+        "Add a JSON file under `stats/results/dashboard_runs/<variant>/<run_type>/<run_id>.json`."
+    )
+
+_render_run_dashboard(selected_payload, selected_title)

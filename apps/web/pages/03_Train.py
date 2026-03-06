@@ -7,8 +7,10 @@ from typing import Any, Dict
 import streamlit as st
 
 from apps.web import api_client
+from apps.web.navigation_bar import render_navigation_bar
 
 st.set_page_config(page_title="Training", layout="wide")
+render_navigation_bar()
 st.title("03 - Training")
 
 
@@ -293,6 +295,7 @@ def _launch_ml_run(mode: str) -> None:
         resp = api_client.launch_ml_run(
             mode=mode,
             run_id=ml_run_id or None,
+            variant="variant_1",
             checkpoint=ml_checkpoint or None,
             test_data_dir=AFFECTNET_TEST_DIR if mode == "test" else None,
         )

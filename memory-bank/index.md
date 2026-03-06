@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-03-06 (Fine-Tune page added for Variant 2)
+**Last Updated**: 2026-03-06 (Variant propagation audit — 6 gaps fixed)
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -14,6 +14,7 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## Key Design Decisions
+- **[Decision: Variant Propagation Audit](./decisions/010-variant-propagation-audit.md)** — 6 gaps fixed: response schema, placeholders, dashboard display, contract events, log filenames, 3-class matrices (2026-03-06).
 - **[Decision: Fine-Tune Webpage Variant 2](./decisions/009-fine-tune-webpage-variant2.md)** — 07_Fine_Tune.py with 25+ tuneable hyperparameters, config_overrides backend support, and AffectNet test button (2026-03-06).
 - **[Decision: Promotion Pipeline Audit & Fixes](./decisions/008-promotion-pipeline-audit-fixes.md)** — 14 fixes across media.py, gateway, training control, DatasetPreparer, DB models (2026-02-28).
 - **[Decision: Reachy Gesture & LLM Integration](./decisions/007-reachy-gesture-llm-integration.md)** — GPT-5.2 empathetic responses with gesture keyword system for Reachy Mini (2026-01-11).

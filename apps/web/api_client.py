@@ -518,6 +518,7 @@ def launch_ml_run(
     *,
     mode: str = "train",
     run_id: Optional[str] = None,
+    variant: Optional[str] = None,
     config_path: Optional[str] = None,
     checkpoint: Optional[str] = None,
     test_data_dir: Optional[str] = None,
@@ -527,6 +528,7 @@ def launch_ml_run(
     Args:
         mode: 'train', 'validate', or 'test'
         run_id: Optional run identifier (auto-generated if omitted)
+        variant: Optional model variant identifier (e.g., variant_1, variant_2)
         config_path: Path to training YAML config (relative to project root)
         checkpoint: Checkpoint path (required for validate/test unless default exists)
         test_data_dir: Override test data directory (defaults to AffectNet test dataset for test mode)
@@ -538,6 +540,8 @@ def launch_ml_run(
     payload: Dict[str, Any] = {"mode": mode}
     if run_id:
         payload["run_id"] = run_id
+    if variant:
+        payload["variant"] = variant
     if config_path:
         payload["config_path"] = config_path
     if checkpoint:
@@ -561,6 +565,7 @@ def launch_finetune_run(
     *,
     mode: str = "train",
     run_id: Optional[str] = None,
+    variant: Optional[str] = None,
     config_path: Optional[str] = None,
     checkpoint: Optional[str] = None,
     test_data_dir: Optional[str] = None,
@@ -575,6 +580,7 @@ def launch_finetune_run(
     Args:
         mode: 'train', 'validate', or 'test'
         run_id: Optional run identifier (auto-generated if omitted)
+        variant: Optional model variant identifier (e.g., variant_1, variant_2)
         config_path: Path to base training YAML config
         checkpoint: Checkpoint path (required for validate/test)
         test_data_dir: Override test data directory
@@ -587,6 +593,8 @@ def launch_finetune_run(
     payload: Dict[str, Any] = {"mode": mode}
     if run_id:
         payload["run_id"] = run_id
+    if variant:
+        payload["variant"] = variant
     if config_path:
         payload["config_path"] = config_path
     if checkpoint:
@@ -608,14 +616,14 @@ def launch_finetune_run(
 
 
 @retry_on_failure()
-def get_training_log(run_id: str, mode: str = "train", tail: int = 100) -> str:
+def get_training_log(run_id: str, mode: str = "train", tail: int = 100, variant: str = "variant_1") -> str:
     """Read the tail of a training run's log file.
 
     This is a convenience helper that reads the log file locally if available,
     or returns an empty string if not found.
     """
     import subprocess
-    log_name = f"{run_id}_{mode}.log"
+    log_name = f"{variant}_{run_id}_{mode}.log"
     log_path = f"logs/{log_name}"
     try:
         result = subprocess.run(

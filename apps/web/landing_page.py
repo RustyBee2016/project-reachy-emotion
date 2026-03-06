@@ -28,6 +28,7 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 from luma_client import LumaVideoGenerator, send_to_n8n_ingest
+from navigation_bar import render_navigation_bar
 from api_client import (
     promote as promote_via_gateway,
     reject_video,
@@ -35,6 +36,8 @@ from api_client import (
     list_videos as list_videos_api,
     register_local_video,
 )
+
+render_navigation_bar()
 
 
 # Helpers

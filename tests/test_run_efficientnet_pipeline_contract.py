@@ -5,6 +5,7 @@ import types
 from typing import Any, Dict, List
 
 import numpy as np
+import pytest
 
 from trainer import run_efficientnet_pipeline as pipeline
 
@@ -97,6 +98,53 @@ def test_emit_training_completed_posts_gate_a_metrics() -> None:
     assert payload["metrics"]["gate_a_passed"] is True
     assert payload["metrics"]["gate_a_metrics"]["f1_macro"] == 0.91
     assert payload["metrics"]["artifacts"]["predictions_npz"] == "/tmp/preds.npz"
+    assert payload["metrics"]["variant"] == "variant_1"
+    assert payload["metrics"]["run_type"] == "training"
+
+
+def test_emit_contract_payloads_include_variant_context() -> None:
+    """All _emit_* functions must propagate variant and run_type into payloads."""
+    session = _DummySession()
+    client = pipeline.GatewayContractClient(
+        base_url="http://gateway.local:8000",
+        session=session,  # type: ignore[arg-type]
+    )
+
+    pipeline._emit_training_started(  # type: ignore[attr-defined]
+        client,
+        run_id="run_v2",
+        config_path="cfg.yaml",
+        variant="variant_2",
+        run_type="validation",
+        strict=True,
+    )
+    started_payload = session.calls[-1]["json"]
+    assert started_payload["metrics"]["variant"] == "variant_2"
+    assert started_payload["metrics"]["run_type"] == "validation"
+
+    pipeline._emit_evaluation_started(  # type: ignore[attr-defined]
+        client,
+        run_id="run_v2",
+        checkpoint_path="/tmp/ckpt.pth",
+        variant="variant_2",
+        run_type="test",
+        strict=True,
+    )
+    eval_payload = session.calls[-1]["json"]
+    assert eval_payload["metrics"]["variant"] == "variant_2"
+    assert eval_payload["metrics"]["run_type"] == "test"
+
+    pipeline._emit_training_failed(  # type: ignore[attr-defined]
+        client,
+        run_id="run_v2",
+        error_message="boom",
+        variant="variant_2",
+        run_type="training",
+        strict=True,
+    )
+    failed_payload = session.calls[-1]["json"]
+    assert failed_payload["metrics"]["variant"] == "variant_2"
+    assert failed_payload["metrics"]["run_type"] == "training"
 
 
 def test_collect_predictions_passes_run_id_to_dataloaders() -> None:
@@ -183,3 +231,54 @@ def test_collect_predictions_passes_run_id_to_dataloaders() -> None:
     assert captured["run_id"] == "run_0007"
     assert captured["frames_per_video"] == 10
     assert output["y_true"].tolist() == [1]
+
+
+def test_normalize_run_type_accepts_aliases() -> None:
+    assert pipeline._normalize_run_type("train") == "training"  # type: ignore[attr-defined]
+    assert pipeline._normalize_run_type("validation") == "validation"  # type: ignore[attr-defined]
+    assert pipeline._normalize_run_type("test") == "test"  # type: ignore[attr-defined]
+
+
+def test_normalize_run_type_rejects_invalid_value() -> None:
+    with pytest.raises(SystemExit):
+        pipeline._normalize_run_type("evaluate")  # type: ignore[attr-defined]
+
+
+def test_resolve_artifact_dir_partitions_variant_run_type_and_run_id(tmp_path) -> None:
+    resolved = pipeline._resolve_artifact_dir(  # type: ignore[attr-defined]
+        output_dir=str(tmp_path),
+        variant="variant_2",
+        run_type="validation",
+        run_id="run_0042",
+    )
+    assert resolved == tmp_path / "variant_2" / "validation" / "run_0042"
+
+
+def test_write_dashboard_run_payload_creates_expected_json(tmp_path) -> None:
+    pred_path = tmp_path / "variant_1" / "training" / "run_0001" / "predictions.npz"
+    gate_path = tmp_path / "variant_1" / "training" / "run_0001" / "gate_a.json"
+    pred_path.parent.mkdir(parents=True, exist_ok=True)
+    pred_path.write_text("preds")
+    gate_path.write_text("{}")
+
+    payload_path = pipeline._write_dashboard_run_payload(  # type: ignore[attr-defined]
+        output_dir=str(tmp_path),
+        variant="variant_1",
+        run_type="training",
+        run_id="run_0001",
+        gate_report={
+            "overall_pass": True,
+            "metrics": {"f1_macro": 0.91},
+            "gates": {"macro_f1": True},
+        },
+        predictions_path=pred_path,
+        gate_path=gate_path,
+        onnx_path=None,
+    )
+
+    assert payload_path.exists()
+    payload = pipeline.json.loads(payload_path.read_text())
+    assert payload["run_id"] == "run_0001"
+    assert payload["model_variant"] == "variant_1"
+    assert payload["run_type"] == "training"
+    assert payload["gate_a_metrics"]["f1_macro"] == 0.91

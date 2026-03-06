@@ -17,8 +17,10 @@ if PROJECT_ROOT_STR not in sys.path:
 import apps.web.path_setup  # noqa: F401
 from apps.web import api_client
 from apps.web.components.video_player import render_video_or_thumb
+from apps.web.navigation_bar import render_navigation_bar
 
 st.set_page_config(page_title="Home", layout="wide", initial_sidebar_state="collapsed")
+render_navigation_bar()
 
 st.markdown(
     """

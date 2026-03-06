@@ -6,8 +6,10 @@ from datetime import datetime
 import streamlit as st
 
 from apps.web import api_client
+from apps.web.navigation_bar import render_navigation_bar
 
 st.set_page_config(page_title="Generate Clips", layout="wide")
+render_navigation_bar()
 st.title("01 - Generate Synthetic Clips")
 
 if "generation_requests" not in st.session_state:
