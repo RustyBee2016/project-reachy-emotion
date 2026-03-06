@@ -1,17 +1,20 @@
-# Dashboard Run Results (Variant 1 + Variant 2)
+# Dashboard Run Results (Base + Variant 1 + Variant 2)
 
 `06_Dashboard.py` reads run payloads from this folder layout:
 
 `stats/results/dashboard_runs/<variant>/<run_type>/<run_id>.json`
 
 Valid `<variant>` values:
-- `variant_1`
-- `variant_2`
+- `base` — HSEmotion default weights, no synthetic data (baseline)
+- `variant_1` — HSEmotion + Luma synthetic videos
+- `variant_2` — HSEmotion fine-tuned + Luma synthetic videos
 
 Valid `<run_type>` values:
 - `training`
 - `validation`
 - `test`
+
+## 06_Dashboard.py
 
 Run IDs used by the six dropdown selections:
 - `Variant 1 Training Run` -> `variant_1/training/run_0001.json`
@@ -23,6 +26,18 @@ Run IDs used by the six dropdown selections:
 
 If an exact run ID file is missing, the dashboard will automatically load the
 most recent JSON file in the corresponding `<variant>/<run_type>/` folder.
+
+## 08_Compare.py
+
+The Compare page reads **test** results from all three variant folders:
+- `base/test/<run_id>.json` — permanently displayed as the baseline
+- `variant_1/test/<run_id>.json` — compared against base
+- `variant_2/test/<run_id>.json` — compared against base
+
+A variant test result qualifies for display only if it outperforms the base on
+**every** key metric: F1 (Macro), Balanced Accuracy, F1 Happy, F1 Sad, F1 Neutral.
+Qualifying results are ranked by composite score to fill Section 2 (best) and
+Section 3 (runner-up).
 
 Pipeline artifact storage is variant + run-type partitioned:
 
@@ -51,7 +66,8 @@ Minimum JSON payload shape:
     "ece": 0.07,
     "brier": 0.10,
     "mce": 0.15,
-    "confusion_matrix": [[50, 5], [6, 49]]
+    "f1_neutral": 0.89,
+    "confusion_matrix": [[50, 3, 2], [2, 49, 4], [3, 4, 48]]
   },
   "gate_a_gates": {
     "macro_f1": true,

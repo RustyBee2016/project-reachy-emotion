@@ -10,6 +10,7 @@ NAV_ITEMS: list[tuple[str, str]] = [
     ("pages/04_Deploy.py", "Deploy"),
     ("pages/06_Dashboard.py", "Dashboard"),
     ("pages/07_Fine_Tune.py", "Fine Tune"),
+    ("pages/08_Compare.py", "Compare"),
 ]
 
 

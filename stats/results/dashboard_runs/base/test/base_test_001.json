@@ -1,0 +1,29 @@
+{
+  "run_id": "base_test_001",
+  "run_type": "test",
+  "model_variant": "base",
+  "gate_a_metrics": {
+    "accuracy": 0.8125,
+    "precision_macro": 0.8190,
+    "recall_macro": 0.8080,
+    "f1_macro": 0.8120,
+    "balanced_accuracy": 0.8080,
+    "f1_class_0": 0.8250,
+    "f1_happy": 0.8250,
+    "f1_class_1": 0.7950,
+    "f1_sad": 0.7950,
+    "f1_class_2": 0.8160,
+    "f1_neutral": 0.8160,
+    "confusion_matrix": [[33, 4, 3], [5, 30, 5], [3, 4, 33]],
+    "ece": 0.1120,
+    "brier": 0.1580,
+    "mce": 0.2050
+  },
+  "gate_a_gates": {
+    "macro_f1": false,
+    "balanced_accuracy": false,
+    "per_class_f1": false,
+    "ece": false,
+    "brier": false
+  }
+}
