@@ -4,6 +4,7 @@
 > - [V3_TUTORIAL_INDEX.md](V3_TUTORIAL_INDEX.md)
 > - [V3_AGENT_NODE_REFERENCE.md](V3_AGENT_NODE_REFERENCE.md)
 > - [V3_ENDPOINT_ALIGNMENT.md](V3_ENDPOINT_ALIGNMENT.md)
+> - [v3_Codex/CURRICULUM_INDEX.md](v3_Codex/CURRICULUM_INDEX.md) (full MODULE_01...MODULE_09 rewritten set + workflow changelog)
 >
 > This legacy curriculum remains useful for learning patterns, but v3 is the authoritative reference for active 08.4.2 workflows and endpoint contracts.
 

@@ -1,0 +1,323 @@
+{
+  "name": "Agent 1 \u2014 Ingest Agent (Reachy 08.4.2 v3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "video_gen_hook",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "webhook_trigger",
+      "name": "Webhook: ingest.video",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [
+        -400,
+        300
+      ],
+      "webhookId": "ingest-video-hook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.headers['x-ingest-key']}}",
+              "operation": "equals",
+              "value2": "={{$env.INGEST_TOKEN}}"
+            }
+          ]
+        }
+      },
+      "id": "auth_check",
+      "name": "IF: auth.check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize incoming payload from various sources\nconst body = $json.body ?? $json;\nconst sourceUrl = body.source_url ?? body.url ?? body.asset?.url ?? body.data?.asset?.url;\n\nif (!sourceUrl) {\n  throw new Error('Missing source_url in request body');\n}\n\nconst label = body.label ?? body.emotion ?? null;\nconst meta = body.meta ?? { \n  generator: body.generator ?? body.source ?? 'unknown' \n};\nconst correlationId = $json.headers?.['x-correlation-id'] ?? `ingest-${Date.now()}`;\nconst idempotencyKey = $json.headers?.['idempotency-key'] ?? `idem-${Date.now()}`;\n\nreturn [\n  {\n    json: {\n      source_url: sourceUrl,\n      label,\n      meta,\n      correlation_id: correlationId,\n      idempotency_key: idempotencyKey,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "normalize_payload",
+      "name": "Code: normalize.payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/v1/ingest/pull",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotency_key}}"
+            },
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source_url",
+              "value": "={{$json.source_url}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "intended_emotion",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "generator",
+              "value": "={{$json.meta?.generator || 'unknown'}}"
+            },
+            {
+              "name": "prompt",
+              "value": "={{$json.meta?.prompt || ''}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        },
+        "method": "POST"
+      },
+      "id": "media_pull",
+      "name": "HTTP: media.pull",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        200,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ ['done','duplicate'].includes($json.status) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "is_done",
+      "name": "IF: status.done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/ingest",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "={{$json.status === 'duplicate' ? 'ingest.duplicate' : 'ingest.completed'}}"
+            },
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "file_path",
+              "value": "={{$json.file_path}}"
+            },
+            {
+              "name": "sha256",
+              "value": "={{$json.sha256}}"
+            },
+            {
+              "name": "duplicate",
+              "value": "={{$json.duplicate || false}}"
+            }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "emit_event",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\"status\": $json.status || 'unknown', \"video_id\": $json.video_id || null, \"correlation_id\": $json.correlation_id || null, \"duplicate\": $json.duplicate || false} }}"
+      },
+      "id": "respond_success",
+      "name": "Respond: success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\"error\": \"unauthorized\", \"message\": \"Invalid or missing X-INGEST-KEY header\"} }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond_401",
+      "name": "Respond: 401 Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "webhook_trigger": {
+      "main": [
+        [
+          {
+            "node": "auth_check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "auth_check": {
+      "main": [
+        [
+          {
+            "node": "normalize_payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "respond_401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalize_payload": {
+      "main": [
+        [
+          {
+            "node": "media_pull",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "media_pull": {
+      "main": [
+        [
+          {
+            "node": "is_done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "is_done": {
+      "main": [
+        [
+          {
+            "node": "emit_event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "respond_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "emit_event": {
+      "main": [
+        [
+          {
+            "node": "respond_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error_handler"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "agent",
+      "id": "1"
+    },
+    {
+      "name": "ingest",
+      "id": "2"
+    },
+    {
+      "name": "phase4",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}
