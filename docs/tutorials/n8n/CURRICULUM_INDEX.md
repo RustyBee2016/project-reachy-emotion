@@ -8,6 +8,7 @@
 > - [v3_Codex/Nth_level/INDEX.md](v3_Codex/Nth_level/INDEX.md) (script/function-level node mechanics for all nine v3 agents)
 >
 > This legacy curriculum remains useful for learning patterns, but v3 is the authoritative reference for active 08.4.2 workflows and endpoint contracts.
+
 **Course**: n8n Agentic AI Development for Reachy_Local_08.4.2  
 **Instructor**: Cascade (AI)  
 **Student**: Russ  
