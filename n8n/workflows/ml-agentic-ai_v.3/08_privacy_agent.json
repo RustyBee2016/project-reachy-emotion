@@ -1,0 +1,268 @@
+{
+  "name": "Agent 8 \u2014 Privacy/Retention Agent (Reachy 08.4.2 v3)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule_daily",
+      "name": "Schedule: daily 03:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "privacy/purge",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook_gdpr",
+      "name": "Webhook: gdpr.deletion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [
+        -600,
+        450
+      ],
+      "webhookId": "privacy-purge"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT video_id, file_path FROM video WHERE split='temp' AND created_at < NOW() - INTERVAL '7 days';"
+      },
+      "id": "db_find_old",
+      "name": "Postgres: find.old_temp",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 50,
+        "options": {}
+      },
+      "id": "split_batches",
+      "name": "Loop: batch.delete",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "rm -f /videos/{{$json.file_path}}",
+        "authentication": "password"
+      },
+      "id": "ssh_delete_file",
+      "name": "SSH: delete.file",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "sshPassword": {
+          "id": "3",
+          "name": "SSH Ubuntu1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE video SET split='purged', updated_at=NOW() WHERE video_id='{{$json.video_id}}'::uuid;"
+      },
+      "id": "db_mark_purged",
+      "name": "Postgres: mark.purged",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        200,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "audit_log",
+        "columns": "action, video_id, reason, timestamp"
+      },
+      "id": "db_audit_log",
+      "name": "Postgres: audit.log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "2",
+          "name": "PostgreSQL - reachy_local"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/pipeline",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "=privacy.purged"
+            },
+            {
+              "name": "pipeline_id",
+              "value": "=privacy-retention"
+            },
+            {
+              "name": "count",
+              "value": "=1"
+            },
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "emit_purged",
+      "name": "HTTP: emit.purged",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        600,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "schedule_daily": {
+      "main": [
+        [
+          {
+            "node": "db_find_old",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook_gdpr": {
+      "main": [
+        [
+          {
+            "node": "db_find_old",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_find_old": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "split_batches": {
+      "main": [
+        [
+          {
+            "node": "ssh_delete_file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ssh_delete_file": {
+      "main": [
+        [
+          {
+            "node": "db_mark_purged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_mark_purged": {
+      "main": [
+        [
+          {
+            "node": "db_audit_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "db_audit_log": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "emit_purged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "agent"
+    },
+    {
+      "name": "privacy"
+    }
+  ],
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}

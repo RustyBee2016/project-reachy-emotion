@@ -1,0 +1,453 @@
+{
+  "name": "Agent 3 \u2014 Promotion/Curation Agent (Reachy 08.4.2 v3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "promotion/v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook_promotion",
+      "name": "Webhook: request.promotion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [
+        -800,
+        300
+      ],
+      "webhookId": "promotion-request"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Validate promotion request\nconst body = $json.body ?? $json;\nconst required = ['video_id', 'label'];\n\nfor (const field of required) {\n  if (!body[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\nconst allowedSplits = ['train', 'test'];\nconst target = body.target || body.dest_split || 'train';\n\nif (!allowedSplits.includes(target)) {\n  throw new Error(`Invalid target split: ${target}`);\n}\n\n// Generate stable idempotency key\nconst crypto = require('crypto');\nconst idem = body.idempotency_key || crypto.createHash('sha256')\n  .update(`${body.video_id}|${target}|${body.label}`)\n  .digest('hex').slice(0, 32);\n\nreturn [{\n  json: {\n    video_id: body.video_id,\n    label: body.label,\n    target,\n    idempotency_key: idem,\n    correlation_id: body.correlation_id || `promo-${Date.now()}`,\n    dry_run: true  // Start with dry-run\n  }\n}];"
+      },
+      "id": "validate_request",
+      "name": "Code: validate.request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/v1/media/promote",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotency_key}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "dest_split",
+              "value": "={{$json.target}}"
+            },
+            {
+              "name": "label",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "dry_run",
+              "value": "=true"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "http_dryrun",
+      "name": "HTTP: dryrun.promote",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -400,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Summarize dry-run plan for approval\nconst plan = $json;\nconst req = $('Code: validate.request').first().json;\n\nreturn [{\n  json: {\n    approval_request: {\n      title: 'Video Promotion Request',\n      video_id: req.video_id,\n      label: req.label,\n      target_split: req.target,\n      plan_summary: {\n        will_move: plan.moves || [],\n        will_update_db: plan.will_update_db !== false,\n        conflicts: plan.conflicts || [],\n        dry_run_status: plan.status\n      },\n      correlation_id: req.correlation_id,\n      idempotency_key: req.idempotency_key\n    }\n  }\n}];"
+      },
+      "id": "summarize_plan",
+      "name": "Code: summarize.plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "promotion/approve",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook_approval",
+      "name": "Webhook: await.approval",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "promotion-approval"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.approved}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if_approved",
+      "name": "IF: approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/v1/media/promote",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{$json.idempotency_key}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "dest_split",
+              "value": "={{$json.target_split}}"
+            },
+            {
+              "name": "label",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "dry_run",
+              "value": "=false"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "http_real_promote",
+      "name": "HTTP: real.promote",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        400,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/v1/ingest/manifest/rebuild",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "splits",
+              "value": "=[\"train\", \"test\"]"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "http_rebuild_manifest",
+      "name": "HTTP: rebuild.manifest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        600,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Media Mover Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/pipeline",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "=promotion.completed"
+            },
+            {
+              "name": "pipeline_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "video_id",
+              "value": "={{$json.video_id}}"
+            },
+            {
+              "name": "dest_split",
+              "value": "={{$json.target_split}}"
+            },
+            {
+              "name": "label",
+              "value": "={{$json.label}}"
+            },
+            {
+              "name": "correlation_id",
+              "value": "={{$json.correlation_id}}"
+            },
+            {
+              "name": "dataset_hash",
+              "value": "={{$('HTTP: rebuild.manifest').first().json.dataset_hash || ''}}"
+            }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "emit_completed",
+      "name": "HTTP: emit.completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"video_id\": $json.video_id,\n  \"dest_split\": $json.target_split,\n  \"dataset_hash\": $json.dataset_hash,\n  \"correlation_id\": $json.correlation_id\n} }}"
+      },
+      "id": "respond_success",
+      "name": "Respond: success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"rejected\",\n  \"message\": \"Promotion not approved\",\n  \"correlation_id\": $json.correlation_id\n} }}",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "id": "respond_rejected",
+      "name": "Respond: rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        400,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "webhook_promotion": {
+      "main": [
+        [
+          {
+            "node": "validate_request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate_request": {
+      "main": [
+        [
+          {
+            "node": "http_dryrun",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_dryrun": {
+      "main": [
+        [
+          {
+            "node": "summarize_plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "summarize_plan": {
+      "main": [
+        [
+          {
+            "node": "webhook_approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook_approval": {
+      "main": [
+        [
+          {
+            "node": "if_approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if_approved": {
+      "main": [
+        [
+          {
+            "node": "http_real_promote",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "respond_rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_real_promote": {
+      "main": [
+        [
+          {
+            "node": "http_rebuild_manifest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_rebuild_manifest": {
+      "main": [
+        [
+          {
+            "node": "emit_completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "emit_completed": {
+      "main": [
+        [
+          {
+            "node": "respond_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "agent",
+      "id": "1"
+    },
+    {
+      "name": "promotion",
+      "id": "2"
+    },
+    {
+      "name": "phase4",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-07T19:30:00.000Z",
+  "versionId": "1"
+}
