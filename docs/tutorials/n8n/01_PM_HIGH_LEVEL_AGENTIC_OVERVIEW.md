@@ -46,11 +46,18 @@ Project impact:
 - Confirm privacy retention and audit event paths are still policy compliant.
 - Confirm observability metrics are being collected and stored.
 
+## Downloadable technical paper
+Download the full markdown research paper here: `05_RESEARCH_PAPER_REACHY_AGENTIC_SYSTEM.md`.
+
+## Fast visual: single-page sequence
+Start with `00_REQUEST_TO_DEPLOYMENT_SEQUENCE_DIAGRAM.md` for a one-page view of the full request-to-deployment control flow before reading supporting docs.
+
 ## Recommended reading order for non-engineering stakeholders
-1. `V3_TUTORIAL_INDEX.md`
-2. `V3_ENDPOINT_ALIGNMENT.md`
-3. `v3_Codex/CURRICULUM_INDEX.md`
-4. `v3_Codex/WORKFLOW_JSON_CHANGELOG.md`
+1. `00_REQUEST_TO_DEPLOYMENT_SEQUENCE_DIAGRAM.md`
+2. `V3_TUTORIAL_INDEX.md`
+3. `V3_ENDPOINT_ALIGNMENT.md`
+4. `v3_Codex/CURRICULUM_INDEX.md`
+5. `v3_Codex/WORKFLOW_JSON_CHANGELOG.md`
 
 This sequence gives strategy first, technical deltas second.
 
