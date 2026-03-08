@@ -59,7 +59,7 @@ Each module follows this pattern:
 
 | Module | Title | Duration | Status |
 |--------|-------|----------|--------|
-| **00** | [n8n Fundamentals](MODULE_00_N8N_FUNDAMENTALS.md) | 3 hours | ✅ Complete |
+| **00** | [n8n Fundamentals](Opus_v2/MODULE_00_N8N_FUNDAMENTALS.md) | 3 hours | ✅ Complete |
 
 **Topics**: Architecture, data flow, expressions, node types, credentials, error handling
 
@@ -69,9 +69,9 @@ Each module follows this pattern:
 
 | Module | Title | Workflow | Duration | Status |
 |--------|-------|----------|----------|--------|
-| **01** | [Ingest Agent](MODULE_01_INGEST_AGENT.md) | `01_ingest_agent.json` | 4 hours | ✅ Complete |
-| **02** | [Labeling Agent](MODULE_02_LABELING_AGENT.md) | `02_labeling_agent.json` | 3 hours | ✅ Complete |
-| **03** | [Promotion Agent](MODULE_03_PROMOTION_AGENT.md) | `03_promotion_agent.json` | 4 hours | ✅ Complete |
+| **01** | [Ingest Agent](Opus_v2/MODULE_01_INGEST_AGENT.md) | `01_ingest_agent.json` | 4 hours | ✅ Complete |
+| **02** | [Labeling Agent](Opus_v2/MODULE_02_LABELING_AGENT.md) | `02_labeling_agent.json` | 3 hours | ✅ Complete |
+| **03** | [Promotion Agent](Opus_v2/MODULE_03_PROMOTION_AGENT.md) | `03_promotion_agent.json` | 4 hours | ✅ Complete |
 
 **Topics**: Webhooks, authentication, polling, database operations, state management, idempotency
 
@@ -81,8 +81,8 @@ Each module follows this pattern:
 
 | Module | Title | Workflow | Duration | Status |
 |--------|-------|----------|----------|--------|
-| **04** | [Reconciler Agent](MODULE_04_RECONCILER_AGENT.md) | `04_reconciler_agent.json` | 3 hours | ✅ Complete |
-| **05** | [Privacy Agent](MODULE_05_PRIVACY_AGENT.md) | `08_privacy_agent.json` | 2 hours | ✅ Complete |
+| **04** | [Reconciler Agent](Opus_v2/MODULE_04_RECONCILER_AGENT.md) | `04_reconciler_agent.json` | 3 hours | ✅ Complete |
+| **05** | [Privacy Agent](Opus_v2/MODULE_05_PRIVACY_AGENT.md) | `08_privacy_agent.json` | 2 hours | ✅ Complete |
 
 **Topics**: Scheduled triggers, batch processing, SSH operations, compliance
 
@@ -92,9 +92,9 @@ Each module follows this pattern:
 
 | Module | Title | Workflow | Duration | Status |
 |--------|-------|----------|----------|--------|
-| **06** | [Training Orchestrator](MODULE_06_TRAINING_ORCHESTRATOR.md) | `05_training_orchestrator_efficientnet.json` | 5 hours | ✅ Complete |
-| **07** | [Evaluation Agent](MODULE_07_EVALUATION_AGENT.md) | `06_evaluation_agent_efficientnet.json` | 3 hours | ✅ Complete |
-| **08** | [Deployment Agent](MODULE_08_DEPLOYMENT_AGENT.md) | `07_deployment_agent_efficientnet.json` | 4 hours | ✅ Complete |
+| **06** | [Training Orchestrator](Opus_v2/MODULE_06_TRAINING_ORCHESTRATOR.md) | `05_training_orchestrator_efficientnet.json` | 5 hours | ✅ Complete |
+| **07** | [Evaluation Agent](Opus_v2/MODULE_07_EVALUATION_AGENT.md) | `06_evaluation_agent_efficientnet.json` | 3 hours | ✅ Complete |
+| **08** | [Deployment Agent](Opus_v2/MODULE_08_DEPLOYMENT_AGENT.md) | `07_deployment_agent_efficientnet.json` | 4 hours | ✅ Complete |
 
 **Topics**: Long-running processes, MLflow integration, quality gates, SSH/SCP, rollback patterns
 
@@ -104,8 +104,8 @@ Each module follows this pattern:
 
 | Module | Title | Workflow | Duration | Status |
 |--------|-------|----------|----------|--------|
-| **09** | [Observability Agent](MODULE_09_OBSERVABILITY_AGENT.md) | `09_observability_agent.json` | 3 hours | ✅ Complete |
-| **10** | [ML Pipeline Orchestrator](MODULE_10_ML_PIPELINE_ORCHESTRATOR.md) | `10_ml_pipeline_orchestrator.json` | 5 hours | ✅ Complete |
+| **09** | [Observability Agent](Opus_v2/MODULE_09_OBSERVABILITY_AGENT.md) | `09_observability_agent.json` | 3 hours | ✅ Complete |
+| **10** | [ML Pipeline Orchestrator](Opus_v2/MODULE_10_ML_PIPELINE_ORCHESTRATOR.md) | `10_ml_pipeline_orchestrator.json` | 5 hours | ✅ Complete |
 
 **Topics**: Metrics collection, alerting, workflow-to-workflow calls, end-to-end orchestration
 
@@ -115,9 +115,9 @@ Each module follows this pattern:
 
 | Module | Title | Duration | Status |
 |--------|-------|----------|--------|
-| **11** | [Error Handling & Recovery](MODULE_11_ERROR_HANDLING.md) | 2 hours | ✅ Complete |
-| **12** | [Testing & Debugging Strategies](MODULE_12_TESTING_DEBUGGING.md) | 2 hours | ✅ Complete |
-| **13** | [Production Operations](MODULE_13_PRODUCTION_OPS.md) | 2 hours | ✅ Complete |
+| **11** | [Error Handling & Recovery](Opus_v2/MODULE_11_ERROR_HANDLING.md) | 2 hours | ✅ Complete |
+| **12** | [Testing & Debugging Strategies](Opus_v2/MODULE_12_TESTING_DEBUGGING.md) | 2 hours | ✅ Complete |
+| **13** | [Production Operations](Opus_v2/MODULE_13_PRODUCTION_OPS.md) | 2 hours | ✅ Complete |
 
 **Topics**: Error workflows, sub-workflows, versioning, monitoring, backup/restore
 
@@ -342,4 +342,4 @@ Track your progress through the curriculum:
 
 ---
 
-*Curriculum Version 1.1 — Last Updated: 2026-03-08*
+*Curriculum Version 2.0 (Opus v2) — Last Updated: 2026-03-08*
