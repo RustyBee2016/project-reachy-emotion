@@ -1,0 +1,53 @@
+{
+  "timestamp_utc": "2026-03-05T19:56:34.056533+00:00",
+  "class_names": [
+    "happy",
+    "sad",
+    "neutral"
+  ],
+  "thresholds": {
+    "macro_f1": 0.84,
+    "balanced_accuracy": 0.85,
+    "per_class_f1": 0.75,
+    "per_class_floor": 0.7,
+    "ece": 0.08,
+    "brier": 0.16
+  },
+  "metrics": {
+    "accuracy": 1.0,
+    "precision_macro": 1.0,
+    "recall_macro": 1.0,
+    "f1_macro": 1.0,
+    "balanced_accuracy": 1.0,
+    "f1_class_0": 1.0,
+    "f1_happy": 1.0,
+    "f1_class_1": 1.0,
+    "f1_sad": 1.0,
+    "confusion_matrix": [
+      [
+        1,
+        0
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    "ece": 0.48958078026771545,
+    "brier": 0.3802821991121825,
+    "mce": 0.5812406241893768
+  },
+  "per_class_f1": {
+    "happy": 1.0,
+    "sad": 1.0,
+    "neutral": 0.0
+  },
+  "gates": {
+    "macro_f1": true,
+    "balanced_accuracy": true,
+    "per_class_f1": false,
+    "ece": false,
+    "brier": false
+  },
+  "overall_pass": false
+}

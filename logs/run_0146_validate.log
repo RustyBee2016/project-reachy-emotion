@@ -1,0 +1,11 @@
+Albumentations not available, using torchvision transforms
+timm not installed, trying torchvision
+Using torchvision EfficientNet-B0 (ImageNet weights)
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:775: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+{
+  "predictions": "/home/rusty_admin/projects/reachy_08.4.2/stats/results/run_0146_predictions.npz",
+  "gate_report": "/home/rusty_admin/projects/reachy_08.4.2/stats/results/run_0146_gate_a.json",
+  "overall_pass": false,
+  "onnx_path": null
+}
