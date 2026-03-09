@@ -44,11 +44,16 @@ The Ingest Agent is the **entry point** for all video data entering the Reachy s
 
 Before creating this workflow, verify that these backend services are running:
 
-- [ ] **Media Mover API** is accessible at `http://10.0.4.130:8083`
+- [ ] **Media Mover API** is accessible at `http://10.0.4.130:8083/api/v1/health`
   ```bash
-  curl -s http://10.0.4.130:8083/health | jq .
-  # Expected: {"status": "ok"}
+  curl -s http://10.0.4.130:8083/api/v1/health | jq .
+  # Expected: {
+  #   "status": "success",
+  #   "data.status": "healthy",
+  #   "data.checks.directories.status": "ok" or "warning"
+  # }
   ```
+  - `directories.status = "warning"` simply means one of the optional split folders (e.g., `purged/`) hasn’t been created yet; this is acceptable for dev setups.
 - [ ] **PostgreSQL** has the `video` table
   ```bash
   psql -h localhost -U reachy_dev -d reachy_emotion -c "\d video"
@@ -93,7 +98,7 @@ This is the entry point. External systems POST video URLs here.
 | **HTTP Method** | `POST` | We're receiving data |
 | **Path** | `video_gen_hook` | This is the endpoint path. The full URL will be `http://<n8n-host>:5678/webhook/video_gen_hook` |
 | **Authentication** | `None` | We handle auth ourselves in the next node |
-| **Response Mode** | `On Received` | Returns 202 immediately before processing completes |
+| **Response Mode** | `Immediately` | Returns 202 immediately before processing completes |
 | **Response Code** | `202` | 202 Accepted indicates async processing |
 
 6. Click **Save** on the node
@@ -101,8 +106,8 @@ This is the entry point. External systems POST video URLs here.
 ### What You Should See
 
 The node shows:
-- **Test URL:** `http://localhost:5678/webhook-test/video_gen_hook`
-- **Production URL:** `http://localhost:5678/webhook/video_gen_hook`
+- **Test URL:** `http://10.0.4.130:5678/webhook-test/video_gen_hook`
+- **Production URL:** `http://10.0.4.130:5678/webhook/video_gen_hook`
 
 ### Test It
 
