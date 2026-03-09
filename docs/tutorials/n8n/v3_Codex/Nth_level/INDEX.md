@@ -3,6 +3,7 @@
 This curriculum maps each n8n node in `n8n/workflows/ml-agentic-ai_v.3` to the exact backend scripts, functions, queries, and side effects that implement the behavior.
 
 ## Modules
+- [AGENT_01_09_PARAMETER_MATRIX.md](./AGENT_01_09_PARAMETER_MATRIX.md)
 - [MODULE_01_INGEST_AGENT_NTH_LEVEL.md](./MODULE_01_INGEST_AGENT_NTH_LEVEL.md)
 - [MODULE_02_LABELING_AGENT_NTH_LEVEL.md](./MODULE_02_LABELING_AGENT_NTH_LEVEL.md)
 - [MODULE_03_PROMOTION_AGENT_NTH_LEVEL.md](./MODULE_03_PROMOTION_AGENT_NTH_LEVEL.md)

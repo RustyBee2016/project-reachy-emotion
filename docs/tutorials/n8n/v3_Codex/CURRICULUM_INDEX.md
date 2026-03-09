@@ -15,6 +15,7 @@ This folder contains internally updated module tutorials aligned to the new work
 - [WORKFLOW_JSON_CHANGELOG.md](./WORKFLOW_JSON_CHANGELOG.md)
 - [step_by_step_guide/INDEX.md](./step_by_step_guide/INDEX.md)
 - [Nth_level/INDEX.md](./Nth_level/INDEX.md)
+- [Nth_level/AGENT_01_09_PARAMETER_MATRIX.md](./Nth_level/AGENT_01_09_PARAMETER_MATRIX.md)
 
 ## Workflow Set
 - `n8n/workflows/ml-agentic-ai_v.3/01_ingest_agent.json`

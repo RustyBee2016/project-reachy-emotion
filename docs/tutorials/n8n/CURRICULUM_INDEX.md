@@ -6,6 +6,7 @@
 > - [V3_ENDPOINT_ALIGNMENT.md](V3_ENDPOINT_ALIGNMENT.md)
 > - [v3_Codex/CURRICULUM_INDEX.md](v3_Codex/CURRICULUM_INDEX.md) (full MODULE_01...MODULE_09 rewritten set + workflow changelog)
 > - [v3_Codex/Nth_level/INDEX.md](v3_Codex/Nth_level/INDEX.md) (script/function-level node mechanics for all nine v3 agents)
+> - [v3_Codex/Nth_level/AGENT_01_09_PARAMETER_MATRIX.md](v3_Codex/Nth_level/AGENT_01_09_PARAMETER_MATRIX.md) (exact per-node parameter values for Agents 1-9)
 >
 > This legacy curriculum remains useful for learning patterns, but v3 is the authoritative reference for active 08.4.2 workflows and endpoint contracts.
 **Course**: n8n Agentic AI Development for Reachy_Local_08.4.2  
