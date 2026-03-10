@@ -36,6 +36,11 @@ EMOTION_LABELS = {"happy", "sad", "neutral"}
 FRAME_NAME_RE = re.compile(r"^(happy|sad|neutral)_.+_f(\d{2})_idx(\d{5})\.jpg$")
 
 
+def utcnow_naive() -> datetime:
+    """Return UTC timestamp as naive datetime for legacy DB timestamp columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 # ============================================================================
 # Request/Response Models
 # ============================================================================
@@ -656,6 +661,9 @@ async def pull_video(
         await generate_thumbnail(file_path, thumb_path)
         
         # Create database record
+        # NOTE: Explicit timestamps are required for DBs where created_at/updated_at
+        # are NOT NULL but server defaults are not present.
+        now = utcnow_naive()
         video = Video(
             video_id=video_id,
             file_path=rel_path,
@@ -667,6 +675,8 @@ async def pull_video(
             fps=metadata.fps,
             width=metadata.width,
             height=metadata.height,
+            created_at=now,
+            updated_at=now,
         )
         
         db.add(video)
@@ -781,6 +791,9 @@ async def upload_video(
         thumb_path = config.thumbs_path / f"{video_id}.jpg"
         await generate_thumbnail(file_path, thumb_path)
 
+        # NOTE: Explicit timestamps are required for DBs where created_at/updated_at
+        # are NOT NULL but server defaults are not present.
+        now = utcnow_naive()
         video = Video(
             video_id=video_id,
             file_path=rel_path,
@@ -793,6 +806,8 @@ async def upload_video(
             width=metadata.width,
             height=metadata.height,
             extra_data=parsed_meta,
+            created_at=now,
+            updated_at=now,
         )
         db.add(video)
         await db.commit()
@@ -922,8 +937,8 @@ async def register_local_video(
         thumb_path = config.thumbs_path / f"{video_id}.jpg"
         await generate_thumbnail(file_path, thumb_path)
 
-        # NOTE: insert explicit timezone-aware UTC timestamps.
-        now = datetime.now(timezone.utc)
+        # NOTE: insert explicit UTC timestamps as naive datetimes for legacy DB schema.
+        now = utcnow_naive()
         insert_values = {
             "video_id": video_id,
             "file_path": stored_rel_path,

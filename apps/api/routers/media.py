@@ -232,7 +232,9 @@ async def promote(
                 },
             )
             video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
-            now = datetime.now(timezone.utc)
+            # NOTE: video.created_at/updated_at may be TIMESTAMP WITHOUT TIME ZONE
+            # in legacy DB deployments, so write UTC as naive datetime.
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             new_video_id = str(uuid.uuid4())
             insert_values = {
                 "video_id": new_video_id,

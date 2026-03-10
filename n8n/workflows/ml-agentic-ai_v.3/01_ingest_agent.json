@@ -5,10 +5,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "video_gen_hook",
-        "responseMode": "onReceived",
-        "options": {
-          "responseCode": 202
-        }
+        "responseMode": "responseNode",
+        "options": {}
       },
       "id": "webhook_trigger",
       "name": "Webhook: ingest.video",
@@ -22,44 +20,21 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{$json.headers['x-ingest-key']}}",
-              "operation": "equals",
-              "value2": "={{$env.INGEST_TOKEN}}"
-            }
-          ]
-        }
-      },
-      "id": "auth_check",
-      "name": "IF: auth.check",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -200,
-        300
-      ]
-    },
-    {
-      "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Normalize incoming payload from various sources\nconst body = $json.body ?? $json;\nconst sourceUrl = body.source_url ?? body.url ?? body.asset?.url ?? body.data?.asset?.url;\n\nif (!sourceUrl) {\n  throw new Error('Missing source_url in request body');\n}\n\nconst label = body.label ?? body.emotion ?? null;\nconst meta = body.meta ?? { \n  generator: body.generator ?? body.source ?? 'unknown' \n};\nconst correlationId = $json.headers?.['x-correlation-id'] ?? `ingest-${Date.now()}`;\nconst idempotencyKey = $json.headers?.['idempotency-key'] ?? `idem-${Date.now()}`;\n\nreturn [\n  {\n    json: {\n      source_url: sourceUrl,\n      label,\n      meta,\n      correlation_id: correlationId,\n      idempotency_key: idempotencyKey,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+        "jsCode": "// Normalize payload and enforce 3-class policy when label is provided.\nconst clean = (v) => (typeof v === 'string' ? v.trim() : '');\nconst body = $json.body ?? $json;\nconst sourceUrl = clean(body.source_url ?? body.url ?? body.asset?.url ?? body.data?.asset?.url);\n\nif (!sourceUrl) {\n  throw new Error('Missing source_url in request body');\n}\n\nconst allowedLabels = new Set(['happy', 'sad', 'neutral']);\nlet label = clean(body.label ?? body.emotion ?? '').toLowerCase();\nif (!label) {\n  label = null;\n}\nif (label && !allowedLabels.has(label)) {\n  throw new Error(`Invalid label '${label}'. Allowed: happy, sad, neutral`);\n}\n\nconst meta = body.meta ?? {};\nconst generator = clean(meta.generator ?? body.generator ?? body.source ?? 'unknown') || 'unknown';\nconst prompt = clean(meta.prompt ?? body.prompt ?? '');\nconst source = clean(meta.source ?? body.source ?? 'agent1.ingest_agent') || 'agent1.ingest_agent';\n\nconst incomingCorrelation = clean($json.headers?.['x-correlation-id']);\nconst correlationId = incomingCorrelation || `ing-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;\n\nconst incomingIdempotency = clean($json.headers?.['idempotency-key']);\nconst stableSeed = `${sourceUrl}|${label ?? ''}|${generator}|${prompt}`;\nlet hash = 0;\nfor (let i = 0; i < stableSeed.length; i += 1) {\n  hash = ((hash << 5) - hash) + stableSeed.charCodeAt(i);\n  hash |= 0;\n}\nconst stableIdempotency = `idem-${Math.abs(hash).toString(36)}`;\nconst idempotencyKey = incomingIdempotency || stableIdempotency;\n\nreturn [{\n  json: {\n    source_url: sourceUrl,\n    label,\n    meta: {\n      generator,\n      prompt,\n      source\n    },\n    correlation_id: correlationId,\n    idempotency_key: idempotencyKey,\n    issued_at: new Date().toISOString(),\n    schema_version: 'v1'\n  }\n}];"
       },
       "id": "normalize_payload",
       "name": "Code: normalize.payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        0,
-        200
+        -100,
+        300
       ]
     },
     {
       "parameters": {
-        "url": "={{$env.MEDIA_MOVER_BASE_URL}}/api/v1/ingest/pull",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "http://10.0.4.130:8083/api/v1/ingest/pull",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -90,11 +65,11 @@
             },
             {
               "name": "generator",
-              "value": "={{$json.meta?.generator || 'unknown'}}"
+              "value": "={{$json.meta.generator}}"
             },
             {
               "name": "prompt",
-              "value": "={{$json.meta?.prompt || ''}}"
+              "value": "={{$json.meta.prompt}}"
             }
           ]
         },
@@ -109,14 +84,11 @@
       "typeVersion": 4,
       "position": [
         200,
-        200
+        300
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "1",
-          "name": "Media Mover Auth"
-        }
-      }
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
@@ -127,26 +99,40 @@
               "value2": true
             }
           ]
-        }
+        },
+        "options": {}
       },
       "id": "is_done",
       "name": "IF: status.done?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        800,
-        200
+        500,
+        300
       ]
     },
     {
       "parameters": {
-        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/ingest",
+        "method": "POST",
+        "url": "http://10.0.4.140:8000/api/events/ingest",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
             {
+              "name": "schema_version",
+              "value": "={{$json.schema_version || 'v1'}}"
+            },
+            {
               "name": "event_type",
               "value": "={{$json.status === 'duplicate' ? 'ingest.duplicate' : 'ingest.completed'}}"
+            },
+            {
+              "name": "source",
+              "value": "={{$json.meta?.source || 'agent1.ingest_agent'}}"
+            },
+            {
+              "name": "issued_at",
+              "value": "={{$now.toISO()}}"
             },
             {
               "name": "video_id",
@@ -170,46 +156,37 @@
             }
           ]
         },
-        "method": "POST"
+        "options": {
+          "timeout": 60000
+        }
       },
       "id": "emit_event",
       "name": "HTTP: emit.completed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        1200,
-        100
-      ]
+        800,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 1000
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ {\"status\": $json.status || 'unknown', \"video_id\": $json.video_id || null, \"correlation_id\": $json.correlation_id || null, \"duplicate\": $json.duplicate || false} }}"
+        "responseBody": "={{ {\"status\": $json.status || 'accepted', \"video_id\": $json.video_id || null, \"correlation_id\": $json.correlation_id || null, \"duplicate\": $json.duplicate || false} }}",
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "respond_success",
       "name": "Respond: success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1400,
-        100
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ {\"error\": \"unauthorized\", \"message\": \"Invalid or missing X-INGEST-KEY header\"} }}",
-        "options": {
-          "responseCode": 401
-        }
-      },
-      "id": "respond_401",
-      "name": "Respond: 401 Unauthorized",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [
-        -200,
-        400
+        1100,
+        300
       ]
     }
   ],
@@ -218,25 +195,7 @@
       "main": [
         [
           {
-            "node": "auth_check",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "auth_check": {
-      "main": [
-        [
-          {
             "node": "normalize_payload",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "respond_401",
             "type": "main",
             "index": 0
           }
@@ -300,7 +259,9 @@
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": "error_handler"
+    "errorWorkflow": "error_handler",
+    "binaryMode": "separate",
+    "availableInMCP": true
   },
   "staticData": null,
   "tags": [
@@ -318,6 +279,6 @@
     }
   ],
   "triggerCount": 1,
-  "updatedAt": "2025-11-07T19:30:00.000Z",
-  "versionId": "1"
+  "updatedAt": "2026-03-09T00:00:00.000Z",
+  "versionId": "2"
 }

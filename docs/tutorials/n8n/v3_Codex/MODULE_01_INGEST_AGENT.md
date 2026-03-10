@@ -3,38 +3,38 @@
 **Workflow JSON:** `n8n/workflows/ml-agentic-ai_v.3/01_ingest_agent.json`
 
 ## Objective
-Receive ingest requests, normalize payloads, pull media into local storage, and emit ingest lifecycle events.
+Receive ingest requests, normalize payloads, pull media into local storage, emit ingest lifecycle events, and return a deterministic webhook response.
 
 ## Related Backend Scripts and Functionalities
-- `apps/api/app/routers/ingest.py`: `POST /api/v1/ingest/pull` (pull/download + ffprobe + thumbnail + DB insert).
+- `apps/api/app/routers/ingest.py`: `POST /api/v1/ingest/pull` (download/hash/ffprobe/thumbnail/DB insert).
 - `apps/api/routers/gateway.py`: `POST /api/events/ingest` event sink used by this workflow.
 
 ## What Changed vs Legacy Module
-- Replaced `/api/media/pull` with canonical `POST /api/v1/ingest/pull` to match active Media Mover routers.
-- Removed obsolete polling chain (`Wait`, `HTTP: check.status`, retry loop). Ingest pull is synchronous and already returns `status=done|duplicate`.
-- Removed duplicate DB write (`Postgres: insert.video`) because `pull_video()` already persists to `video` table.
-- Updated success criteria to accept both `done` and `duplicate` statuses.
-- Added explicit HTTP method configuration (`POST`) for outbound requests.
+- Replaced `/api/media/pull` with canonical `POST /api/v1/ingest/pull`.
+- Removed obsolete polling chain (`Wait`, status polling loop, duplicate DB write).
+- Removed workflow-level auth gate and unauthorized response branch for this local trusted environment.
+- Added envelope fields on emitted events: `schema_version`, `source`, `issued_at`.
+- Added retry settings to outbound HTTP nodes (`maxTries=5`).
+- Switched Agent 1 HTTP node URLs to explicit absolute endpoints because runtime env allow-list blocks those `$env.*` variables.
 
 ## Node-by-Node (Official n8n Node Types)
 | Workflow Node | Official n8n Node | Functionality |
 |---|---|---|
-| `Webhook: ingest.video` | `Webhook` | n8n `Webhook` trigger for ingest start (`video_gen_hook`). |
-| `IF: auth.check` | `If` | n8n `If` gate validating `x-ingest-key` header against `INGEST_TOKEN`. |
-| `Code: normalize.payload` | `Code` | n8n `Code` node that canonicalizes source URL and correlation/idempotency metadata. |
-| `HTTP: media.pull` | `HTTP Request` | n8n `HTTP Request` node calling `POST /api/v1/ingest/pull` with `source_url`, `correlation_id`, and optional emotion metadata. |
-| `IF: status.done?` | `If` | n8n `If` node validating response status belongs to `done|duplicate`. |
-| `HTTP: emit.completed` | `HTTP Request` | n8n `HTTP Request` node posting ingest event payload to gateway `/api/events/ingest`. |
-| `Respond: success` | `Respond to Webhook` | n8n `Respond to Webhook` node returning final normalized status to caller. |
-| `Respond: 401 Unauthorized` | `Respond to Webhook` | n8n `Respond to Webhook` node for auth rejection path. |
+| `Webhook: ingest.video` | `Webhook` | Ingest entrypoint (`video_gen_hook`). |
+| `Code: normalize.payload` | `Code` | Canonicalizes source URL, 3-class label policy, correlation/idempotency metadata. |
+| `HTTP: media.pull` | `HTTP Request` | Calls `POST /api/v1/ingest/pull` with ingest payload and tracing headers. |
+| `IF: status.done?` | `If` | Allows only `done|duplicate` to emit event. |
+| `HTTP: emit.completed` | `HTTP Request` | Posts ingest lifecycle event to `/api/events/ingest`. |
+| `Respond: success` | `Respond to Webhook` | Returns final normalized status payload to caller. |
 
 ## How This Workflow Delivers Code-Level Functionality
-1. Ingest trigger arrives at `Webhook: ingest.video` and is validated by `If` auth gate.
-2. `Code: normalize.payload` standardizes payload variants so downstream API contract is stable.
-3. `HTTP: media.pull` calls `pull_video()` in `apps/api/app/routers/ingest.py`, which performs download, hash, metadata extraction, thumbnail generation, and DB insert.
-4. The workflow only emits completion events when status is `done` or `duplicate`, matching pull endpoint outcomes.
-5. Gateway receives ingest event through `apps/api/routers/gateway.py` (`/api/events/ingest`) for audit/observability.
+1. Ingest trigger reaches `Webhook: ingest.video`.
+2. `Code: normalize.payload` validates payload shape and normalizes metadata.
+3. `HTTP: media.pull` calls `pull_video()` to download, hash, dedupe, thumbnail, and insert DB row.
+4. `IF: status.done?` gates event emission to terminal ingest statuses.
+5. `HTTP: emit.completed` emits an auditable gateway event envelope.
+6. `Respond: success` returns status, `video_id`, and `correlation_id`.
 
 ## Notes
-- This module reflects the v3 workflow JSON and active backend endpoint contracts as of 2026-03-07.
-- Legacy module files in `docs/tutorials/n8n/` are preserved unchanged; this file is the updated equivalent for v3_Codex.
+- This module reflects the current no-auth workflow policy for n8n orchestration inside the trusted local network.
+- Legacy module files under `docs/tutorials/n8n/Opus_v2/` remain as historical references.

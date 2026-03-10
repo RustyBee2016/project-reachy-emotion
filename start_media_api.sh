@@ -43,5 +43,5 @@ fi
     --host "$HOST" \
     --port "$PORT" \
     --workers "$WORKERS" \
-    --log-level info \a
+    --log-level info \
     --access-log

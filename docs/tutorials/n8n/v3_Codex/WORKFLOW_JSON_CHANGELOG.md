@@ -90,3 +90,29 @@ This document explains exactly what changed in each workflow JSON and why, with 
 - Explicit HTTP methods were set across all v3 workflows to avoid relying on node defaults.
 - Node-reference expressions in Code nodes were normalized to actual node names present in each workflow.
 - v3 workflow titles were renamed to include `v3` for visual separation in n8n imports.
+
+## 2026-03-09 Agent 1 Update (No-Auth + Runtime Repair)
+- **Removed auth nodes from Agent 1 flow:**
+  - Deleted `IF: auth.check` and `Respond: 401 Unauthorized`.
+  - **Why:** maintainer policy for current local trusted-network environment removed workflow-level auth requirements.
+- **Webhook response correction:**
+  - Switched webhook `responseMode` to `responseNode`.
+  - **Why:** ensures `Respond: success` controls final response deterministically.
+- **Event envelope policy alignment:**
+  - Added `schema_version`, `source`, and `issued_at` to `HTTP: emit.completed`.
+- **Retry policy hardening:**
+  - Enabled `retryOnFail` with `maxTries=5` on `HTTP: media.pull` and `HTTP: emit.completed`.
+- **Idempotency fallback hardening:**
+  - Replaced timestamp-only fallback with stable payload-derived fallback key.
+- **Live n8n runtime repair applied:**
+  - Updated workflow ID `vYMNLWn2ba26Aeqk` in local n8n SQLite store to restore missing connections and remove stale auth nodes.
+- **2026-03-09 URL hardening hotfix:**
+  - `HTTP: media.pull` now uses explicit URL `http://10.0.4.130:8083/api/v1/ingest/pull`.
+  - `HTTP: emit.completed` now uses explicit URL `http://10.0.4.140:8000/api/events/ingest`.
+  - **Why:** n8n runtime allow-list (`N8N_ALLOWED_ENV_VARS`) excludes these env vars, causing unresolved URL expressions.
+- **2026-03-09 backend schema compatibility fix (blocking Agent 1 tests):**
+  - Patched `apps/api/app/routers/ingest.py` to set explicit `created_at/updated_at` during `/api/v1/ingest/pull` and `/api/v1/ingest/upload` inserts.
+  - Normalized explicit insert timestamps to UTC-naive format in `ingest.py` and `apps/api/routers/media.py` to match legacy `timestamp without time zone` DB columns.
+  - Restarted Media Mover API and validated:
+    - first call returns `status=done`
+    - repeat call returns `status=duplicate`

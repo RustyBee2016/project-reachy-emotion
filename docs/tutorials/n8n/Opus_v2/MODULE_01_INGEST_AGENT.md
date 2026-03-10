@@ -6,6 +6,8 @@
 **Prerequisite:** MODULE 00 complete, credentials configured
 **Outcome:** A working ingest pipeline that receives video URLs, downloads via Media Mover, stores metadata in PostgreSQL, and emits completion events
 
+> **v3/no-auth policy note (2026-03-09):** For current local trusted-network workflows, remove auth-gate nodes (`auth_check`, `respond_401`) and do not require per-node authentication settings. Use the v3 guide and workflow JSON as the canonical implementation.
+
 ---
 
 ## 1.1 What Does the Ingest Agent Do?
