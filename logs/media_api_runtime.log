@@ -1,0 +1,12 @@
+Starting Media Mover API...
+  Host: 0.0.0.0
+  Port: 8083
+  Database: postgresql+psycopg2://reachy_app:reachy_app@localhost:5432/reachy_local
+  Videos Root: /mnt/videos
+
+INFO:     Started server process [120697]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8083 (Press CTRL+C to quit)
+INFO:     127.0.0.1:45960 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     10.0.4.130:43266 - "GET /api/v1/health HTTP/1.1" 200 OK
