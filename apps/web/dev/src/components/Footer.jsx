@@ -9,9 +9,10 @@ const LINKS = {
     { to: '/privacy',      label: 'Privacy & Safety' },
   ],
   Company: [
-    { to: '/use-cases', label: 'Use Cases' },
-    { to: '/about',     label: 'About' },
-    { to: '/contact',   label: 'Contact' },
+    { to: '/use-cases',                   label: 'Use Cases' },
+    { to: '/about',                       label: 'About' },
+    { to: '/contact',                     label: 'Contact' },
+    { to: '/contact?type=collaboration',  label: 'Careers' },
   ],
   Resources: [
     { to: '/contact', label: 'Investor Inquiry' },
@@ -56,8 +57,8 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
               <Mail size={13} />
-              <a href="mailto:rustybee255@gmail.com" className="hover:text-white transition-colors">
-                rustybee255@gmail.com
+              <a href="mailto:contact@affective-ai.io" className="hover:text-white transition-colors">
+                contact@affective-ai.io
               </a>
             </div>
 
@@ -117,10 +118,7 @@ export default function Footer() {
             color: 'rgba(255,255,255,0.30)',
           }}
         >
-          <span>© {new Date().getFullYear()} Affective AI — Emotionally Intelligent Robotics</span>
-          <span className="font-mono" style={{ color: 'rgba(123,47,247,0.50)' }}>
-            v0.09.1 · Reachy_Local_08.4.2 · Research / Educational Use
-          </span>
+          <span>© 2022-2026 Affective AI — Emotionally Intelligent Robotics</span>
         </div>
       </div>
     </footer>

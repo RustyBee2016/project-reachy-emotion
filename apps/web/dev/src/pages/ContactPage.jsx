@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Mail, MessageSquare, TrendingUp, BookOpen, CheckCircle2, ArrowRight } from 'lucide-react'
 import LogoSVG from '../components/LogoSVG'
 import { Reveal } from '../hooks/useReveal'
@@ -12,14 +13,19 @@ const G = ({ children }) => (
 )
 
 const INQUIRY_TYPES = [
-  { id: 'demo', icon: MessageSquare, color: '#7B2FF7', label: 'Request Demo', desc: 'See the platform in action with a guided walkthrough.' },
-  { id: 'investor', icon: TrendingUp, color: '#D4166A', label: 'Investor Inquiry', desc: 'Discuss partnership and investment opportunities.' },
-  { id: 'technical', icon: BookOpen, color: '#00B4D8', label: 'Technical Brief', desc: 'Receive the full technical specification document.' },
-  { id: 'collaboration', icon: Mail, color: '#00C8A0', label: 'Research Collaboration', desc: 'Academic or clinical research partnership discussion.' },
+  { id: 'demo',          icon: MessageSquare, color: '#7B2FF7', label: 'Request Demo',           desc: 'See the platform in action with a guided walkthrough.' },
+  { id: 'investor',     icon: TrendingUp,    color: '#D4166A', label: 'Investor Inquiry',        desc: 'Discuss partnership and investment opportunities.' },
+  { id: 'technical',   icon: BookOpen,      color: '#00B4D8', label: 'Technical Brief',         desc: 'Receive the full technical specification document.' },
+  { id: 'collaboration', icon: Mail,         color: '#22C55E', label: 'Research Collaboration', desc: 'Academic or clinical research partnership discussion.' },
 ]
 
 export default function ContactPage() {
-  const [selected, setSelected] = useState('demo')
+  const [searchParams] = useSearchParams()
+  const initialType = searchParams.get('type')
+  const validIds = INQUIRY_TYPES.map(t => t.id)
+  const [selected, setSelected] = useState(
+    validIds.includes(initialType) ? initialType : 'demo'
+  )
   const [form, setForm] = useState({ name: '', email: '', org: '', message: '' })
   const [submitted, setSubmitted] = useState(false)
 
@@ -113,15 +119,12 @@ export default function ContactPage() {
               </div>
               <div className="flex items-center gap-2 text-sm mb-1">
                 <Mail size={13} style={{ color: '#7B2FF7' }} />
-                <a href="mailto:rustybee255@gmail.com" className="transition-colors" style={{ color: 'rgba(255,255,255,0.60)' }}
+                <a href="mailto:contact@affective-ai.io" className="transition-colors" style={{ color: 'rgba(255,255,255,0.60)' }}
                   onMouseOver={e => e.target.style.color = 'white'}
                   onMouseOut={e => e.target.style.color = 'rgba(255,255,255,0.60)'}
                 >
-                  rustybee255@gmail.com
+                  contact@affective-ai.io
                 </a>
-              </div>
-              <div className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                Russell Bray · Affective AI · v0.09.1
               </div>
             </div>
           </div>

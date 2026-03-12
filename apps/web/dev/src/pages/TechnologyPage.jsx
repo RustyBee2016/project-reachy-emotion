@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Cpu, Brain, Zap, BarChart2, Activity, CheckCircle2, ChevronRight } from 'lucide-react'
+import { ArrowRight, Cpu, Brain, Zap, BarChart2, Activity, CheckCircle2, ChevronRight, Bot } from 'lucide-react'
 import { Reveal } from '../hooks/useReveal'
 import { GradientOrbs } from '../components/AnimatedBackground'
+import GestureModulationShowcase from '../components/GestureModulationShowcase'
 
 const G = ({ children }) => (
   <span style={{
@@ -18,6 +20,183 @@ const Card = ({ children, className = '' }) => (
     {children}
   </div>
 )
+
+/* ── Ekman Taxonomy Grid ── */
+const EKMAN_MAP = [
+  { emotion: 'joy',       phase1: 'happy',   color: '#00B4D8', intensity: 'high',   strategy: 'amplify_positive', tone: 'warm · celebratory',  deEsc: false, gestures: ['WAVE','CELEBRATE','EXCITED','THUMBS_UP'] },
+  { emotion: 'sadness',  phase1: 'sad',     color: '#D4166A', intensity: 'high',   strategy: 'provide_support',  tone: 'gentle · empathetic',  deEsc: false, gestures: ['EMPATHY','COMFORT','HUG','SAD_ACK'] },
+  { emotion: 'neutral',  phase1: 'neutral', color: '#7B2FF7', intensity: 'low',    strategy: 'engage_openly',    tone: 'calm · curious',       deEsc: false, gestures: ['NOD','LISTEN','THINK','WAVE'] },
+  { emotion: 'anger',    phase1: 'neutral', color: '#FF6B35', intensity: 'medium', strategy: 'de_escalate',      tone: 'calm · measured',      deEsc: true,  gestures: ['LISTEN','NOD','NEUTRAL'] },
+  { emotion: 'fear',     phase1: 'sad',     color: '#A820D8', intensity: 'medium', strategy: 'reassure',         tone: 'reassuring · steady',  deEsc: false, gestures: ['COMFORT','HUG','LISTEN'] },
+  { emotion: 'disgust',  phase1: 'neutral', color: '#6B7280', intensity: 'low',    strategy: 'redirect',         tone: 'neutral · redirecting', deEsc: false, gestures: ['NOD','NEUTRAL','LISTEN'] },
+  { emotion: 'contempt', phase1: 'neutral', color: '#9CA3AF', intensity: 'low',    strategy: 'de_escalate',      tone: 'calm · non-reactive',  deEsc: true,  gestures: ['LISTEN','NOD'] },
+  { emotion: 'surprise', phase1: 'happy',   color: '#00C8A0', intensity: 'high',   strategy: 'match_and_explore','tone': 'excited · inquisitive', deEsc: false, gestures: ['EXCITED','WAVE','CELEBRATE'] },
+]
+
+function EkmanTaxonomyGrid() {
+  const [active, setActive] = useState(null)
+  return (
+    <div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {EKMAN_MAP.map(({ emotion, phase1, color, intensity, strategy, tone, deEsc, gestures }) => (
+          <div
+            key={emotion}
+            className="rounded-xl p-4 cursor-pointer"
+            style={{
+              background: active === emotion ? `${color}10` : 'rgba(11,11,24,0.85)',
+              border: `1px solid ${active === emotion ? color + '55' : color + '22'}`,
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => setActive(active === emotion ? null : emotion)}
+            onMouseOver={e => { if (active !== emotion) e.currentTarget.style.borderColor = `${color}44` }}
+            onMouseOut={e => { if (active !== emotion) e.currentTarget.style.borderColor = `${color}22` }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold capitalize" style={{ color }}>{emotion}</span>
+              <div className="flex items-center gap-1.5">
+                {deEsc && (
+                  <span className="text-xs px-1.5 py-0.5 rounded font-semibold"
+                    style={{ background: 'rgba(255,107,53,0.12)', color: '#FF6B35', border: '1px solid rgba(255,107,53,0.25)', fontSize: '9px' }}>de-esc</span>
+                )}
+                <span className="text-xs font-mono" style={{ color: `${color}99` }}>{intensity}</span>
+              </div>
+            </div>
+            <div className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.32)' }}>
+              Phase 1 map: <span className="font-mono" style={{ color: 'rgba(255,255,255,0.55)' }}>{phase1}</span>
+            </div>
+            <div className="text-xs font-mono mb-2" style={{ color: 'rgba(255,255,255,0.28)' }}>{strategy}</div>
+            {active === emotion && (
+              <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${color}20` }}>
+                <div className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.40)' }}>LLM tone: <span style={{ color }}>{tone}</span></div>
+                <div className="flex flex-wrap gap-1">
+                  {gestures.map(g => (
+                    <span key={g} className="text-xs font-mono px-1.5 py-0.5 rounded"
+                      style={{ background: `${color}10`, color, border: `1px solid ${color}22` }}>[{g}]</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {active !== emotion && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {gestures.slice(0, 2).map(g => (
+                  <span key={g} className="font-mono" style={{ color: `${color}70`, fontSize: '10px' }}>[{g}]</span>
+                ))}
+                {gestures.length > 2 && <span style={{ color: 'rgba(255,255,255,0.20)', fontSize: '10px' }}>+{gestures.length - 2}</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        Click any class to expand its LLM tone profile and full gesture keyword set.
+        Phase 1 column shows the 3-class detection that triggers each Ekman interpretation via the PPE layer.
+      </p>
+    </div>
+  )
+}
+
+/* ── Confidence Tier Demo ── */
+const CONF_TIERS = [
+  {
+    label: 'Low confidence', conf: 0.47, tier: 1, tierLabel: 'Abstain', color: '#6B7280',
+    ekman: 'unknown', gesture: 'NEUTRAL',
+    llm: 'Let me make sure I understand. Can you share a little more about what you\'re feeling right now?',
+    note: 'Abstention: system acknowledges without committing to an emotion interpretation.',
+  },
+  {
+    label: 'Moderate confidence', conf: 0.74, tier: 3, tierLabel: 'Moderate', color: '#A820D8',
+    ekman: 'sadness', gesture: 'LISTEN',
+    llm: 'That sounds difficult. I\'m here with you and I hear how you\'re feeling.',
+    note: 'Mid-tier: proportional gesture, empathetic but not overstated.',
+  },
+  {
+    label: 'High confidence', conf: 0.91, tier: 5, tierLabel: 'Full', color: '#00B4D8',
+    ekman: 'joy', gesture: 'CELEBRATE',
+    llm: 'That\'s wonderful! I\'m genuinely excited to share this moment with you — let\'s celebrate!',
+    note: 'Peak tier: full expressiveness, maximum gesture, celebratory LLM tone.',
+  },
+]
+
+function ConfidenceTierDemo() {
+  const [active, setActive] = useState(1)
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Column selector for mobile */}
+      <div className="flex gap-2 lg:hidden">
+        {CONF_TIERS.map((ct, i) => (
+          <button key={i} onClick={() => setActive(i)}
+            className="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all"
+            style={{
+              background: active === i ? `${ct.color}18` : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${active === i ? ct.color + '55' : 'rgba(255,255,255,0.08)'}`,
+              color: active === i ? ct.color : 'rgba(255,255,255,0.40)',
+            }}>
+            {ct.tierLabel}
+          </button>
+        ))}
+      </div>
+
+      {/* Three-column grid */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        {CONF_TIERS.map((ct, i) => (
+          <div
+            key={i}
+            className="rounded-2xl p-5 flex flex-col gap-4"
+            style={{
+              background: 'rgba(11,11,24,0.88)',
+              border: `1px solid ${ct.color}30`,
+              opacity: window.innerWidth < 1024 && active !== i ? 0.35 : 1,
+              transition: 'opacity 0.3s, border-color 0.3s',
+            }}
+          >
+            {/* Confidence badge */}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-widest font-semibold mb-1" style={{ color: 'rgba(255,255,255,0.28)' }}>Confidence</div>
+                <div className="text-3xl font-black font-mono" style={{ color: ct.color }}>{(ct.conf * 100).toFixed(0)}%</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs uppercase tracking-widest font-semibold mb-1" style={{ color: 'rgba(255,255,255,0.28)' }}>Tier</div>
+                <div className="text-lg font-black" style={{ color: ct.color }}>{ct.tier} — {ct.tierLabel}</div>
+              </div>
+            </div>
+
+            {/* Tier bar */}
+            <div className="flex gap-1.5">
+              {[1,2,3,4,5].map(j => (
+                <div key={j} className="flex-1 h-1.5 rounded-full transition-all duration-500" style={{
+                  background: j <= ct.tier ? ct.color : 'rgba(255,255,255,0.08)',
+                  boxShadow: j <= ct.tier ? `0 0 6px ${ct.color}50` : 'none',
+                }} />
+              ))}
+            </div>
+
+            {/* Ekman PPE */}
+            <div className="rounded-xl p-3" style={{ background: 'rgba(0,0,0,0.22)', border: `1px solid ${ct.color}15` }}>
+              <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.25)' }}>PPE → Ekman</div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold capitalize" style={{ color: ct.color }}>{ct.ekman}</span>
+                <span className="text-xs font-mono px-2 py-0.5 rounded"
+                  style={{ background: `${ct.color}10`, color: ct.color, border: `1px solid ${ct.color}20` }}>[ {ct.gesture} ]</span>
+              </div>
+            </div>
+
+            {/* LLM response */}
+            <div className="rounded-xl p-3 flex-1" style={{ background: 'rgba(0,0,0,0.18)', border: `1px solid ${ct.color}15` }}>
+              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>LLM Response</div>
+              <p className="text-sm italic leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                “{ct.llm}”
+              </p>
+            </div>
+
+            {/* Note */}
+            <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.30)' }}>{ct.note}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 /* Mock: Confusion Matrix */
 function ConfusionMatrix() {
@@ -246,6 +425,91 @@ export default function TechnologyPage() {
               </Card>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="section-divider max-w-7xl mx-auto" />
+
+      {/* Ekman 8-Class Taxonomy */}
+      <section className="py-20 relative">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-widest uppercase mb-5"
+            style={{ border: '1px solid rgba(168,32,216,0.35)', color: 'rgba(168,32,216,0.85)', background: 'rgba(168,32,216,0.08)' }}>
+            <Brain size={11} /> PPE — Ekman Taxonomy
+          </div>
+          <Reveal>
+          <h2 className="text-3xl font-black mb-3 tracking-tight">
+            8-class <G>Ekman behavioral map</G>
+          </h2>
+          <p className="text-sm mb-8 max-w-2xl" style={{ color: 'rgba(255,255,255,0.50)' }}>
+            Phase 1 produces 3-class scores. The PPE layer (Personality, Perception, Expression) maps
+            each to a full 8-class Ekman profile — defining LLM tone, gesture keywords, de-escalation
+            policy, and expressiveness intensity before any response is generated.
+          </p>
+          </Reveal>
+          <Reveal delay={0.1}>
+          <EkmanTaxonomyGrid />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="section-divider max-w-7xl mx-auto" />
+
+      {/* Confidence Tier Demo */}
+      <section className="py-20 relative">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-widest uppercase mb-5"
+            style={{ border: '1px solid rgba(0,180,216,0.35)', color: 'rgba(0,180,216,0.85)', background: 'rgba(0,180,216,0.08)' }}>
+            <BarChart2 size={11} /> Confidence-Conditioned Response
+          </div>
+          <Reveal>
+          <h2 className="text-3xl font-black mb-3 tracking-tight">
+            Same emotion. <G>Different confidence. Different world.</G>
+          </h2>
+          <p className="text-sm mb-8 max-w-2xl" style={{ color: 'rgba(255,255,255,0.50)' }}>
+            The EQ Degree layer continuously modulates the robot’s response based on classifier
+            confidence — not just <em>what</em> was detected, but <em>how certain</em> the system is.
+            Below: the same ‘sad’ detection at three different confidence levels generates
+            completely different gesture tiers, Ekman class assignments, and LLM responses.
+          </p>
+          </Reveal>
+          <Reveal delay={0.1}>
+          <ConfidenceTierDemo />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="section-divider max-w-7xl mx-auto" />
+
+      {/* Gesture Modulation Engine */}
+      <section className="py-20 relative">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-widest uppercase mb-5"
+            style={{ border: '1px solid rgba(0,200,160,0.35)', color: 'rgba(0,200,160,0.85)', background: 'rgba(0,200,160,0.08)' }}>
+            <Bot size={11} /> Gesture Modulation Engine
+          </div>
+          <Reveal>
+          <h2 className="text-3xl font-black mb-3 tracking-tight">
+            <G>5-tier expressiveness</G> — powered by gesture_modulator.py
+          </h2>
+          <p className="text-sm mb-8 max-w-2xl" style={{ color: 'rgba(255,255,255,0.50)' }}>
+            Confidence scores drive a 5-tier expressiveness engine that maps directly to
+            Reachy Mini’s physical gesture vocabulary. From a subtle NOD at 62% to a full
+            CELEBRATE at 95% — every motion is proportional, deliberate, and calibrated.
+          </p>
+          </Reveal>
+          <Reveal delay={0.1}>
+          <div className="rounded-2xl p-6 sm:p-8" style={{
+            background: 'linear-gradient(145deg, rgba(11,11,24,0.95) 0%, rgba(8,8,20,0.98) 100%)',
+            border: '1px solid rgba(123,47,247,0.20)',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.45)',
+          }}>
+            <GestureModulationShowcase />
+          </div>
+          </Reveal>
         </div>
       </section>
 

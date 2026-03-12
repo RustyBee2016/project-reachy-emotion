@@ -122,7 +122,7 @@ function EmotionBar({ label, confidence, color, delay = 0 }) {
   )
 }
 
-function GestureIndicator({ gesture, confidence, tier }) {
+function GestureIndicator({ gesture, confidence, tier, ekmanClass, responseStrategy }) {
   const tierColors = ['#555', '#D4166A', '#A820D8', '#7B2FF7', '#00B4D8', '#00C8A0']
   const tierLabels = ['Silent', 'Minimal', 'Subtle', 'Moderate', 'Expressive', 'Full']
 
@@ -137,6 +137,13 @@ function GestureIndicator({ gesture, confidence, tier }) {
           Tier {tier} — {tierLabels[tier]}
         </span>
       </div>
+      {ekmanClass && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs px-2 py-0.5 rounded font-semibold" style={{ background: 'rgba(212,22,106,0.12)', color: '#D4166A', border: '1px solid rgba(212,22,106,0.25)' }}>PPE</span>
+          <span className="text-xs font-mono capitalize" style={{ color: 'rgba(255,255,255,0.65)' }}>{ekmanClass}</span>
+          {responseStrategy && <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>· {responseStrategy}</span>}
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <div className="text-2xl font-black font-mono" style={{ color: '#00B4D8' }}>[{gesture}]</div>
         <div className="flex-1">
@@ -163,7 +170,7 @@ export default function EQShowcase() {
 
   const scenarios = [
     {
-      label: 'Happy interaction',
+      label: 'Happy — joy',
       emotions: [
         { label: 'happy', confidence: 0.87, color: '#00B4D8' },
         { label: 'sad', confidence: 0.06, color: '#D4166A' },
@@ -171,9 +178,10 @@ export default function EQShowcase() {
       ],
       ece: 0.042, brier: 0.118, f1: 0.871, balanced: 0.874,
       gesture: 'WAVE', tier: 4,
+      ekmanClass: 'joy', responseStrategy: 'amplify_positive',
     },
     {
-      label: 'Sad interaction',
+      label: 'Sad — sadness',
       emotions: [
         { label: 'happy', confidence: 0.08, color: '#00B4D8' },
         { label: 'sad', confidence: 0.79, color: '#D4166A' },
@@ -181,9 +189,10 @@ export default function EQShowcase() {
       ],
       ece: 0.055, brier: 0.142, f1: 0.871, balanced: 0.874,
       gesture: 'EMPATHY', tier: 4,
+      ekmanClass: 'sadness', responseStrategy: 'provide_support',
     },
     {
-      label: 'Low confidence',
+      label: 'Low confidence — abstain',
       emotions: [
         { label: 'happy', confidence: 0.38, color: '#00B4D8' },
         { label: 'sad', confidence: 0.29, color: '#D4166A' },
@@ -191,6 +200,40 @@ export default function EQShowcase() {
       ],
       ece: 0.072, brier: 0.158, f1: 0.871, balanced: 0.874,
       gesture: 'LISTEN', tier: 1,
+      ekmanClass: 'unknown', responseStrategy: 'engage_openly',
+    },
+    {
+      label: 'Anger — de-escalate',
+      emotions: [
+        { label: 'happy', confidence: 0.05, color: '#00B4D8' },
+        { label: 'sad', confidence: 0.19, color: '#D4166A' },
+        { label: 'neutral', confidence: 0.76, color: '#7B2FF7' },
+      ],
+      ece: 0.061, brier: 0.149, f1: 0.871, balanced: 0.874,
+      gesture: 'LISTEN', tier: 2,
+      ekmanClass: 'anger', responseStrategy: 'de_escalate',
+    },
+    {
+      label: 'Fear — reassure',
+      emotions: [
+        { label: 'happy', confidence: 0.08, color: '#00B4D8' },
+        { label: 'sad', confidence: 0.71, color: '#D4166A' },
+        { label: 'neutral', confidence: 0.21, color: '#7B2FF7' },
+      ],
+      ece: 0.058, brier: 0.138, f1: 0.871, balanced: 0.874,
+      gesture: 'COMFORT', tier: 3,
+      ekmanClass: 'fear', responseStrategy: 'reassure',
+    },
+    {
+      label: 'Surprise — engage',
+      emotions: [
+        { label: 'happy', confidence: 0.76, color: '#00B4D8' },
+        { label: 'sad', confidence: 0.09, color: '#D4166A' },
+        { label: 'neutral', confidence: 0.15, color: '#7B2FF7' },
+      ],
+      ece: 0.046, brier: 0.121, f1: 0.871, balanced: 0.874,
+      gesture: 'EXCITED', tier: 5,
+      ekmanClass: 'surprise', responseStrategy: 'match_and_explore',
     },
   ]
 
@@ -304,7 +347,7 @@ export default function EQShowcase() {
             </div>
 
             {/* Gesture output */}
-            <GestureIndicator gesture={s.gesture} confidence={Math.max(...s.emotions.map(e => e.confidence))} tier={s.tier} />
+            <GestureIndicator gesture={s.gesture} confidence={Math.max(...s.emotions.map(e => e.confidence))} tier={s.tier} ekmanClass={s.ekmanClass} responseStrategy={s.responseStrategy} />
           </div>
         </div>
       </div>

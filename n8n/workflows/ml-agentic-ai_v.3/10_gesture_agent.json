@@ -1,0 +1,269 @@
+{
+  "name": "Agent 10 \u2014 Reachy Gesture Agent (Reachy 08.4.2 v3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gesture/cue",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook_cue",
+      "name": "Webhook: gesture.cue",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-700, 300],
+      "webhookId": "gesture-cue-hook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gesture/sim",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook_sim",
+      "name": "Webhook: gesture.sim",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 3,
+      "position": [-700, 460],
+      "webhookId": "gesture-sim-hook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize and validate the incoming gesture cue.\nconst body = $json.body ?? $json;\n\n// Emotion (3-class Phase 1 output)\nconst VALID_EMOTIONS = new Set(['happy','sad','neutral','anger','fear','disgust','contempt','surprise','unknown']);\nconst emotion = ((body.emotion ?? 'unknown')).toLowerCase();\nif (!VALID_EMOTIONS.has(emotion)) {\n  throw new Error(`Invalid emotion '${emotion}'. Allowed: ${[...VALID_EMOTIONS].join(', ')}`);\n}\n\nconst confidence = parseFloat(body.confidence ?? 0);\nif (isNaN(confidence) || confidence < 0 || confidence > 1) {\n  throw new Error(`Invalid confidence '${body.confidence}'. Must be 0.0–1.0.`);\n}\n\n// Ekman PPE class (may differ from 3-class emotion, set by PPE layer)\nconst ekman_class = ((body.ekman_class ?? emotion)).toLowerCase();\n\n// Gesture keywords (from LLM keyword parser or PPE layer)\nconst gesture_keywords = Array.isArray(body.gesture_keywords) ? body.gesture_keywords : [];\n\n// Simulation mode — bypass SSH, return mock response\nconst sim_mode = body.sim_mode === true || body.sim_mode === 'true' ||\n  $json.headers?.['x-sim-mode'] === 'true';\n\n// Response strategy from PPE layer (e.g. de_escalate, provide_support)\nconst response_strategy = body.response_strategy ?? 'engage_openly';\n\n// Correlation ID for distributed tracing\nconst incomingCorrelation = ($json.headers?.['x-correlation-id'] ?? '').trim();\nconst correlation_id = incomingCorrelation || `gest-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;\n\nreturn [{\n  json: {\n    emotion,\n    ekman_class,\n    confidence,\n    gesture_keywords,\n    sim_mode,\n    response_strategy,\n    correlation_id,\n    received_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "code_parse_cue",
+      "name": "Code: parse.cue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Map confidence → expressiveness tier and select the target gesture.\n// Mirrors gesture_modulator.py tier thresholds.\nconst {\n  emotion, ekman_class, confidence, gesture_keywords,\n  sim_mode, response_strategy, correlation_id, received_at\n} = $json;\n\nlet tier;\nif      (confidence < 0.60) tier = 1;  // Abstain — Minimal\nelse if (confidence < 0.70) tier = 2;  // Subtle\nelse if (confidence < 0.80) tier = 3;  // Moderate\nelse if (confidence < 0.90) tier = 4;  // Expressive\nelse                        tier = 5;  // Full\n\nconst TIER_CONFIG = {\n  1: { amplitude: 0.25, speed: 'none',   label: 'Minimal/Abstain' },\n  2: { amplitude: 0.50, speed: 'slow',   label: 'Subtle' },\n  3: { amplitude: 0.75, speed: 'normal', label: 'Moderate' },\n  4: { amplitude: 1.00, speed: 'normal', label: 'Expressive' },\n  5: { amplitude: 1.00, speed: 'fast',   label: 'Full' },\n};\n\n// Fallback gesture map (mirrors emotion_gesture_map.py primary gestures)\nconst FALLBACK_MAP = {\n  happy:    ['WAVE', 'CELEBRATE', 'EXCITED', 'THUMBS_UP'],\n  sad:      ['EMPATHY', 'COMFORT', 'HUG', 'SAD_ACK'],\n  neutral:  ['NOD', 'LISTEN', 'THINK', 'WAVE'],\n  anger:    ['LISTEN', 'NOD', 'NEUTRAL'],\n  fear:     ['COMFORT', 'HUG', 'LISTEN'],\n  disgust:  ['NOD', 'NEUTRAL', 'LISTEN'],\n  contempt: ['LISTEN', 'NOD'],\n  surprise: ['EXCITED', 'WAVE', 'CELEBRATE'],\n  unknown:  ['LISTEN', 'NOD'],\n};\n\n// Prefer caller-supplied keywords; fall back to emotion map\nconst candidates = gesture_keywords.length > 0\n  ? gesture_keywords\n  : (FALLBACK_MAP[ekman_class] ?? FALLBACK_MAP.unknown);\n\n// De-escalation policy: anger/contempt always cap at tier 2 even if conf is high\nconst DE_ESCALATE = new Set(['anger', 'contempt']);\nconst effective_tier = DE_ESCALATE.has(ekman_class) ? Math.min(tier, 2) : tier;\n\nconst cfg = TIER_CONFIG[effective_tier];\nconst selected_gesture = effective_tier === 1 ? 'NEUTRAL' : (candidates[0] ?? 'NEUTRAL');\n\nreturn [{\n  json: {\n    emotion,\n    ekman_class,\n    confidence,\n    tier: effective_tier,\n    tier_label: cfg.label,\n    selected_gesture,\n    amplitude: cfg.amplitude,\n    speed: cfg.speed,\n    abstain: effective_tier === 1,\n    de_escalated: DE_ESCALATE.has(ekman_class) && tier > 2,\n    sim_mode,\n    response_strategy,\n    correlation_id,\n    gesture_candidates: candidates,\n    received_at\n  }\n}];"
+      },
+      "id": "code_select_gesture",
+      "name": "Code: select.gesture",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-260, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.abstain}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if_abstain",
+      "name": "If: abstain",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-40, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.FASTAPI_BASE_URL}}/api/v1/obs/samples",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\"src\": \"agent10.gesture\", \"metric\": \"gesture_abstained\", \"value\": 1, \"labels\": {\"emotion\": \"{{$json.emotion}}\", \"ekman_class\": \"{{$json.ekman_class}}\", \"confidence\": {{$json.confidence}}, \"tier\": {{$json.tier}}, \"correlation_id\": \"{{$json.correlation_id}}\"}}",
+        "method": "POST"
+      },
+      "id": "http_obs_abstain",
+      "name": "HTTP: obs.abstained",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [180, 460]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/pipeline",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "event_type",     "value": "=gesture.abstained" },
+            { "name": "pipeline_id",    "value": "=gesture-agent" },
+            { "name": "emotion",        "value": "={{$json.emotion}}" },
+            { "name": "ekman_class",    "value": "={{$json.ekman_class}}" },
+            { "name": "confidence",     "value": "={{$json.confidence}}" },
+            { "name": "correlation_id", "value": "={{$json.correlation_id}}" }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "http_emit_abstained",
+      "name": "HTTP: emit.abstained",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 460]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"abstained\", \"reason\": \"confidence below threshold\", \"confidence\": {{$json.confidence}}, \"tier\": {{$json.tier}}, \"emotion\": \"{{$json.emotion}}\", \"correlation_id\": \"{{$json.correlation_id}}\"}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond_abstained",
+      "name": "Respond: abstained",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [620, 460]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.sim_mode}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if_simulation",
+      "name": "If: simulation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"simulated\", \"gesture\": \"{{$json.selected_gesture}}\", \"tier\": {{$json.tier}}, \"tier_label\": \"{{$json.tier_label}}\", \"amplitude\": {{$json.amplitude}}, \"speed\": \"{{$json.speed}}\", \"emotion\": \"{{$json.emotion}}\", \"ekman_class\": \"{{$json.ekman_class}}\", \"sim_mode\": true, \"correlation_id\": \"{{$json.correlation_id}}\"}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond_sim",
+      "name": "Respond: simulated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [400, 140]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/reachy/gesture_exec.py --gesture {{$json.selected_gesture}} --tier {{$json.tier}} --amplitude {{$json.amplitude}} --speed {{$json.speed}} --emotion {{$json.emotion}} --correlation-id {{$json.correlation_id}}",
+        "authentication": "password"
+      },
+      "id": "ssh_exec_gesture",
+      "name": "SSH: exec.gesture",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [400, 300],
+      "credentials": {
+        "sshPassword": {
+          "id": "4",
+          "name": "SSH Jetson"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{$env.FASTAPI_BASE_URL}}/api/v1/obs/samples",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\"src\": \"agent10.gesture\", \"metric\": \"gesture_executed\", \"value\": 1, \"labels\": {\"emotion\": \"{{$json.emotion}}\", \"ekman_class\": \"{{$json.ekman_class}}\", \"gesture\": \"{{$json.selected_gesture}}\", \"tier\": {{$json.tier}}, \"amplitude\": {{$json.amplitude}}, \"de_escalated\": {{$json.de_escalated}}, \"correlation_id\": \"{{$json.correlation_id}}\"}}",
+        "method": "POST"
+      },
+      "id": "http_obs_sample",
+      "name": "HTTP: obs.gesture",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.GATEWAY_BASE_URL}}/api/events/pipeline",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "event_type",       "value": "=gesture.executed" },
+            { "name": "pipeline_id",      "value": "=gesture-agent" },
+            { "name": "emotion",          "value": "={{$json.emotion}}" },
+            { "name": "ekman_class",      "value": "={{$json.ekman_class}}" },
+            { "name": "gesture",          "value": "={{$json.selected_gesture}}" },
+            { "name": "tier",             "value": "={{$json.tier}}" },
+            { "name": "amplitude",        "value": "={{$json.amplitude}}" },
+            { "name": "de_escalated",     "value": "={{$json.de_escalated}}" },
+            { "name": "response_strategy","value": "={{$json.response_strategy}}" },
+            { "name": "correlation_id",   "value": "={{$json.correlation_id}}" }
+          ]
+        },
+        "method": "POST"
+      },
+      "id": "http_emit_executed",
+      "name": "HTTP: emit.executed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"executed\", \"gesture\": \"{{$json.selected_gesture}}\", \"tier\": {{$json.tier}}, \"tier_label\": \"{{$json.tier_label}}\", \"amplitude\": {{$json.amplitude}}, \"speed\": \"{{$json.speed}}\", \"emotion\": \"{{$json.emotion}}\", \"ekman_class\": \"{{$json.ekman_class}}\", \"de_escalated\": {{$json.de_escalated}}, \"response_strategy\": \"{{$json.response_strategy}}\", \"correlation_id\": \"{{$json.correlation_id}}\"}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond_executed",
+      "name": "Respond: executed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 300]
+    }
+  ],
+  "connections": {
+    "webhook_cue": {
+      "main": [[{ "node": "code_parse_cue", "type": "main", "index": 0 }]]
+    },
+    "webhook_sim": {
+      "main": [[{ "node": "code_parse_cue", "type": "main", "index": 0 }]]
+    },
+    "code_parse_cue": {
+      "main": [[{ "node": "code_select_gesture", "type": "main", "index": 0 }]]
+    },
+    "code_select_gesture": {
+      "main": [[{ "node": "if_abstain", "type": "main", "index": 0 }]]
+    },
+    "if_abstain": {
+      "main": [
+        [{ "node": "http_obs_abstain",  "type": "main", "index": 0 }],
+        [{ "node": "if_simulation",     "type": "main", "index": 0 }]
+      ]
+    },
+    "http_obs_abstain": {
+      "main": [[{ "node": "http_emit_abstained", "type": "main", "index": 0 }]]
+    },
+    "http_emit_abstained": {
+      "main": [[{ "node": "respond_abstained", "type": "main", "index": 0 }]]
+    },
+    "if_simulation": {
+      "main": [
+        [{ "node": "respond_sim",      "type": "main", "index": 0 }],
+        [{ "node": "ssh_exec_gesture", "type": "main", "index": 0 }]
+      ]
+    },
+    "ssh_exec_gesture": {
+      "main": [[{ "node": "http_obs_sample", "type": "main", "index": 0 }]]
+    },
+    "http_obs_sample": {
+      "main": [[{ "node": "http_emit_executed", "type": "main", "index": 0 }]]
+    },
+    "http_emit_executed": {
+      "main": [[{ "node": "respond_executed", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "agent" },
+    { "name": "gesture" },
+    { "name": "phase3" }
+  ],
+  "updatedAt": "2026-03-12T19:00:00.000Z",
+  "versionId": "1"
+}

@@ -27,6 +27,7 @@ from apps.reachy.gestures.emotion_gesture_map import (
     GestureKeyword,
 )
 from apps.reachy.gestures.gesture_definitions import GESTURE_LIBRARY
+from apps.reachy.gestures.gesture_modulator import GestureModulator
 
 # Inference robustness utilities
 from shared.utils.confidence_handler import ConfidenceHandler, ConfidenceResult
@@ -128,6 +129,7 @@ class EmotionLLMGesturePipeline:
         
         self._gesture_controller = GestureController(self.config.reachy_config)
         self._gesture_mapper = EmotionGestureMapper()
+        self._gesture_modulator = GestureModulator()
         
         # Initialize confidence handler for abstention
         self._confidence_handler = ConfidenceHandler(
@@ -423,9 +425,16 @@ class EmotionLLMGesturePipeline:
         
         if self.config.enable_gestures:
             default_gesture = self._gesture_mapper.get_default_gesture(event.emotion)
-            gesture = GESTURE_LIBRARY.get(default_gesture)
-            if gesture:
-                await self._gesture_controller.execute_gesture(gesture)
+            base_gesture = GESTURE_LIBRARY.get(default_gesture)
+            if base_gesture:
+                modulated = self._gesture_modulator.modulate(base_gesture, event.confidence)
+                if modulated is not None:
+                    await self._gesture_controller.execute_gesture(modulated)
+                else:
+                    logger.debug(
+                        f"Emotion change gesture '{base_gesture.name}' suppressed "
+                        f"(confidence {event.confidence:.2f} below abstain threshold)"
+                    )
     
     async def _execute_gestures_from_keywords(
         self,
@@ -440,8 +449,18 @@ class EmotionLLMGesturePipeline:
                 gesture_type = KEYWORD_TO_GESTURE.get(keyword)
                 
                 if gesture_type:
-                    gesture = GESTURE_LIBRARY.get(gesture_type)
-                    if gesture:
+                    base_gesture = GESTURE_LIBRARY.get(gesture_type)
+                    if base_gesture:
+                        confidence = getattr(
+                            self._emotion_history[-1], "confidence", 1.0
+                        ) if self._emotion_history else 1.0
+                        gesture = self._gesture_modulator.modulate(base_gesture, confidence)
+                        if gesture is None:
+                            logger.debug(
+                                f"Gesture '{base_gesture.name}' suppressed by modulator "
+                                f"(confidence too low, abstaining)"
+                            )
+                            continue
                         result = await self._gesture_controller.execute_gesture(gesture)
                         results.append(result)
                         
@@ -476,6 +495,11 @@ class EmotionLLMGesturePipeline:
             "emotion_history_length": len(self._emotion_history),
             "conversation_length": len(self._llm_client.get_history()),
             "gesture_controller_connected": self._gesture_controller.is_connected,
+            "gesture_modulator_stats": self._gesture_modulator.stats,
+            "gesture_modulator_last_expressiveness": (
+                self._gesture_modulator.last_expressiveness.value
+                if self._gesture_modulator.last_expressiveness else None
+            ),
         }
         
         # Add smoother stats if enabled
