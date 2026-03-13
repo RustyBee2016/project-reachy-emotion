@@ -12,10 +12,13 @@ This is the central integration point for the emotion-driven interaction system.
 
 import asyncio
 import logging
+import os
 from typing import Optional, Callable, Any, List
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+
+import httpx
 
 from apps.llm.client import EmpatheticLLMClient, MockEmpatheticLLMClient, LLMResponse
 from apps.llm.config import LLMConfig
@@ -32,6 +35,7 @@ from apps.reachy.gestures.gesture_modulator import GestureModulator
 # Inference robustness utilities
 from shared.utils.confidence_handler import ConfidenceHandler, ConfidenceResult
 from shared.utils.emotion_smoother import EmotionSmoother, SmoothedResult, create_smoother_30fps
+from shared.taxonomy.ekman_taxonomy import phase1_to_ekman
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +162,10 @@ class EmotionLLMGesturePipeline:
         
         self._processing_task: Optional[asyncio.Task] = None
         
+        # Observability: async HTTP client for posting confidence samples to obs_samples
+        self._fastapi_base_url = os.getenv("FASTAPI_BASE_URL", "http://localhost:8000")
+        self._obs_client: Optional[httpx.AsyncClient] = None
+        
         logger.info("EmotionLLMGesturePipeline initialized")
     
     @property
@@ -207,6 +215,11 @@ class EmotionLLMGesturePipeline:
             
             self._processing_task = asyncio.create_task(self._process_events())
             
+            self._obs_client = httpx.AsyncClient(
+                base_url=self._fastapi_base_url,
+                timeout=5.0,
+            )
+            
             self._state = PipelineState.RUNNING
             logger.info("Pipeline started successfully")
             return True
@@ -233,6 +246,10 @@ class EmotionLLMGesturePipeline:
             await self._gesture_controller.disconnect()
         
         await self._llm_client.close()
+        
+        if self._obs_client:
+            await self._obs_client.aclose()
+            self._obs_client = None
         
         self._state = PipelineState.STOPPED
         logger.info("Pipeline stopped")
@@ -423,11 +440,24 @@ class EmotionLLMGesturePipeline:
         
         self._update_emotion_state(event)
         
+        # Map 3-class Jetson output → Ekman class for LLM prompt routing
+        ekman_class = phase1_to_ekman(event.emotion)
+        self._llm_client.update_emotion_context(ekman_class, event.confidence)
+        
         if self.config.enable_gestures:
             default_gesture = self._gesture_mapper.get_default_gesture(event.emotion)
             base_gesture = GESTURE_LIBRARY.get(default_gesture)
             if base_gesture:
                 modulated = self._gesture_modulator.modulate(base_gesture, event.confidence)
+                params = self._gesture_modulator.last_expressiveness
+                expressiveness_label = params.value if params else "unknown"
+                asyncio.create_task(self._emit_obs_sample(
+                    emotion=event.emotion,
+                    ekman_class=ekman_class,
+                    confidence=event.confidence,
+                    expressiveness_level=expressiveness_label,
+                    abstained=(modulated is None),
+                ))
                 if modulated is not None:
                     await self._gesture_controller.execute_gesture(modulated)
                 else:
@@ -470,6 +500,35 @@ class EmotionLLMGesturePipeline:
                 logger.warning(f"Unknown gesture keyword: {keyword_str}")
         
         return results
+    
+    async def _emit_obs_sample(
+        self,
+        emotion: str,
+        ekman_class: str,
+        confidence: float,
+        expressiveness_level: str,
+        abstained: bool,
+    ) -> None:
+        """Fire-and-forget POST of a confidence sample to the obs_samples API."""
+        if self._obs_client is None:
+            return
+        try:
+            await self._obs_client.post(
+                "/api/v1/obs/samples",
+                json={
+                    "src": "pipeline",
+                    "metric": "confidence",
+                    "value": confidence,
+                    "labels": {
+                        "emotion": emotion,
+                        "ekman_class": ekman_class,
+                        "expressiveness_level": expressiveness_level,
+                        "abstained": abstained,
+                    },
+                },
+            )
+        except Exception as exc:
+            logger.debug(f"obs_sample POST failed (non-critical): {exc}")
     
     def get_conversation_history(self) -> List[dict]:
         """Get the current conversation history."""

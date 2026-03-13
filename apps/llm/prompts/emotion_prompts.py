@@ -218,6 +218,11 @@ class EmotionPromptBuilder:
             )
             parts.append(gesture_prompt)
         
+        # PPE layer: inject Ekman behavioral profile guidance
+        behavior_note = self._build_behavior_note(emotion_lower)
+        if behavior_note:
+            parts.append(behavior_note)
+        
         # Tiered confidence-based prompt modulation
         # This implements the Degree component of the EQ system
         confidence_note = self._get_confidence_guidance(confidence)
@@ -283,6 +288,49 @@ Be sensitive to this transition:
         
         return context_prefix + user_message
     
+    def _build_behavior_note(self, emotion: str) -> Optional[str]:
+        """
+        Build a behavioral guidance note from the Ekman PPE taxonomy profile.
+
+        Injects response_strategy, de-escalation, validate_first, and intensity
+        into the prompt so the LLM is driven by the taxonomy at runtime.
+
+        Args:
+            emotion: Emotion label (maps to an EkmanBehaviorProfile)
+
+        Returns:
+            Formatted guidance string, or None if profile unavailable
+        """
+        try:
+            profile = get_behavior_profile(emotion)
+        except Exception:
+            return None
+
+        lines = ["\nPPE Behavioral Guidance (Ekman Layer):"]
+        lines.append(f"- Response strategy: {profile.response_strategy}")
+        lines.append(f"- Intensity level: {profile.intensity_label}")
+
+        if profile.de_escalate:
+            lines.append(
+                "- DE-ESCALATION ACTIVE: Maintain a calm, measured tone regardless "
+                "of the user's intensity. Do not match or amplify elevated emotion."
+            )
+
+        if profile.validate_first:
+            lines.append(
+                "- VALIDATE FIRST: Before responding substantively, briefly acknowledge "
+                "and check your understanding of the user's emotional state. "
+                "For example: 'It sounds like you might be feeling... is that right?'"
+            )
+
+        if profile.gesture_expressiveness_hint:
+            lines.append(
+                f"- Gesture expressiveness ceiling: {profile.gesture_expressiveness_hint} "
+                "(match physical expressiveness to this level)."
+            )
+
+        return "\n".join(lines)
+
     def _get_confidence_guidance(self, confidence: float) -> Optional[str]:
         """
         Get confidence-tiered guidance for LLM response generation.
