@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Cpu, Brain, Shield, GitBranch, Layers, Bot, Heart } from 'lucide-react'
-import LogoSVG from '../components/LogoSVG'
+import { ArrowRight, ExternalLink, Cpu, Brain, Shield, GitBranch, Layers, Bot, Heart } from 'lucide-react'
 import { Reveal } from '../hooks/useReveal'
 import { GradientOrbs } from '../components/AnimatedBackground'
+
+const REPO_URL = 'https://github.com/RustyBee2016/project-reachy-emotion'
 
 const G = ({ children }) => (
   <span style={{
@@ -20,7 +21,7 @@ const PHASES = [
   },
   {
     n: '02', color: '#7B2FF7', title: 'Phase 2 — Emotional Intelligence Layer',
-    status: 'Planned',
+    status: 'Active',
     desc: 'Degree, PPE, and EQ layers that translate raw classification scores into nuanced behavioral guidance. Gesture modulation and LLM prompt conditioning.',
     items: ['Confidence degree scoring (0–1)', '8-class Ekman PPE taxonomy mapping', 'ECE / Brier / MCE EQ calibration', '5-tier gesture modulation engine', 'Emotion-conditioned LLM prompts', 'gesture_modulator.py integration'],
   },
@@ -51,13 +52,43 @@ export default function AboutPage() {
         <GradientOrbs />
         <div className="relative max-w-4xl mx-auto px-6 text-center z-10">
           <Reveal>
-            <div className="mb-6 flex justify-center">
-              <LogoSVG size={70} showText={false} />
+            <div className="mb-8 flex flex-col items-center gap-4">
+              {/* Logo centrepiece with glow halo */}
+              <div className="relative inline-flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full" style={{
+                  background: 'radial-gradient(circle, rgba(212,22,106,0.28) 0%, rgba(123,47,247,0.18) 45%, transparent 70%)',
+                  filter: 'blur(18px)',
+                  transform: 'scale(1.6)',
+                }} />
+                <div className="relative p-5 rounded-3xl" style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(212,22,106,0.22)',
+                  boxShadow: '0 0 60px rgba(212,22,106,0.20), 0 0 30px rgba(123,47,247,0.15)',
+                }}>
+                  <img
+                    src="/affective-ai-logo.png"
+                    alt="Affective AI"
+                    style={{ width: 110, height: 110, objectFit: 'contain' }}
+                  />
+                </div>
+              </div>
+              {/* Brand wordmark + tagline */}
+              <div>
+                <div className="text-4xl font-black tracking-tight mb-1" style={{
+                  background: 'linear-gradient(135deg, #D4166A 0%, #7B2FF7 50%, #00B4D8 100%)',
+                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                }}>
+                  Affective AI
+                </div>
+                <div className="text-xs font-semibold tracking-[0.28em] uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Emotionally Intelligent Robotics
+                </div>
+              </div>
             </div>
           </Reveal>
           <Reveal delay={0.1}>
-            <h1 className="text-5xl font-black mb-5 tracking-tight">
-              About <G>Affective AI</G>
+            <h1 className="text-4xl font-black mb-5 tracking-tight">
+              About the <G>Project</G>
             </h1>
           </Reveal>
           <Reveal delay={0.2}>
@@ -66,6 +97,24 @@ export default function AboutPage() {
               a platform that combines edge AI perception, privacy-first architecture, and
               embodied empathetic response.
             </p>
+          </Reveal>
+          <Reveal delay={0.3}>
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary flex items-center gap-2"
+                style={{ padding: '0.85rem 1.6rem' }}
+              >
+                View ML Lab Repo
+                <ExternalLink size={16} />
+              </a>
+              <Link to="/contact" className="btn-secondary flex items-center gap-2" style={{ padding: '0.85rem 1.6rem' }}>
+                Partner / Collaborate
+                <ArrowRight size={16} />
+              </Link>
+            </div>
           </Reveal>
         </div>
       </section>
@@ -142,9 +191,9 @@ export default function AboutPage() {
                     </div>
                   </div>
                   <span className="text-xs px-3 py-1 rounded-full font-semibold flex-shrink-0" style={{
-                    background: status === 'Active' ? 'rgba(74,222,128,0.12)' : `${color}12`,
-                    color: status === 'Active' ? '#4ade80' : color,
-                    border: `1px solid ${status === 'Active' ? 'rgba(74,222,128,0.30)' : color + '30'}`,
+                    background: status === 'Active' ? 'rgba(74,222,128,0.12)' : 'rgba(212,22,106,0.12)',
+                    color: status === 'Active' ? '#4ade80' : '#D4166A',
+                    border: `1px solid ${status === 'Active' ? 'rgba(74,222,128,0.30)' : 'rgba(212,22,106,0.35)'}`,
                   }}>
                     {status}
                   </span>

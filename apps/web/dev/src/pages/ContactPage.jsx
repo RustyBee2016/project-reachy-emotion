@@ -19,15 +19,18 @@ const INQUIRY_TYPES = [
   { id: 'collaboration', icon: Mail,         color: '#22C55E', label: 'Research Collaboration', desc: 'Academic or clinical research partnership discussion.' },
 ]
 
+const INVESTOR_HIGHLIGHT_PARAM = 'investor_inquiry_auto_highlight'
+
 export default function ContactPage() {
   const [searchParams] = useSearchParams()
   const initialType = searchParams.get('type')
+  const normalizedInitialType = initialType === INVESTOR_HIGHLIGHT_PARAM ? 'investor' : initialType
   const validIds = INQUIRY_TYPES.map(t => t.id)
-  const [selected, setSelected] = useState(
-    validIds.includes(initialType) ? initialType : 'demo'
-  )
+  const defaultSelected = validIds.includes(normalizedInitialType) ? normalizedInitialType : 'demo'
+  const [selected, setSelected] = useState(defaultSelected)
   const [form, setForm] = useState({ name: '', email: '', org: '', message: '' })
   const [submitted, setSubmitted] = useState(false)
+  const investorAutoHighlight = initialType === INVESTOR_HIGHLIGHT_PARAM
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -88,28 +91,32 @@ export default function ContactPage() {
               What are you <G>interested in?</G>
             </h2>
             <div className="flex flex-col gap-3 mb-8">
-              {INQUIRY_TYPES.map(({ id, icon: Icon, color, label, desc }) => (
+              {INQUIRY_TYPES.map(({ id, icon: Icon, color, label, desc }) => {
+                const isSelected = selected === id
+                const shouldHighlight = investorAutoHighlight && id === 'investor' && isSelected
+                return (
                 <button
                   key={id}
                   onClick={() => setSelected(id)}
                   className="flex items-start gap-3 p-4 rounded-2xl text-left transition-all duration-200"
                   style={{
-                    background: selected === id
+                    background: isSelected
                       ? `linear-gradient(145deg, ${color}12 0%, rgba(0,0,0,0) 100%)`
                       : 'rgba(11,11,24,0.60)',
-                    border: `1px solid ${selected === id ? color + '45' : 'rgba(123,47,247,0.15)'}`,
-                    transform: selected === id ? 'translateX(4px)' : 'none',
+                    border: `1px solid ${isSelected ? color + '45' : 'rgba(123,47,247,0.15)'}`,
+                    transform: isSelected ? 'translateX(4px)' : 'none',
+                    boxShadow: shouldHighlight ? `0 0 25px ${color}55` : 'none',
                   }}
                 >
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
                     <Icon size={18} style={{ color }} />
                   </div>
                   <div>
-                    <div className="text-sm font-bold" style={{ color: selected === id ? 'white' : 'rgba(255,255,255,0.65)' }}>{label}</div>
+                    <div className="text-sm font-bold" style={{ color: isSelected ? 'white' : 'rgba(255,255,255,0.65)' }}>{label}</div>
                     <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.38)' }}>{desc}</div>
                   </div>
                 </button>
-              ))}
+              )})}
             </div>
 
             {/* Direct contact */}
@@ -180,21 +187,25 @@ export default function ContactPage() {
                   <div className="mb-5">
                     <label style={labelStyle}>Inquiry type</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {INQUIRY_TYPES.map(({ id, label, color }) => (
+                      {INQUIRY_TYPES.map(({ id, label, color }) => {
+                        const isSelected = selected === id
+                        const shouldHighlight = investorAutoHighlight && id === 'investor' && isSelected
+                        return (
                         <button
                           type="button"
                           key={id}
                           onClick={() => setSelected(id)}
                           className="py-2 px-3 rounded-xl text-xs font-semibold transition-all"
                           style={{
-                            background: selected === id ? `${color}18` : 'rgba(255,255,255,0.04)',
-                            border: `1px solid ${selected === id ? color + '50' : 'rgba(255,255,255,0.08)'}`,
-                            color: selected === id ? color : 'rgba(255,255,255,0.50)',
+                            background: isSelected ? `${color}18` : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${isSelected ? color + '50' : 'rgba(255,255,255,0.08)'}`,
+                            color: isSelected ? color : 'rgba(255,255,255,0.50)',
+                            boxShadow: shouldHighlight ? `0 0 20px ${color}60` : 'none',
                           }}
                         >
                           {label}
                         </button>
-                      ))}
+                      )})}
                     </div>
                   </div>
                   <div className="mb-6">

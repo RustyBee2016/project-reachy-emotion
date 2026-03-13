@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Github, Linkedin } from 'lucide-react'
 import LogoSVG from './LogoSVG'
 
 const NAV_LINKS = [
@@ -67,8 +67,32 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Desktop CTA */}
+        {/* Desktop social + CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <a
+            href="https://github.com/RustyBee2016/project-reachy-emotion"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository"
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: 'rgba(255,255,255,0.55)' }}
+            onMouseOver={e => e.currentTarget.style.color = 'white'}
+            onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}
+          >
+            <Github size={18} />
+          </a>
+          <a
+            href="https://www.linkedin.com/in/russell-bray-485721172/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="LinkedIn profile"
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: 'rgba(255,255,255,0.55)' }}
+            onMouseOver={e => e.currentTarget.style.color = '#0A66C2'}
+            onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}
+          >
+            <Linkedin size={18} />
+          </a>
           <Link to="/contact" className="btn-secondary text-xs px-4 py-2">
             Investor Inquiry
           </Link>
@@ -112,6 +136,26 @@ export default function Navbar() {
           <div className="pt-2 flex flex-col gap-2 border-t" style={{ borderColor: 'rgba(123,47,247,0.15)' }}>
             <Link to="/contact" className="btn-secondary text-sm justify-center">Investor Inquiry</Link>
             <Link to="/contact" className="btn-primary text-sm justify-center">Request Demo</Link>
+            <div className="flex items-center gap-3 pt-1">
+              <a
+                href="https://github.com/RustyBee2016/project-reachy-emotion"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm py-1"
+                style={{ color: 'rgba(255,255,255,0.55)' }}
+              >
+                <Github size={16} /> GitHub
+              </a>
+              <a
+                href="https://www.linkedin.com/in/russell-bray-485721172/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm py-1"
+                style={{ color: 'rgba(255,255,255,0.55)' }}
+              >
+                <Linkedin size={16} /> LinkedIn
+              </a>
+            </div>
           </div>
         </div>
       )}

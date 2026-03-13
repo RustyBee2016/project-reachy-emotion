@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import LogoSVG from './LogoSVG'
-import { Mail, Shield, Cpu, GitBranch } from 'lucide-react'
+import { Mail, Shield, Cpu, GitBranch, Github, Linkedin } from 'lucide-react'
 
 const LINKS = {
   Platform: [
@@ -61,6 +61,32 @@ export default function Footer() {
                 contact@affective-ai.io
               </a>
             </div>
+            {/* Social links */}
+            <div className="flex items-center gap-3 mt-3">
+              <a
+                href="https://github.com/RustyBee2016/project-reachy-emotion"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub repository"
+                className="flex items-center gap-1.5 text-xs transition-colors hover:text-white"
+                style={{ color: 'rgba(255,255,255,0.45)' }}
+              >
+                <Github size={14} /> GitHub
+              </a>
+              <span style={{ color: 'rgba(255,255,255,0.20)' }}>·</span>
+              <a
+                href="https://www.linkedin.com/in/russell-bray-485721172/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Russell Bray on LinkedIn"
+                className="flex items-center gap-1.5 text-xs transition-colors"
+                style={{ color: 'rgba(255,255,255,0.45)' }}
+                onMouseOver={e => e.currentTarget.style.color = '#0A66C2'}
+                onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
+              >
+                <Linkedin size={14} /> Russell Bray
+              </a>
+            </div>
 
             {/* Trust badges */}
             <div className="flex gap-3 mt-5">
@@ -119,6 +145,28 @@ export default function Footer() {
           }}
         >
           <span>© 2022-2026 Affective AI — Emotionally Intelligent Robotics</span>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://github.com/RustyBee2016/project-reachy-emotion"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub"
+              className="transition-colors hover:text-white"
+            >
+              <Github size={15} />
+            </a>
+            <a
+              href="https://www.linkedin.com/in/russell-bray-485721172/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="LinkedIn"
+              className="transition-colors"
+              onMouseOver={e => e.currentTarget.style.color = '#0A66C2'}
+              onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.30)'}
+            >
+              <Linkedin size={15} />
+            </a>
+          </div>
         </div>
       </div>
     </footer>
