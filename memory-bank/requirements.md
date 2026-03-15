@@ -9,8 +9,8 @@
 
 ## 1. Project Overview
 - **Project Name**: Reachy_EQ_PPE_Degree_Mini_01
-- **Version**: 0.09.0
-- **Last Updated**: 2026-01-14
+- **Version**: 0.09.2
+- **Last Updated**: 2026-03-13
 - **Project Type**: Robotics Control Software
 - **Target Platform**: Reachy Mini Companion Robot — Jetson Xavier NX 16GB model
 - **Primary Language**: Python 3.8+
@@ -27,6 +27,7 @@
 | 0.08.4.3| 2025-10-28 | Team             | Introduced run-scoped dataset preparation workflows and updated promotion/manifest requirements |
 | 0.09.0  | 2026-01-14 | Russell Bray     | Renamed to Reachy_EQ_PPE_Degree_Mini_01; added emotion-degree telemetry (0–5), Reachy Mini Lite gesture orchestration, multi-task training updates, and refreshed documentation |
 | 0.09.1  | 2026-01-25 | Cascade          | Swapped backbone to EfficientNet-B0 (HSEmotion enet_b0_8_best_vgaf) for 3× latency/memory headroom on Jetson; documented EfficientNet-B2 trade-offs |
+| 0.09.2  | 2026-03-13 | Cascade          | Updated to reflect 10-agent system (added Agent 10: Reachy Gesture Agent); Phase 2 Emotional Intelligence Layer 95% complete; synchronized documentation |
 
 ### Project Description
 Reachy‑Emotion‑Recognition is an open‑source robotic platform designed for human‑robot interaction and research. This project implements a privacy‑preserving emotion perception + expression system with a continuous improvement loop:
@@ -504,10 +505,26 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 
 ---
 
-## 20. Agentic AI System (08.3)
+## 20. Agentic AI System (08.4.2)
+
+The system uses **ten cooperating agents**, each performing one narrow, auditable task. All orchestration occurs in **n8n** running on Ubuntu 1.
+
+### Agent Roster:
+1. **Ingest Agent** — Receive new videos (uploads or generated) and register them in the system
+2. **Labeling Agent** — Manage user-assisted classification and dataset promotion (3-class: happy, sad, neutral)
+3. **Promotion/Curation Agent** — Oversee controlled movement of media between filesystem stages
+4. **Reconciler/Audit Agent** — Ensure filesystem and database consistency
+5. **Training Orchestrator** — Trigger EfficientNet-B0 emotion classifier fine-tuning once dataset balance and size thresholds are met
+6. **Evaluation Agent** — Run validation jobs once the test set is balanced
+7. **Deployment Agent** — Promote validated engines from shadow → canary → rollout with explicit approval gates
+8. **Privacy/Retention Agent** — Enforce local-first policy, TTLs for temporary media, and purge/redaction procedures
+9. **Observability/Telemetry Agent** — Aggregate system metrics and raise alerts when thresholds are breached
+10. **Reachy Gesture Agent** — Execute physical gestures on the Reachy Mini robot based on emotion context and LLM response cues
+
+### Agent Contracts:
 - Agents register contracts (name/version/role, inputs/outputs schemas, tools, authority, limits, security, observability, ownership)
 - Storage‑aware: agents reference **relative** media paths + `sha256`, never embed raw media
-- Roles include Ingest, Labeling, Promotion/Curation, Reconciler/Audit, Training Orchestrator, Evaluation, Deployment, Privacy/Retention, Observability
+- See `AGENTS.md` for detailed responsibilities, approval rules, and SLOs
 
 ---
 
@@ -524,6 +541,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 - [2025-11-26 03:55:00] - Documented `/api/v1/promote/*` gateway endpoints, refreshed DB credentials (`reachy_dev`), noted full gateway test pass, and aligned observability/networking details.
 - [2026-02-18 11:50:00] - Updated architecture to direct `temp -> train/<label>` promotion and run-specific frame extraction (10 frames/video) into `train/<label>/<run_id>` with consolidated `train/<run_id>/<label>` datasets and frame-based manifests.
 - [2026-02-19 10:58:00] - Updated consolidated run dataset conventions to `train/run/<run_id>/<label>` and `test/<run_id>/<label>` while preserving run-scoped extraction under `train/<label>/<run_id>`.
+- [2026-03-13 02:45:00] - Added Agent 10 (Reachy Gesture Agent) to agentic system; updated Phase 2 status to 95% complete; synchronized all documentation to reflect 10-agent architecture.
 
 ---
 

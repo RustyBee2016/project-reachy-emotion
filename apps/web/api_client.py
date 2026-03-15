@@ -635,6 +635,49 @@ def get_training_log(run_id: str, mode: str = "train", tail: int = 100, variant:
         return ""
 
 
+@retry_on_failure()
+def get_calibration_summary() -> Dict[str, Any]:
+    """Get calibration metrics summary from the latest training runs."""
+    url = f"{_base_url()}/api/v1/obs/calibration_summary"
+    resp = requests.get(url, headers=_headers(), timeout=15,
+                        verify=_request_verify(_base_url(), "API"))
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def get_obs_samples(limit: int = 500, emotion: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch recent observability samples (confidence + expressiveness logs)."""
+    url = f"{_base_url()}/api/v1/obs/samples"
+    params: Dict[str, Any] = {"limit": limit}
+    if emotion:
+        params["emotion"] = emotion
+    resp = requests.get(url, headers=_headers(), params=params, timeout=15,
+                        verify=_request_verify(_base_url(), "API"))
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def post_obs_samples(samples: list) -> Dict[str, Any]:
+    """Batch-insert observability samples."""
+    url = f"{_base_url()}/api/v1/obs/samples"
+    resp = requests.post(url, headers=_headers(), json={"samples": samples},
+                         timeout=15, verify=_request_verify(_base_url(), "API"))
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def get_llm_health() -> Dict[str, Any]:
+    """Check LLM service health (LM Studio / OpenAI)."""
+    url = f"{_base_url()}/api/v1/llm/health"
+    resp = requests.get(url, headers=_headers(), timeout=20,
+                        verify=_request_verify(_base_url(), "API"))
+    resp.raise_for_status()
+    return resp.json()
+
+
 def reject_video(video_id: str, correlation_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
     url = f"{_gateway_base()}/api/privacy/redact/{video_id}"
     payload: Dict[str, Any] = {"correlation_id": correlation_id}

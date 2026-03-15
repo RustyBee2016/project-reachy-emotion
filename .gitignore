@@ -22,6 +22,11 @@ videos/
 mlruns/
 jetson/engines/
 
+# Node / web
+node_modules/
+apps/web/dev/node_modules/
+apps/web/dev/dist/
+
 # Build
 build/
 dist/

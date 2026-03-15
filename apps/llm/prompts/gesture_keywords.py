@@ -75,6 +75,12 @@ def get_keywords_for_emotion(emotion: str) -> List[str]:
     emotion_keyword_map = {
         "happy": ["THUMBS_UP", "CELEBRATE", "EXCITED", "NOD", "WAVE"],
         "sad": ["EMPATHY", "COMFORT", "HUG", "SAD_ACK", "LISTEN"],
+        "neutral": ["NOD", "LISTEN", "THINK", "WAVE"],
+        "anger": ["LISTEN", "NOD", "SHRUG"],
+        "fear": ["COMFORT", "EMPATHY", "OPEN_ARMS"],
+        "disgust": ["SHRUG", "NOD", "LISTEN"],
+        "contempt": ["SHRUG", "NOD"],
+        "surprise": ["EXCITED", "OPEN_ARMS", "NOD"],
     }
     
     return emotion_keyword_map.get(emotion_lower, ["NOD", "LISTEN"])

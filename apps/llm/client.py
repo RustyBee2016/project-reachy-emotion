@@ -357,6 +357,31 @@ class MockEmpatheticLLMClient(EmpatheticLLMClient):
             "Thanks for sharing that with me [NOD]. What else is on your mind?",
             "I appreciate you talking with me [WAVE]. Let me know how I can support you.",
         ],
+        "anger": [
+            "I can hear that you're really frustrated right now [LISTEN]. That makes complete sense. I'm not going anywhere — take all the time you need. [NOD]",
+            "It sounds like things have been really difficult [LISTEN]. I want to understand. Can you tell me more about what's been happening? [NOD]",
+            "Your frustration is completely valid [NOD]. I'm here to listen, not to judge. What would feel most helpful right now?",
+        ],
+        "fear": [
+            "You are safe, and I am right here with you [COMFORT]. Take a slow breath — I'm not going anywhere. [EMPATHY]",
+            "That sounds really frightening [EMPATHY]. It's okay to feel this way. I'm here as a steady presence for you. [COMFORT]",
+            "I hear you, and I want you to know you're not alone [COMFORT]. We can take this one step at a time together. [NOD]",
+        ],
+        "disgust": [
+            "That sounds like a really unpleasant experience [NOD]. I can understand why you'd feel that way. Can I ask what happened?",
+            "I hear you — that's a strong reaction, and it makes sense [SHRUG]. Let's talk about what might help you move forward. [NOD]",
+            "That sounds genuinely uncomfortable [LISTEN]. It's okay to name that feeling. What would feel better right now?",
+        ],
+        "contempt": [
+            "I'm curious about what's behind that feeling [NOD]. It sounds like something really let you down. I'd like to understand more.",
+            "I hear a lot of disappointment in what you're saying [LISTEN]. What happened that brought you to this point? [NOD]",
+            "I want to make sure I understand what you're feeling [NOD]. Can you help me see it from your perspective?",
+        ],
+        "surprise": [
+            "Oh wow, that does sound unexpected! [EXCITED] Tell me more — was this a good surprise or a difficult one? [NOD]",
+            "That's quite something! [OPEN_ARMS] I'd love to hear all about it. How are you feeling now that the dust has settled?",
+            "I can see why that caught you off guard [NOD]. How are you doing with it? [EXCITED]",
+        ],
     }
     
     def __init__(self, config: Optional[LLMConfig] = None):

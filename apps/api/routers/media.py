@@ -228,7 +228,7 @@ async def promote(
                 extra={
                     "file_path": str(existing_path),
                     "correlation_id": payload.get("correlation_id", ""),
-                    "message": "Auto-registering file found on disk; bypasses ingest agent metadata extraction",
+                    "note": "Auto-registering file found on disk; bypasses ingest agent metadata extraction",
                 },
             )
             video_root = config.videos_root if str(existing_path).startswith(str(config.videos_root)) else VIDEOS_ROOT
@@ -318,6 +318,50 @@ async def promote(
                     "idempotent_replay": True,
                 },
             )
+
+    # If dedupe resolved this request to a non-temp row that is already at target,
+    # treat it as a no-op success instead of surfacing a filesystem_error.
+    current_split = str(getattr(video.split, "value", video.split))
+    current_label = str(video.label).strip().lower() if video.label is not None else None
+    if current_split != "temp":
+        if current_split == target_split and (
+            target_split != "train" or current_label == train_label
+        ):
+            existing_dst = str(config.videos_root / str(video.file_path))
+            logger.info(
+                "media_mover_promote_already_in_target",
+                extra={
+                    "video_id": video_id,
+                    "split": current_split,
+                    "label": current_label,
+                    "dst": existing_dst,
+                    "correlation_id": payload.get("correlation_id", ""),
+                },
+            )
+            return _promote_json_response(
+                status_code=200,
+                legacy_path_used=legacy_path_used,
+                content={
+                    "status": "ok",
+                    "video_id": video_id,
+                    "dst": existing_dst,
+                    "dry_run": bool(payload.get("dry_run", body.get("dry_run", False))),
+                    "adapter_mode": adapter_mode,
+                    "idempotent_replay": True,
+                    "already_in_target": True,
+                },
+            )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_state",
+                "message": (
+                    f"Video currently in split '{current_split}' at '{video.file_path}'. "
+                    "Promotion expects source split 'temp'."
+                ),
+                "correlation_id": payload.get("correlation_id", ""),
+            },
+        )
 
     src = config.videos_root / str(video.file_path)
     dst_name = Path(str(video.file_path)).name

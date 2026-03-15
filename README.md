@@ -6,7 +6,7 @@ Local-first, LAN-contained pipeline for real-time emotion recognition on the Rea
 - Primary language: `Python 3.12+`
 - Core stack: DeepStream 6.x + TensorRT 8.6+ (Jetson), FastAPI + Nginx (Ubuntu 2), LM Studio (Ubuntu 1), PostgreSQL (metadata only)
 
-## Recent Updates (2026-02)
+## Recent Updates (2026-03)
 
 - **Fine-tuning stack standardized on 3-class EfficientNet-B0 (HSEmotion)**
   - Training config: `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`
@@ -28,13 +28,11 @@ Local-first, LAN-contained pipeline for real-time emotion recognition on the Rea
 
 ## 📊 Implementation Status
 
-**Phases Completed**: 2 of 5 (40%)  
+**Phases Completed**: 2 of 3 (67%)  
 
-✅ **Phase 1**: Web UI & Foundation (In process)  
-✅ **Phase 2**: ML Pipeline (In process)  
-⏳ **Phase 3**: Edge Deployment (Pending)  
-⏳ **Phase 4**: n8n Orchestration (Pending)  
-⏳ **Phase 5**: Production Hardening (Pending)
+✅ **Phase 1**: Offline ML Classification System — Complete  
+✅ **Phase 2**: Emotional Intelligence Layer — 95% Complete  
+⏳ **Phase 3**: Edge Deployment & Real-Time Inference — Pending
 
 
 
@@ -195,7 +193,20 @@ reachy_08.4.2/
 
 ## Agents (08.4.2)
 
-This system uses ten cooperating agents (ingest, labeling, promotion/curation, reconciler/audit, training, evaluation, deployment, privacy/retention, observability, reachy-gesture). Orchestration via n8n on Ubuntu 1. See `AGENTS.md` for responsibilities, approval rules, and SLOs.
+This system uses **ten cooperating agents**, each performing one narrow, auditable task in the video → label → train → evaluate → deploy loop:
+
+1. **Ingest Agent** — Register new videos and compute checksums
+2. **Labeling Agent** — Manage human-assisted classification (3-class: happy, sad, neutral)
+3. **Promotion/Curation Agent** — Move media between filesystem stages
+4. **Reconciler/Audit Agent** — Ensure filesystem ↔ database consistency
+5. **Training Orchestrator** — Trigger EfficientNet-B0 fine-tuning with Gate A validation
+6. **Evaluation Agent** — Run validation jobs and compute calibration metrics
+7. **Deployment Agent** — Promote validated models to Jetson (shadow → canary → rollout)
+8. **Privacy/Retention Agent** — Enforce local-first policy and TTL purges
+9. **Observability/Telemetry Agent** — Aggregate metrics and raise alerts
+10. **Reachy Gesture Agent** — Execute physical gestures on Reachy Mini based on emotion context and LLM cues
+
+Orchestration via **n8n** on Ubuntu 1. See `AGENTS.md` for detailed responsibilities, approval rules, and SLOs.
 
 ### Run (local dev)
 

@@ -93,6 +93,81 @@ EMOTION_GESTURE_MAP: Dict[str, EmotionGestureMapping] = {
         ],
         default_gesture=GestureType.EMPATHY,
     ),
+    "neutral": EmotionGestureMapping(
+        emotion="neutral",
+        primary_gestures=[
+            GestureType.LISTENING,
+            GestureType.NOD,
+            GestureType.THINKING,
+        ],
+        secondary_gestures=[
+            GestureType.WAVE,
+            GestureType.NEUTRAL,
+        ],
+        default_gesture=GestureType.LISTENING,
+    ),
+    "anger": EmotionGestureMapping(
+        emotion="anger",
+        primary_gestures=[
+            GestureType.LISTENING,
+            GestureType.NOD,
+        ],
+        secondary_gestures=[
+            GestureType.SHRUG,
+            GestureType.NEUTRAL,
+        ],
+        default_gesture=GestureType.LISTENING,
+    ),
+    "fear": EmotionGestureMapping(
+        emotion="fear",
+        primary_gestures=[
+            GestureType.COMFORT,
+            GestureType.EMPATHY,
+            GestureType.OPEN_ARMS,
+        ],
+        secondary_gestures=[
+            GestureType.NOD,
+            GestureType.LISTENING,
+        ],
+        default_gesture=GestureType.COMFORT,
+    ),
+    "disgust": EmotionGestureMapping(
+        emotion="disgust",
+        primary_gestures=[
+            GestureType.SHRUG,
+            GestureType.NOD,
+        ],
+        secondary_gestures=[
+            GestureType.LISTENING,
+            GestureType.NEUTRAL,
+        ],
+        default_gesture=GestureType.NOD,
+    ),
+    "contempt": EmotionGestureMapping(
+        emotion="contempt",
+        primary_gestures=[
+            GestureType.SHRUG,
+            GestureType.NOD,
+        ],
+        secondary_gestures=[
+            GestureType.LISTENING,
+            GestureType.NEUTRAL,
+        ],
+        default_gesture=GestureType.SHRUG,
+    ),
+    "surprise": EmotionGestureMapping(
+        emotion="surprise",
+        primary_gestures=[
+            GestureType.EXCITED,
+            GestureType.OPEN_ARMS,
+            GestureType.NOD,
+        ],
+        secondary_gestures=[
+            GestureType.WAVE,
+            GestureType.THUMBS_UP,
+        ],
+        default_gesture=GestureType.OPEN_ARMS,
+    ),
 }
 
 

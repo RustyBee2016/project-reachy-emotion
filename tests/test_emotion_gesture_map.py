@@ -303,3 +303,94 @@ class TestGestureForEmotionContext:
         )
         
         assert len(gestures) > 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: 8-class Ekman gesture map coverage
+# ---------------------------------------------------------------------------
+
+EKMAN_8_EMOTIONS = ["happy", "sad", "neutral", "anger", "fear", "disgust", "contempt", "surprise"]
+
+
+class TestEkman8ClassGestureMap:
+    """All 8 Ekman emotion classes must have valid gesture mappings."""
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_all_ekman_emotions_in_map(self, emotion):
+        assert emotion in EMOTION_GESTURE_MAP, f"Missing gesture map for: {emotion}"
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_mapping_is_correct_type(self, emotion):
+        mapping = EMOTION_GESTURE_MAP[emotion]
+        assert isinstance(mapping, EmotionGestureMapping)
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_primary_gestures_non_empty(self, emotion):
+        mapping = EMOTION_GESTURE_MAP[emotion]
+        assert len(mapping.primary_gestures) >= 1, f"{emotion}: no primary gestures"
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_default_gesture_is_valid_type(self, emotion):
+        mapping = EMOTION_GESTURE_MAP[emotion]
+        assert isinstance(mapping.default_gesture, GestureType)
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_default_gesture_in_primary_or_secondary(self, emotion):
+        mapping = EMOTION_GESTURE_MAP[emotion]
+        all_gestures = set(mapping.primary_gestures + mapping.secondary_gestures)
+        assert mapping.default_gesture in all_gestures, (
+            f"{emotion}: default_gesture not in primary or secondary gestures"
+        )
+
+    def test_neutral_default_is_listening(self):
+        mapping = EMOTION_GESTURE_MAP["neutral"]
+        assert mapping.default_gesture == GestureType.LISTENING
+
+    def test_anger_default_is_listening(self):
+        """Anger defaults to LISTENING to de-escalate."""
+        mapping = EMOTION_GESTURE_MAP["anger"]
+        assert mapping.default_gesture == GestureType.LISTENING
+
+    def test_fear_default_is_comfort(self):
+        mapping = EMOTION_GESTURE_MAP["fear"]
+        assert mapping.default_gesture == GestureType.COMFORT
+
+    def test_surprise_has_excited_gesture(self):
+        mapping = EMOTION_GESTURE_MAP["surprise"]
+        all_gestures = set(mapping.primary_gestures + mapping.secondary_gestures)
+        assert GestureType.EXCITED in all_gestures
+
+    def test_de_escalation_emotions_use_calm_gestures(self):
+        """Anger and contempt should include LISTENING or NOD as calm anchors."""
+        for emotion in ("anger", "contempt"):
+            mapping = EMOTION_GESTURE_MAP[emotion]
+            all_gestures = set(mapping.primary_gestures + mapping.secondary_gestures)
+            calm = {GestureType.LISTENING, GestureType.NOD, GestureType.NEUTRAL}
+            assert len(calm & all_gestures) > 0, f"{emotion}: missing calm anchor gesture"
+
+
+class TestEkman8ClassMapper:
+    """EmotionGestureMapper must correctly resolve all 8 Ekman classes."""
+
+    @pytest.fixture
+    def mapper(self):
+        return EmotionGestureMapper()
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_get_default_gesture_for_all_ekman(self, mapper, emotion):
+        default = mapper.get_default_gesture(emotion)
+        assert isinstance(default, GestureType), f"{emotion}: default is not GestureType"
+
+    @pytest.mark.parametrize("emotion", EKMAN_8_EMOTIONS)
+    def test_get_gestures_returns_list_for_all_ekman(self, mapper, emotion):
+        gestures = mapper.get_gestures_for_emotion(emotion)
+        assert isinstance(gestures, list)
+        assert len(gestures) >= 1
+
+    def test_neutral_default_gesture_resolves(self, mapper):
+        default = mapper.get_default_gesture("neutral")
+        assert default == GestureType.LISTENING
+
+    def test_fear_default_gesture_resolves(self, mapper):
+        default = mapper.get_default_gesture("fear")
+        assert default == GestureType.COMFORT
