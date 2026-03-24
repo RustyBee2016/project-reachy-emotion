@@ -42,9 +42,7 @@
 
 ### File list - 3.19.26
 
-
-
-Comprehensive inventory of file inventory available here:  **PROJECT_FILES_INVENTORY.md**
+All files available here:  **source code/update_1.0**
 
 
 
