@@ -1,13 +1,179 @@
--
-### 6.7 Model Selection Rationale — EfficientNet Family
+### Updates: 1.0  (3.19.26)
 
-- **Why EfficientNet-B0 now:** Provides ~3× latency (≈40 ms vs 120 ms budget) and 3× memory headroom compared to the prior ResNet-50 export while maintaining target accuracy through compound scaling and HSEmotion pre-training. The extra thermal/memory margin protects gesture workloads and future cue-planning features on Jetson Xavier NX.
-- **EfficientNet-B2 trade-off:** HSEmotion’s `enet_b2_8` offers higher accuracy in unconstrained settings but is expected to exceed Jetson latency and memory limits (≤120 ms, ≤2.5 GB). Requirements now mandate a benchmark/validation cycle before any promotion to B2, and Gate B metrics must be re-established if constraints change.
-- **Sources:** HSEmotion / EmotiEffLib (`pip install emotiefflib`) for video-optimized EfficientNet-B0/B2 weights, plus timm fallbacks when custom checkpoints are unavailable. Google’s canonical EfficientNet repo is considered legacy for this stack.
+* Updated project components
+  
+  * Web app
+    
+    * Completed ML data pipeline
+    
+    * * Ingestion
+      
+      * Pre-processing
+      
+      * Promotion
+      
+      * Logging
+    
+    * Added model fine-tuning
+    
+    * Added model dashboards
+      
+      * Displays statistical results
+      
+      * Determines Gate A thresholds
+      
+      * Includes direct model comparisons
+  
+  * Workflow automation using ***n8n***
+    
+    * Completed first three agents
+    
+    * Confirmed functionalities
+    
+    * 100% availabe for production
+  
+  * Marketing Web app
+    
+    * Static version provides snapshots summarize key concepts
+    
+    * Key metrics reflect actual data pipelines
+      
+      
+
+### File list - 3.19.26
+
+
+
+Comprehensive inventory of file inventory available here:  **PROJECT_FILES_INVENTORY.md**
+
+
+
+### Summary
+
+#### Streamlit Web App (10 pages)
+
+**Core Pages:**
+
+* 00_Home.py — Dashboard with system status
+
+* 01_Generate.py — Video generation (Luma/Runway)
+
+* 02_Label.py — Human labeling with class balance
+
+* 03_Train.py — Training launch with hyperparameters
+
+* 04_Deploy.py — TensorRT deployment management
+
+* 05_Video_Management.py — Video library browser
+
+**Advanced ML Pages:**
+
+* 06_Dashboard.py — Gate A metrics (F1, ECE, Brier, confusion matrices)
+
+* 07_Fine_Tune.py — **Variant 2** with 25+ tuneable hyperparameters
+
+* 08_Compare.py — Direct model comparison (Base vs Variant 1 vs Variant 2)
+
+* 09_EQ_Calibration.py — EQ calibration metrics (ECE, Brier, MCE)
+
+### FastAPI Gateway (11 routers)
+
+**Key Routers:**
+
+* ingest.py — Video ingestion with SHA256 deduplication (pull_video(), register_local_video())
+
+* promote.py — Promotion with dry-run preview
+
+* media_v1.py — Canonical promotion workflow
+
+* training_control.py — Training subprocess spawning (`launch_training()`)
+
+* gateway_upstream.py — Jetson emotion events
+
+* websocket_cues.py — Real-time gesture cues
+
+### ML Training Pipeline
+
+**Core Scripts:**
+
+* train_efficientnet.py — CLI entry point
+
+* run_efficientnet_pipeline.py — End-to-end orchestrator
+
+* prepare_dataset.py — DatasetPreparer class (10 frames/video extraction)
+
+* gate_a_validator.py — Threshold validation
+
+* mlflow_tracker.py — Experiment tracking
+
+### n8n Workflows (✅ 100% PRODUCTION-READY)
+
+**First Three Agents (Confirmed Functional):**
+
+* 01_ingest_agent.json — Video ingestion with deduplication
+
+* 02_labeling_agent.json — Human labeling with class balance
+
+* 03_promotion_agent.json — Dry-run promotion with approval gate
+
+**Remaining Agents (Validated):**
+
+* 04_reconciler_agent.json — Filesystem ↔ DB drift detection
+
+* 05_training_orchestrator_efficientnet.json — EfficientNet-B0 training with MLflow
+
+* 06_evaluation_agent_efficientnet.json — Test evaluation with calibration
+
+* 07_deployment_agent_efficientnet.json — ONNX → TensorRT + Jetson deployment
+
+* 08_privacy_agent.json — TTL purging and GDPR compliance
+
+* 09_observability_agent.json — Prometheus metrics
+
+* 10_ml_pipeline_orchestrator.json — Master coordinator
+
+### 
+
+### React Website Location:
+
+apps/web/dev/
+
+### React Website Structure (✅ VALIDATED - STABLE & PRODUCTION-READY)
+
+**Core Files:**
+
+* package.json — React 18.3 + Vite 5.4 + TailwindCSS 3.4 dependencies with gh-pages deployment
+
+* src/App.jsx — HashRouter with 7 routes, Layout wrapper, ScrollToTop utility
+
+* src/main.jsx — React bootstrap entry point
+
+**Pages (7):**
+
+* HomePage.jsx — Landing with hero waveform, EQ gauge, feature showcase
+
+* TechnologyPage.jsx — EfficientNet-B0, HSEmotion, DeepStream/TensorRT technical details
+
+* ArchitecturePage.jsx — Three-node system, agent orchestration, deployment gates
+
+* PrivacySafetyPage.jsx — Privacy-by-design, GDPR compliance, ethical guidelines
+
+* UseCasesPage.jsx — Companion robotics, healthcare, education applications
+
+* AboutPage.jsx — Project background and team
+
+* ContactPage.jsx — Contact form
+  
+  
+
+------
+
+
 
 # Project Requirements — Reachy_EQ_PPE_Degree_Mini_01
 
 ## 1. Project Overview
+
 - **Project Name**: Reachy_EQ_PPE_Degree_Mini_01
 - **Version**: 0.09.2
 - **Last Updated**: 2026-03-13
@@ -16,20 +182,22 @@
 - **Primary Language**: Python 3.8+
 
 ### Version History
-| Version | Date       | Author           | Changes Description                                                                                                                                           |
-|--------:|------------|------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0.1.0   | 2025-09-16 | Russell Bray     | Initial requirements draft                                                                                                                                    |
-| 0.2.0   | 2025-09-16 | Cascade          | Added deployment gates, performance metrics, privacy controls, and acceptance criteria                                                                         |
-| 0.8.3   | 2025-09-20 | Team             | Hybrid storage (PostgreSQL metadata + ext4 media via Nginx), DeepStream-only runtime, FastAPI gateway, checksum/dedup, promotion dry‑run, reconciler & metrics, tightened security |
-| 0.08.3.2| 2025-09-20 | Team             | Integrated **Reachy_Storage.md** guidance: canonical FS layout, mini‑FastAPI endpoints, MLflow lineage, NAS redundancy, DB schema, ops playbooks, acceptance criteria |
-| 0.08.3.3| 2025-10-06 | Team             | Pin TAO container/image version; document workspace mounts and envs; canonicalize storage root on Ubuntu 1; add explicit endpoint map; clarify EmotionNet schema; note Media Mover on Ubuntu 1 |
-| 0.08.4.2| 2025-10-16 | Team             | Project renamed to Reachy_Local_08.4.2; updated README alignment; agentic AI system integration; enhanced privacy controls and deployment gates |
-| 0.08.4.3| 2025-10-28 | Team             | Introduced run-scoped dataset preparation workflows and updated promotion/manifest requirements |
-| 0.09.0  | 2026-01-14 | Russell Bray     | Renamed to Reachy_EQ_PPE_Degree_Mini_01; added emotion-degree telemetry (0–5), Reachy Mini Lite gesture orchestration, multi-task training updates, and refreshed documentation |
-| 0.09.1  | 2026-01-25 | Cascade          | Swapped backbone to EfficientNet-B0 (HSEmotion enet_b0_8_best_vgaf) for 3× latency/memory headroom on Jetson; documented EfficientNet-B2 trade-offs |
-| 0.09.2  | 2026-03-13 | Cascade          | Updated to reflect 10-agent system (added Agent 10: Reachy Gesture Agent); Phase 2 Emotional Intelligence Layer 95% complete; synchronized documentation |
+
+| Version  | Date       | Author       | Changes Description                                                                                                                                                                            |
+| --------:| ---------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.1.0    | 2025-09-16 | Russell Bray | Initial requirements draft                                                                                                                                                                     |
+| 0.2.0    | 2025-09-16 | Cascade      | Added deployment gates, performance metrics, privacy controls, and acceptance criteria                                                                                                         |
+| 0.8.3    | 2025-09-20 | Team         | Hybrid storage (PostgreSQL metadata + ext4 media via Nginx), DeepStream-only runtime, FastAPI gateway, checksum/dedup, promotion dry‑run, reconciler & metrics, tightened security             |
+| 0.08.3.2 | 2025-09-20 | Team         | Integrated **Reachy_Storage.md** guidance: canonical FS layout, mini‑FastAPI endpoints, MLflow lineage, NAS redundancy, DB schema, ops playbooks, acceptance criteria                          |
+| 0.08.3.3 | 2025-10-06 | Team         | Pin TAO container/image version; document workspace mounts and envs; canonicalize storage root on Ubuntu 1; add explicit endpoint map; clarify EmotionNet schema; note Media Mover on Ubuntu 1 |
+| 0.08.4.2 | 2025-10-16 | Team         | Project renamed to Reachy_Local_08.4.2; updated README alignment; agentic AI system integration; enhanced privacy controls and deployment gates                                                |
+| 0.08.4.3 | 2025-10-28 | Team         | Introduced run-scoped dataset preparation workflows and updated promotion/manifest requirements                                                                                                |
+| 0.09.0   | 2026-01-14 | Russell Bray | Renamed to Reachy_EQ_PPE_Degree_Mini_01; added emotion-degree telemetry (0–5), Reachy Mini Lite gesture orchestration, multi-task training updates, and refreshed documentation                |
+| 0.09.1   | 2026-01-25 | Cascade      | Swapped backbone to EfficientNet-B0 (HSEmotion enet_b0_8_best_vgaf) for 3× latency/memory headroom on Jetson; documented EfficientNet-B2 trade-offs                                            |
+| 0.09.2   | 2026-03-13 | Cascade      | Updated to reflect 10-agent system (added Agent 10: Reachy Gesture Agent); Phase 2 Emotional Intelligence Layer 95% complete; synchronized documentation                                       |
 
 ### Project Description
+
 Reachy‑Emotion‑Recognition is an open‑source robotic platform designed for human‑robot interaction and research. This project implements a privacy‑preserving emotion perception + expression system with a continuous improvement loop:
 
 1. **Data Generation**: Web app for generating and classifying synthetic emotion videos (labels + degree sliders).
@@ -42,6 +210,7 @@ Reachy‑Emotion‑Recognition is an open‑source robotic platform designed for
 The system prioritizes user privacy through on‑device processing, minimal data retention, and strict access controls. Performance is continuously monitored against quantifiable metrics for accuracy, latency, and resource utilization.
 
 ### Project Goals
+
 1. Create a web app for generating and classifying videos of people expressing emotions.
 2. Fine‑tune a classification model using videos created by the web app.
 3. Deploy fine‑tuned models to the robot (Reachy).
@@ -52,6 +221,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 8. Provide comprehensive documentation and examples.
 
 ### Success Metrics
+
 - 95% emotion recognition accuracy within specified tolerances
 - Sub‑100 ms response time for basic commands
 - 99.9% system uptime during operation
@@ -64,6 +234,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ## 2. Project Scope
 
 ### 2.1 In Scope
+
 - Generate and classify videos of people expressing emotions
 - Python API used for emotion recognition
 - Advanced AI/ML capabilities use generated videos for model fine‑tuning
@@ -74,6 +245,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - **Synology NAS redundancy** via NFS/SMB mirroring of `/videos/*` and MLflow artifacts; SSD remains the hot path
 
 ### 2.2 Out of Scope
+
 - Hardware specification and procurement details for Reachy Mini (covered elsewhere)
 - Object‑store semantics (S3/MinIO/Supabase buckets) for this phase
 - Using MLflow as a media server (tracking only; artifacts live on filesystem)
@@ -81,12 +253,13 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ---
 
 ## 3. Stakeholders
-| Role | Name | Contact | Responsibilities |
-|------|------|---------|------------------|
-| Product Owner | Russell Bray  | rustybee255@gmail.com | Project vision & development |
-| Lead Developer | Russell Bray | rustybee255@gmail.com | Technical direction & implementation |
-| ML/Computer Vision Engineer | Russell Bray | rustybee255@gmail.com | ML & CV components |
-| End Users | Unknown | Unknown | Interaction with Reachy |
+
+| Role                        | Name         | Contact               | Responsibilities                     |
+| --------------------------- | ------------ | --------------------- | ------------------------------------ |
+| Product Owner               | Russell Bray | rustybee255@gmail.com | Project vision & development         |
+| Lead Developer              | Russell Bray | rustybee255@gmail.com | Technical direction & implementation |
+| ML/Computer Vision Engineer | Russell Bray | rustybee255@gmail.com | ML & CV components                   |
+| End Users                   | Unknown      | Unknown               | Interaction with Reachy              |
 
 ---
 
@@ -107,6 +280,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ## 5. Functional Requirements
 
 ### 5.1 Core Features
+
 1. **FR‑001 — Video Generation & User Classification**  
    Web app calls video generation APIs to create emotion clips; user classifies or discards.
 2. **FR‑002 — Model Fine‑Tuning**  
@@ -119,6 +293,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
    LLM adapts responses based on predicted emotion.
 
 ### 5.2 Storage & Media API
+
 - **FR‑STOR‑001 — Media listing**  
   `GET /api/videos/list?split={temp|train|test}&limit=&offset=` returns `video_id, path, size, mtime`.
 - **FR‑STOR‑002 — Promote labeled clip to train**  
@@ -131,10 +306,12 @@ The system prioritizes user privacy through on‑device processing, minimal data
   `POST /api/manifest/rebuild` emits JSONL manifests under `/videos/manifests/` (tagged by `run_id` when applicable) and returns `dataset_hash`.
 
 ### 5.3 Experiment Tracking
+
 - **FR‑TRACK‑001 — MLflow lineage**  
   Each run logs `dataset_hash`, optional `zfs_snapshot`, metrics (accuracy/F1, latency p50/p95, calibration), confusion matrix, and artifacts (logs, TRT/ONNX).
 
 ### 5.4 Redundancy & Backup
+
 - **FR‑BACKUP‑001 — NAS mirror**  
   Nightly sync of `/videos/*` and `/mlruns` to Synology NAS; quarterly restore test.
 
@@ -143,12 +320,14 @@ The system prioritizes user privacy through on‑device processing, minimal data
 ## 6. Technical Specifications
 
 ### 6.1 Hardware Requirements
+
 - **Robot**: Reachy Mini on NVIDIA Jetson Xavier NX 16GB
 - **Camera**: RGB camera ≥30 FPS at 1080p
 - **Memory**: 16 GB RAM
 - **Storage**: 32 GB eMMC + 2 TB SSD
 
 ### 6.2 Software Dependencies
+
 - **OS**: Ubuntu 20.04 LTS with ROS 2 Foxy
 - **Python**: 3.8+
 - **ML Framework**: PyTorch 2.0+ with CUDA 12 for EfficientNet-B0 fine-tuning
@@ -173,17 +352,20 @@ The system prioritizes user privacy through on‑device processing, minimal data
 - **Filesystem (optional)**: ZFS utilities (`zpool`, `zfs`)
 
 ### 6.3 Performance Targets
+
 - Nginx thumbnail fetch median **< 30 ms** on LAN
 - Manifest rebuild for up to **10k clips** **< 2 minutes** on NVMe SSD
 - Training I/O sustains NVMe read throughput (**≥ 1 GB/s** sequential where feasible)
 
 ### 6.4 Reliability & Security
+
 - ZFS checksums when using ZFS; snapshot before each fine-tune
 - Mutate endpoints require Bearer/JWT; strict `video_id` validation; forbid arbitrary paths
 - Optional ZFS native encryption or LUKS on ext4 for at-rest protection
 - rsync exit codes monitored; SMART monitoring on NAS
 
 ### 6.5 n8n Orchestration Environment
+
 - **Container orchestration**: n8n runs via Docker Compose alongside PostgreSQL. Expose ports `5678/tcp` (n8n UI/API), `5432/tcp` (Postgres), and ensure Media Mover (`8083/tcp`), FastAPI gateway (`8000/tcp`), MLflow (`5000/tcp`), and SSH (`22/tcp`) are reachable from the n8n container network.
 - **Environment variables**: Maintain the following keys in the n8n `.env` file (secrets stored outside source control). These power workflow authentication, host discovery, and feature toggles. *Default metadata DB connection: `DB_HOST=10.0.4.130`, `DB_PORT=5432`, `DB_NAME=reachy_emotion`, `DB_USER=reachy_dev` (credentials managed via Vault).*
   - n8n core: `N8N_BASIC_AUTH_ACTIVE`, `N8N_BASIC_AUTH_USER`, `N8N_BASIC_AUTH_PASSWORD`, `N8N_METRICS`, `GENERIC_TIMEZONE`, `N8N_API_URL`, `N8N_API_KEY`, `N8N_HOST`, `WEBHOOK_URL`, `N8N_USER`, `N8N_PASSWORD`.
@@ -197,13 +379,27 @@ The system prioritizes user privacy through on‑device processing, minimal data
   - Feature toggles: `SSH_ACTIONS_ENABLED`, `TRAINING_ENABLED`, `EVALUATION_ENABLED`, `DEPLOYMENT_ENABLED`.
   - LLM integrations: `CLAUDE_API_KEY`, `LLM_STUDIO_BASE_URL`, `LLM_STUDIO_API_KEY`.
 - **Compose alignment**: Docker Compose expects the `.env` to define `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `N8N_USER`, `N8N_PASSWORD`, `N8N_HOST`, and `WEBHOOK_URL` so that container environment interpolation resolves correctly.
+  
+  
+
+### 6.6 Model Selection Rationale — EfficientNet Family (2.30.26)
+
+* **Why EfficientNet-B0 now:** Provides ~3× latency (≈40 ms vs 120 ms budget) and 3× memory headroom compared to the prior ResNet-50 export while maintaining target accuracy through compound scaling and HSEmotion pre-training. The extra thermal/memory margin protects gesture workloads and future cue-planning features on Jetson Xavier NX.
+
+* **EfficientNet-B2 trade-off:** HSEmotion’s `enet_b2_8` offers higher accuracy in unconstrained settings but is expected to exceed Jetson latency and memory limits (≤120 ms, ≤2.5 GB). Requirements now mandate a benchmark/validation cycle before any promotion to B2, and Gate B metrics must be re-established if constraints change.
+
+* **Sources:** HSEmotion / EmotiEffLib (`pip install emotiefflib`) for video-optimized EfficientNet-B0/B2 weights, plus timm fallbacks when custom checkpoints are unavailable. Google’s canonical EfficientNet repo is considered legacy for this stack.
+  
+  
 
 ---
 
 ## 7. Model Deployment & Quality Gates
 
 ### 7.1 Deployment Gates
+
 **Gate A — Offline Validation (Pre-robot)**
+
 - Macro F1 (val): ≥ 0.84; per‑class floors ≥ 0.75; no class < 0.70
 - Balanced accuracy: ≥ 0.85
 - Calibration: ECE ≤ 0.08, Brier ≤ 0.16
@@ -211,15 +407,18 @@ The system prioritizes user privacy through on‑device processing, minimal data
 EfficientNet-B0 is the reference backbone for these gates; any alternative (e.g., EfficientNet-B2) must demonstrate equal or better metrics **and** prove latency/memory compliance before the gates are updated.
 
 **Gate B — Robot Shadow Mode**
+
 - On‑device latency: p50 ≤ 120 ms, p95 ≤ 250 ms
 - GPU memory ≤ 2.5 GB; Macro F1 ≥ 0.80; per‑class floors ≥ 0.72; no class < 0.68
 
 EfficientNet-B0’s 3× latency/memory cushion (≈40 ms p50 inference, ~0.8 GB GPU footprint) supplies the thermal headroom needed for gesture planners and future multimodal features. Make sure this margin remains ≥2× after TensorRT optimization before clearing Gate B.
 
 **Gate C — Limited User Rollout**
+
 - User‑visible latency ≤ 300 ms end‑to‑end; abstention ≤ 20%; complaints < 1% of sessions
 
 ### 7.2 Performance Requirements
+
 - Input: 30 FPS camera stream
 - Decision window: 1.0–1.5 s sliding; hop 0.5 s
 - Update cadence: new estimate every 500 ms
@@ -231,26 +430,30 @@ EfficientNet-B0’s 3× latency/memory cushion (≈40 ms p50 inference, ~0.8 GB 
 ## 8. Compliance & Ethics
 
 ### 8.1 Ethical Guidelines
+
 - No demographic bias in training
 - Clear statements of capabilities/limitations
 - User consent for data collection; opt‑out available
 
 ### 8.2 Regulatory Compliance
+
 - GDPR, COPPA, WCAG 2.1
 
 ### 8.3 Data Governance
+
 - Data retention policies; right to be forgotten; DSAR process
 
 ---
 
 ## 9. Risks and Mitigations
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Model Drift | High | Medium | Monitoring + retraining pipeline |
-| Privacy Concerns | High | Low | On‑device processing, data minimization |
-| Hardware Limits | Medium | Medium | Optimization, quantization |
-| Performance Bottlenecks | High | Medium | Profiling + targeted fixes |
-| Data Quality Issues | High | Medium | Rigorous validation/cleaning |
+
+| Risk                    | Impact | Likelihood | Mitigation                              |
+| ----------------------- | ------ | ---------- | --------------------------------------- |
+| Model Drift             | High   | Medium     | Monitoring + retraining pipeline        |
+| Privacy Concerns        | High   | Low        | On‑device processing, data minimization |
+| Hardware Limits         | Medium | Medium     | Optimization, quantization              |
+| Performance Bottlenecks | High   | Medium     | Profiling + targeted fixes              |
+| Data Quality Issues     | High   | Medium     | Rigorous validation/cleaning            |
 
 ---
 
@@ -259,7 +462,9 @@ EfficientNet-B0’s 3× latency/memory cushion (≈40 ms p50 inference, ~0.8 GB 
 The project is organized into three sequential phases, each building on the previous:
 
 ### Phase 1: Offline ML Classification System
+
 **Scope:** Foundation infrastructure and model training pipeline
+
 - Web application for video generation, upload, and emotion labeling
 - EfficientNet-B0 fine-tuning pipeline with transfer learning
 - FastAPI gateway and Media Mover services
@@ -269,7 +474,9 @@ The project is organized into three sequential phases, each building on the prev
 **Key Files:** `apps/web/`, `trainer/fer_finetune/`, `apps/api/`
 
 ### Phase 2: Emotional Intelligence Layer
+
 **Scope:** Degree, PPE, EQ metrics + response generation
+
 - **Degree of Emotion**: Continuous confidence scores (0–1) from softmax
 - **Primary Principles of Emotion (PPE)**: 8-class Ekman taxonomy mapping
 - **Emotional Intelligence (EQ)**: Calibration metrics (ECE, Brier, MCE)
@@ -277,13 +484,16 @@ The project is organized into three sequential phases, each building on the prev
 - **LLM Prompt Tailoring**: Emotion-conditioned prompts with confidence guidance
 
 **Key Files:** 
+
 - `apps/reachy/gestures/gesture_modulator.py` — Degree-modulated gestures
 - `apps/llm/prompts/emotion_prompts.py` — Emotion-conditioned LLM prompts
 - `apps/reachy/gestures/emotion_gesture_map.py` — PPE gesture mapping
 - `trainer/fer_finetune/evaluate.py` — EQ calibration metrics
 
 ### Phase 3: Edge Deployment & Real-Time Inference
+
 **Scope:** Jetson deployment and production optimization
+
 - TensorRT engine conversion (ONNX → .engine)
 - DeepStream pipeline configuration
 - Real-time inference on Jetson Xavier NX
@@ -296,18 +506,20 @@ The project is organized into three sequential phases, each building on the prev
 ---
 
 ## 10. Timeline and Milestones
-| Milestone | Target Date | Owner | Status |
-|-----------|-------------|-------|--------|
-| Requirements Finalized | 2025-10-01 | Russell Bray | In Progress |
-| Initial Prototype | 2025-12-31 | Russell Bray | Not Started |
-| Beta Release | 2026-02-15 | Russell Bray | Not Started |
-| Production Release | 2026-05-10 | Russell Bray | Not Started |
+
+| Milestone              | Target Date | Owner        | Status      |
+| ---------------------- | ----------- | ------------ | ----------- |
+| Requirements Finalized | 2025-10-01  | Russell Bray | In Progress |
+| Initial Prototype      | 2025-12-31  | Russell Bray | Not Started |
+| Beta Release           | 2026-02-15  | Russell Bray | Not Started |
+| Production Release     | 2026-05-10  | Russell Bray | Not Started |
 
 ---
 
 ## 11. System Architecture Overview
 
 ### 11.1 Components
+
 - **Ubuntu 1 — Model Host (heavy compute)**  
   LM Studio (Llama-3.1-8B-Instruct), synthetic video clients, **Media Mover API** (base: `https://10.0.4.130/api/media`), PostgreSQL (metadata only), Nginx static media, EfficientNet-B0 dual-head training/export pipeline.
 
@@ -318,6 +530,7 @@ The project is organized into three sequential phases, each building on the prev
   DeepStream + TensorRT (`gst-nvinfer`) loading EfficientNet-B0 EmotionNet `.engine`; emits JSON (no raw video); consumes cues over WebSocket.
 
 ### 11.2 Design Principles
+
 - Local‑first; no raw video egress by default
 - Separation of concerns across Jetson / Ubuntu 1 / Ubuntu 2
 - Media served via Nginx to bypass app layers for efficiency
@@ -325,6 +538,7 @@ The project is organized into three sequential phases, each building on the prev
 ---
 
 ## 12. End‑to‑End Data Flow
+
 1. Jetson detects emotion → Ubuntu 2 JSON (emotion, confidence, context).
 2. Ubuntu 2 updates DB and requests LLM inference from Ubuntu 1.
 3. Ubuntu 1 returns tone‑matched text.
@@ -339,6 +553,7 @@ The project is organized into three sequential phases, each building on the prev
 ## 13. APIs & Event Schemas
 
 ### 13.1 Jetson → Ubuntu 2: Emotion Event
+
 ```json
 {
   "device_id": "reachy-mini-01",
@@ -350,12 +565,15 @@ The project is organized into three sequential phases, each building on the prev
   "meta": { "model_version": "emotionnet-0.8.4-trt", "temp": 68.2 }
 }
 ```
+
 Validation: `emotion ∈ {happy, sad, neutral}`, `0 ≤ confidence ≤ 1`.
 
 ### 13.2 Ubuntu 2 → Ubuntu 1: LLM Chat (LM Studio)
+
 Endpoint: `POST http://10.0.4.140:1234/v1/chat/completions` (messages array with system+user prompts).
 
 ### 13.3 Ubuntu 2 → Browser: UI Payload
+
 ```json
 {
   "emotion": "sad",
@@ -367,6 +585,7 @@ Endpoint: `POST http://10.0.4.140:1234/v1/chat/completions` (messages array with
 ```
 
 ### 13.4 FastAPI Gateway (Ubuntu 2)
+
 - `GET https://10.0.4.140/api/videos/list` — filter/paginate/lists
 - `GET https://10.0.4.140/api/videos/{video_id}` — metadata lookup
 - `PATCH https://10.0.4.140/api/videos/{video_id}/label` — label updates (422 on validation)
@@ -375,22 +594,27 @@ Endpoint: `POST http://10.0.4.140:1234/v1/chat/completions` (messages array with
 - `POST https://10.0.4.140/api/v1/promote/reset-manifest` — rebuild manifests per run
 
 ### 13.5 Media Mover (Ubuntu 2 → Ubuntu 1)
+
 `POST http://10.0.4.140/api/media/promote` → `{ clip, target, label, correlation_id, dry_run }`
 
 ### 13.6 WebSocket Cues (Ubuntu 2 → Jetson)
+
 Server → client: `{ type: "tts|gesture", text, gesture_id, correlation_id, expires_at }`; client → server ack by `correlation_id`.
 
 ### 13.7 Error Model & Retries
+
 - Standard error: `{ error, message, correlation_id, fields? }`
 - Retry: backoff + jitter on 5xx/network; no retry on 4xx
 - Idempotency: `Idempotency-Key` required on writes
 
 ### 13.8 AuthN/AuthZ & Transport
+
 - mTLS or short‑lived JWTs for service calls; strict CORS; TLS 1.3; Nginx hardening
 
 ---
 
 ## 14. Data Storage & Curation Workflow
+
 - **Directories on Ubuntu 1**: `/videos/temp/`, `/videos/train/`, `/videos/test/`, `/videos/thumbs/`, `/videos/manifests/`
 - **Path convention**: DB keeps **relative** `storage_path` (e.g., `videos/train/happy/abc123.mp4`); `split` includes `temp`, `train`, `test`.
 - **On‑ingest**: compute `sha256`, `size_bytes`; `ffprobe` metadata; generate `thumbs/{stem}.jpg`.
@@ -406,6 +630,7 @@ Server → client: `{ type: "tts|gesture", text, gesture_id, correlation_id, exp
 ---
 
 ## 15. Database Schema (Metadata)
+
 ```sql
 CREATE TABLE video (
   video_id       UUID PRIMARY KEY,
@@ -432,6 +657,7 @@ CREATE TABLE run_link (
   created_at     TIMESTAMPTZ DEFAULT now()
 );
 ```
+
 **Policy:** DB is the source of truth for labels/splits; manifests are derived.
 
 **Connection Defaults:** `host=10.0.4.130`, `port=5432`, `database=reachy_emotion`, `user=reachy_dev`, password via Vault secret. Application overrides use `DB_URL=postgresql+asyncpg://reachy_dev:***@10.0.4.130:5432/reachy_emotion`.
@@ -458,6 +684,7 @@ CREATE TABLE training_selection (
 ## 16. API Contracts
 
 ### 16.1 FastAPI Gateway (Ubuntu 2)
+
 - Base: `https://10.0.4.140/api`
 - `/videos/list`: supports `split`, `limit`, `offset`, `label`, `order_by`, `order`
 - `/videos/{video_id}`: returns metadata + derived file status (404 if file missing)
@@ -468,6 +695,7 @@ CREATE TABLE training_selection (
 - `/metrics` & `/health`: internal monitoring endpoints
 
 ### 16.2 Media Mover API (Ubuntu 1)
+
 - Base: `https://10.0.4.130/api/media`
 - `GET /api/media`: service status/version
 - `POST /api/media/promote`: filesystem move/copy operations mirroring gateway requests
@@ -480,6 +708,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 ---
 
 ## 17. Networking, Ports, and Security
+
 - **Ingress**: Jetson → Ubuntu 2 only (HTTPS `:443`, WebSocket `/ws/cues/*`)
 - **Ubuntu 2 → Ubuntu 1**: LM Studio `:1234`, Media Mover `:8083` (base `https://10.0.4.130/api/media`), PostgreSQL `:5432`, Nginx media `:80/:443`, Redis `:6379` (optional)
 - **Prometheus**: internal `/metrics` (media-mover `:9101`, gateway `:9100`); FastAPI gateway exposes `/metrics` guarded behind Nginx allow-list.
@@ -494,6 +723,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 ---
 
 ## 18. Observability & Operations
+
 - Structured logs: latency histograms, fps, GPU mem/temp, per‑class counts, abstain counts
 - Dashboards: latency p50/p95, macro/per‑class F1, drift (KL), flicker rate, SLA breaches
 - Alerts: WebSocket churn, NAS sync failures, manifest rebuild errors, dataset sampling anomalies (e.g., insufficient clips, labeled entries in `test`).
@@ -501,6 +731,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 ---
 
 ## 19. Emotion Taxonomy & Operating Points
+
 - Labels: `happy`, `sad`, `angry`, `neutral`, `surprise`, `fearful`
 
 ---
@@ -510,6 +741,7 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 The system uses **ten cooperating agents**, each performing one narrow, auditable task. All orchestration occurs in **n8n** running on Ubuntu 1.
 
 ### Agent Roster:
+
 1. **Ingest Agent** — Receive new videos (uploads or generated) and register them in the system
 2. **Labeling Agent** — Manage user-assisted classification and dataset promotion (3-class: happy, sad, neutral)
 3. **Promotion/Curation Agent** — Oversee controlled movement of media between filesystem stages
@@ -522,6 +754,7 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 10. **Reachy Gesture Agent** — Execute physical gestures on the Reachy Mini robot based on emotion context and LLM response cues
 
 ### Agent Contracts:
+
 - Agents register contracts (name/version/role, inputs/outputs schemas, tools, authority, limits, security, observability, ownership)
 - Storage‑aware: agents reference **relative** media paths + `sha256`, never embed raw media
 - See `AGENTS.md` for detailed responsibilities, approval rules, and SLOs
@@ -529,6 +762,7 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 ---
 
 ## 21. Model Packaging & Serving on Jetson
+
 - DeepStream `gst‑nvinfer` loads TensorRT `.engine` for EmotionNet
 - Preferred precision FP16; optional INT8 with calibration set
 - Minimal DeepStream container; include `nvinfer` configs and engine paths
@@ -537,6 +771,7 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 ---
 
 ### Changelog
+
 - [2025-10-28 21:37:00] - Added staged dataset preparation workflows, randomized train/test selection requirements, API/schema updates, and monitoring expectations.
 - [2025-11-26 03:55:00] - Documented `/api/v1/promote/*` gateway endpoints, refreshed DB credentials (`reachy_dev`), noted full gateway test pass, and aligned observability/networking details.
 - [2026-02-18 11:50:00] - Updated architecture to direct `temp -> train/<label>` promotion and run-specific frame extraction (10 frames/video) into `train/<label>/<run_id>` with consolidated `train/<run_id>/<label>` datasets and frame-based manifests.
@@ -546,12 +781,14 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 ---
 
 ## 22. Secrets & Registry
+
 - Secrets: HashiCorp Vault issues & rotates certs, JWT keys, DB creds, LM Studio/Luma creds (≤90 days)
 - Container registry: GHCR with cosign signatures
 
 ---
 
 ## 23. Operations Playbooks
+
 - **Promote Flow**: request → atomic move → DB update → manifest rebuild → optional ZFS snapshot
 - **Rollback**: stop writers → `zfs rollback` → rebuild manifests → re‑evaluate
 - **Backup/Restore**: nightly rsync to NAS; quarterly restore test with hash verification
@@ -560,6 +797,7 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 ---
 
 ## 24. Acceptance Criteria
+
 - **Gateway+Media Mover expose** `list`, `thumb`, direct `promote` (`temp -> train/<label>`), `relabel`, and manifest rebuild endpoints with auth and atomic moves
 - **Training prep outputs run-specific frame datasets** in `train/<label>/<run_id>` and consolidated `train/run/<run_id>/<label>` (and optional `test/<run_id>/<label>`) with exactly 10 sampled frames per source video when sufficient frames exist
 - MLflow runs contain **dataset_hash** and (if ZFS) **snapshot_ref** with artifacts visible in UI
@@ -571,10 +809,9 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 
 *Document Version Control*
 
-| Version  | Date       | Author | Changes |
-|---------:|------------|--------|---------|
-| 0.08.3.2 | 2025-09-20 | Team   | Integrated hybrid storage, mini‑FastAPI endpoints, MLflow linkage, NAS redundancy, DB schema, ops playbooks, acceptance criteria |
-| 0.8.3    | 2025-09-20 | Team   | Hybrid storage, DeepStream runtime, gateway hardening, reconciler & metrics |
-| 0.2.0    | 2025-09-16 | Cascade| Added comprehensive technical specifications, quality gates, and compliance |
-| 0.1.0    | 2025-09-16 | System | Initial draft |
-
+| Version  | Date       | Author  | Changes                                                                                                                          |
+| --------:| ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 0.08.3.2 | 2025-09-20 | Team    | Integrated hybrid storage, mini‑FastAPI endpoints, MLflow linkage, NAS redundancy, DB schema, ops playbooks, acceptance criteria |
+| 0.8.3    | 2025-09-20 | Team    | Hybrid storage, DeepStream runtime, gateway hardening, reconciler & metrics                                                      |
+| 0.2.0    | 2025-09-16 | Cascade | Added comprehensive technical specifications, quality gates, and compliance                                                      |
+| 0.1.0    | 2025-09-16 | System  | Initial draft                                                                                                                    |

@@ -2,13 +2,34 @@
 """
 Gate A validation utility for EfficientNet-B0 emotion classifiers.
 
-Supports:
-- Evaluation from saved predictions (`.npz`) for CI/statistical workflows
-- Optional direct checkpoint evaluation against filesystem test data
+This module implements the quality gate validation logic that determines
+whether a trained model meets the minimum performance thresholds required
+for deployment to the Jetson (Gate A requirements from requirements.md §8.1).
+
+Gate A Thresholds (default):
+  - Macro F1 ≥ 0.84
+  - Balanced Accuracy ≥ 0.85
+  - Per-class F1 ≥ 0.75 (all classes)
+  - Per-class Floor ≥ 0.70 (minimum across all classes)
+  - ECE (Expected Calibration Error) ≤ 0.08
+  - Brier Score ≤ 0.16
+
+Usage modes:
+  1. Evaluate from saved predictions (.npz) for CI/statistical workflows
+  2. Direct checkpoint evaluation against filesystem test data (optional)
+
+Called by:
+  - run_efficientnet_pipeline.py (after training/evaluation)
+  - n8n Agent 6 (Evaluation Agent)
+  - Streamlit UI (06_Dashboard.py) for manual validation
 """
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Standard library imports for CLI argument parsing, JSON serialization,
+# dataclass definitions, datetime handling, filesystem operations, and typing.
+# ---------------------------------------------------------------------------
 import argparse
 import json
 from dataclasses import asdict, dataclass
@@ -16,19 +37,40 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+# ---------------------------------------------------------------------------
+# NumPy for loading .npz prediction arrays (y_true, y_pred, y_prob)
+# ---------------------------------------------------------------------------
 import numpy as np
 
+# ---------------------------------------------------------------------------
+# Import metric computation functions from the fer_finetune evaluation module.
+# These compute F1, balanced accuracy, ECE (Expected Calibration Error), and
+# Brier score from prediction arrays.
+# ---------------------------------------------------------------------------
 from trainer.fer_finetune.evaluate import compute_calibration_metrics, compute_metrics
 
 
+# ===========================================================================
+# Gate A Threshold Configuration
+# ===========================================================================
+# This dataclass defines the minimum performance thresholds a model must
+# meet to pass Gate A validation.  These thresholds are aligned with the
+# project requirements (requirements.md §8.1) and ensure models are
+# sufficiently accurate and well-calibrated before deployment.
+#
+# Thresholds can be overridden via CLI flags (--macro-f1-threshold, etc.)
+# or by instantiating GateAThresholds with custom values.
+# ===========================================================================
+
 @dataclass
 class GateAThresholds:
-    macro_f1: float = 0.84
-    balanced_accuracy: float = 0.85
-    per_class_f1: float = 0.75
-    per_class_floor: float = 0.70
-    ece: float = 0.08
-    brier: float = 0.16
+    """Gate A quality thresholds for model validation."""
+    macro_f1: float = 0.84              # Macro-averaged F1 score
+    balanced_accuracy: float = 0.85     # Balanced accuracy (accounts for class imbalance)
+    per_class_f1: float = 0.75          # Minimum F1 for each individual class
+    per_class_floor: float = 0.70       # Absolute minimum F1 across all classes
+    ece: float = 0.08                   # Expected Calibration Error (confidence reliability)
+    brier: float = 0.16                 # Brier score (probabilistic accuracy)
 
 
 def _per_class_f1(metrics: Dict[str, float], class_names: List[str]) -> Dict[str, float]:
@@ -39,6 +81,23 @@ def _per_class_f1(metrics: Dict[str, float], class_names: List[str]) -> Dict[str
     return result
 
 
+# ===========================================================================
+# Core Gate A Evaluation Function
+# ===========================================================================
+# This function computes all Gate A metrics from prediction arrays and
+# determines whether the model passes validation.  It returns a structured
+# report with:
+#   - All computed metrics (F1, balanced accuracy, ECE, Brier, etc.)
+#   - Per-class F1 scores
+#   - Pass/fail status for each gate
+#   - Overall pass/fail determination
+#
+# The report is saved as gate_a.json and used by:
+#   - run_efficientnet_pipeline.py to decide whether to export ONNX
+#   - n8n Agent 6 to emit evaluation.completed events
+#   - Streamlit dashboard (06_Dashboard.py) to display results
+# ===========================================================================
+
 def evaluate_predictions(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -46,6 +105,19 @@ def evaluate_predictions(
     class_names: List[str],
     thresholds: GateAThresholds,
 ) -> Dict[str, object]:
+    """
+    Evaluate predictions against Gate A thresholds.
+    
+    Args:
+        y_true: Ground truth labels (integer class indices)
+        y_pred: Predicted labels (integer class indices)
+        y_prob: Predicted probabilities (softmax outputs, shape [N, num_classes])
+        class_names: List of class names (e.g., ['happy', 'sad', 'neutral'])
+        thresholds: GateAThresholds instance with validation thresholds
+    
+    Returns:
+        Dictionary with metrics, per-class scores, gate pass/fail, and overall pass
+    """
     metrics = compute_metrics(y_true.tolist(), y_pred.tolist(), class_names=class_names)
     if y_prob is not None:
         metrics.update(compute_calibration_metrics(y_true.tolist(), y_prob))
@@ -74,7 +146,19 @@ def evaluate_predictions(
     }
 
 
+# ===========================================================================
+# Prediction Loading Helper
+# ===========================================================================
+# Loads saved predictions from a .npz file (output of _collect_predictions
+# in run_efficientnet_pipeline.py).  The .npz file contains:
+#   - y_true: Ground truth labels
+#   - y_pred: Predicted labels
+#   - y_prob: Softmax probabilities (optional)
+#   - class_names: List of class names (optional, defaults to 3-class)
+# ===========================================================================
+
 def _load_predictions(path: Path) -> tuple[np.ndarray, np.ndarray, Optional[np.ndarray], List[str]]:
+    """Load predictions from .npz file."""
     payload = np.load(path, allow_pickle=True)
     y_true = payload["y_true"]
     y_pred = payload["y_pred"]
@@ -86,7 +170,28 @@ def _load_predictions(path: Path) -> tuple[np.ndarray, np.ndarray, Optional[np.n
     return y_true, y_pred, y_prob, class_names
 
 
+# ===========================================================================
+# CLI Entry Point
+# ===========================================================================
+# Standalone script for validating Gate A metrics from saved predictions.
+# Typically invoked by CI/CD pipelines or manual validation workflows.
+#
+# Usage:
+#   python gate_a_validator.py --predictions stats/results/variant_1/training/run_0042/predictions.npz
+#
+# Outputs:
+#   - JSON report written to --output path (default: stats/results/gate_a_validation.json)
+#   - Exit code 0 (validation complete, regardless of pass/fail)
+# ===========================================================================
+
 def main() -> int:
+    """CLI entry point for Gate A validation."""
+    # -------------------------------------------------------------------
+    # CLI Argument Parsing
+    # -------------------------------------------------------------------
+    # Accepts paths to prediction files and allows threshold overrides.
+    # All thresholds have defaults matching GateAThresholds dataclass.
+    # -------------------------------------------------------------------
     parser = argparse.ArgumentParser(description="Validate Gate A metrics")
     parser.add_argument("--predictions", type=str, help="Path to .npz with y_true/y_pred/y_prob")
     parser.add_argument("--output", type=str, default="stats/results/gate_a_validation.json")
@@ -101,6 +206,12 @@ def main() -> int:
     if not args.predictions:
         raise SystemExit("--predictions is required in this environment")
 
+    # -------------------------------------------------------------------
+    # Threshold Configuration & Evaluation
+    # -------------------------------------------------------------------
+    # Instantiate GateAThresholds with CLI-provided values, load predictions
+    # from .npz file, and run the full Gate A validation.
+    # -------------------------------------------------------------------
     thresholds = GateAThresholds(
         macro_f1=args.macro_f1_threshold,
         balanced_accuracy=args.balanced_accuracy_threshold,
@@ -113,6 +224,12 @@ def main() -> int:
     y_true, y_pred, y_prob, class_names = _load_predictions(Path(args.predictions))
     result = evaluate_predictions(y_true, y_pred, y_prob, class_names, thresholds)
 
+    # -------------------------------------------------------------------
+    # Output Report & Exit
+    # -------------------------------------------------------------------
+    # Write the full validation report to JSON and print a summary.
+    # Always exit 0 (validation completed successfully, even if gates failed).
+    # -------------------------------------------------------------------
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(result, indent=2))

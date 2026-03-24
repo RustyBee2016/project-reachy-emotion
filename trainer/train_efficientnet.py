@@ -23,6 +23,10 @@ Usage:
     python train_efficientnet.py --export-only --resume checkpoints/best_model.pth
 """
 
+# ---------------------------------------------------------------------------
+# Standard library imports for CLI argument parsing, filesystem operations,
+# JSON serialization (for structured result output), and logging.
+# ---------------------------------------------------------------------------
 import os
 import sys
 import argparse
@@ -31,9 +35,18 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
-# Add project root to path
+# ---------------------------------------------------------------------------
+# Ensure the project root is on sys.path so that sibling packages
+# (fer_finetune, trainer, apps) can be imported regardless of the
+# working directory from which this script is launched.
+# ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# ---------------------------------------------------------------------------
+# Configure structured logging for training progress, errors, and gate
+# validation results.  All log lines include timestamps for correlation
+# with MLflow run records and n8n workflow audit trails.
+# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -43,6 +56,20 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Main entry point for EfficientNet-B0 emotion classifier training."""
+
+    # -------------------------------------------------------------------
+    # CLI Argument Definitions
+    # -------------------------------------------------------------------
+    # This block defines every command-line flag the script accepts.
+    # The script is invoked directly by the Streamlit web UI (03_Train.py)
+    # via training_control.py, or manually from the command line.
+    # Key arguments:
+    #   --config   : Path to YAML spec (e.g. efficientnet_b0_emotion_3cls.yaml)
+    #   --run-id   : Ties this run to MLflow, manifests, and dashboard payloads
+    #   --resume   : Checkpoint path for warm-starting interrupted training
+    #   --export-only : Skip training and jump straight to ONNX export
+    #   --weights-path: Override default HSEmotion pretrained weight location
+    # -------------------------------------------------------------------
     parser = argparse.ArgumentParser(
         description='Train EfficientNet-B0 emotion classifier (HSEmotion pretrained)'
     )
@@ -96,7 +123,13 @@ def main():
     
     args = parser.parse_args()
     
-    # Generate run ID if not provided
+    # -------------------------------------------------------------------
+    # Run ID Generation
+    # -------------------------------------------------------------------
+    # If no explicit run ID is provided, generate a timestamped one.
+    # This ID is used throughout the pipeline: MLflow experiment tracking,
+    # JSONL manifest naming, dashboard payload files, and n8n correlation.
+    # -------------------------------------------------------------------
     if args.run_id is None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         args.run_id = f"efficientnet_b0_emotion_{timestamp}"
@@ -107,7 +140,15 @@ def main():
     logger.info(f"Run ID: {args.run_id}")
     logger.info("=" * 60)
     
-    # Import training modules
+    # -------------------------------------------------------------------
+    # Lazy Import of Heavy ML Dependencies
+    # -------------------------------------------------------------------
+    # PyTorch, timm, and albumentations are only available on Ubuntu 1
+    # (the training node).  A deferred import inside a try/except block
+    # gives a clear error message if this script is accidentally run on
+    # Ubuntu 2 (gateway) or Jetson (inference-only), where these
+    # packages are not installed.
+    # -------------------------------------------------------------------
     try:
         from fer_finetune.config import TrainingConfig
         from fer_finetune.train_efficientnet import EfficientNetTrainer
@@ -118,7 +159,15 @@ def main():
         logger.error("Install dependencies: pip install torch timm albumentations")
         sys.exit(1)
     
-    # Load configuration
+    # -------------------------------------------------------------------
+    # Configuration Loading & CLI Overrides
+    # -------------------------------------------------------------------
+    # Load the YAML training spec (model architecture, hyperparameters,
+    # data paths, augmentation settings).  Relative paths are resolved
+    # against the trainer/ directory.  CLI flags --data-dir and
+    # --output-dir override YAML values, enabling the web UI (07_Fine_Tune)
+    # to inject per-run paths without editing the spec file.
+    # -------------------------------------------------------------------
     config_path = Path(args.config)
     if not config_path.is_absolute():
         config_path = Path(__file__).parent / config_path
@@ -130,13 +179,21 @@ def main():
     logger.info(f"Loading config: {config_path}")
     config = TrainingConfig.from_yaml(str(config_path))
     
-    # Apply overrides
+    # Apply CLI overrides to the loaded config
     if args.data_dir:
         config.data.data_root = args.data_dir
     if args.output_dir:
         config.checkpoint_dir = args.output_dir
     
-    # Export only mode
+    # -------------------------------------------------------------------
+    # Export-Only Mode
+    # -------------------------------------------------------------------
+    # When --export-only is set, skip training entirely and convert an
+    # existing checkpoint to ONNX format for downstream TensorRT
+    # conversion on the Jetson (Agent 7 — Deployment Agent).  This is
+    # used when a model has already been trained and only the deployment
+    # artifact is needed.
+    # -------------------------------------------------------------------
     if args.export_only:
         if args.resume is None:
             logger.error("--resume required with --export-only")
@@ -161,10 +218,18 @@ def main():
         print("=" * 60)
         return
     
-    # Create trainer
+    # -------------------------------------------------------------------
+    # Trainer Instantiation & Checkpoint Resume
+    # -------------------------------------------------------------------
+    # EfficientNetTrainer wraps the two-phase training loop:
+    #   Phase 1 (epochs 1-5): Backbone frozen, only classification head trains
+    #   Phase 2 (epochs 6+):  Selectively unfreeze blocks.5, blocks.6, conv_head
+    # If --resume is provided, the trainer restores optimizer state and
+    # learning rate schedule from the checkpoint, continuing from the
+    # saved epoch.
+    # -------------------------------------------------------------------
     trainer = EfficientNetTrainer(config, weights_path=args.weights_path)
     
-    # Resume from checkpoint if specified
     resume_epoch = 0
     if args.resume:
         if not Path(args.resume).exists():
@@ -172,17 +237,24 @@ def main():
             sys.exit(1)
         resume_epoch = trainer.load_checkpoint(args.resume)
     
-    # Run training
+    # Execute the training loop (returns a results dict with status, metrics)
     results = trainer.train(run_id=args.run_id, resume_epoch=resume_epoch)
     
-    # Print results
+    # -------------------------------------------------------------------
+    # Results Output & Conditional ONNX Export
+    # -------------------------------------------------------------------
+    # Print training results as JSON for machine-parseable output.
+    # If Gate A validation passed during training (status =
+    # 'completed_gate_passed'), automatically export the best checkpoint
+    # to ONNX.  The ONNX file is later converted to TensorRT by the
+    # Deployment Agent (Agent 7) on the Jetson Xavier NX.
+    # -------------------------------------------------------------------
     print("\n" + "=" * 60)
     print("TRAINING RESULTS")
     print("=" * 60)
     print(json.dumps(results, indent=2, default=str))
     print("=" * 60)
     
-    # Export if training succeeded and gates passed
     if results.get('status') == 'completed_gate_passed':
         logger.info("Gate A passed - exporting model for deployment")
         
@@ -210,7 +282,14 @@ def main():
             logger.error(f"Export failed: {e}")
             results['export_error'] = str(e)
     
-    # Exit with appropriate code
+    # -------------------------------------------------------------------
+    # Exit Code Convention
+    # -------------------------------------------------------------------
+    # Exit 0 on successful completion (even if gates failed — the model
+    # was trained correctly, it just didn't meet thresholds).  Exit 1
+    # only on actual training errors.  n8n workflow nodes and
+    # training_control.py use the exit code to determine success/failure.
+    # -------------------------------------------------------------------
     if results['status'] in ['completed', 'completed_gate_passed']:
         sys.exit(0)
     elif results['status'] == 'completed_gate_failed':

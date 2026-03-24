@@ -3,16 +3,23 @@ Dataset preparation module for training pipeline.
 Handles run-specific frame extraction, manifest generation, and dataset hashing.
 """
 
-import json
+# ---------------------------------------------------------------------------
+# Standard library imports for filesystem operations, hashing, JSON manifests,
+# logging, random sampling, regex validation, and type hints.
+# ---------------------------------------------------------------------------
 import hashlib
+import json
+import logging
 import random
 import re
 import shutil
-import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
-import logging
+from typing import Any, Dict, List, Optional
 
+# ---------------------------------------------------------------------------
+# OpenCV for video frame extraction and face detection (DNN-based SSD model)
+# NumPy for array operations during face bbox calculations
+# ---------------------------------------------------------------------------
 import cv2
 import numpy as np
 
@@ -22,11 +29,25 @@ logger = logging.getLogger(__name__)
 class DatasetPreparer:
     """Prepare run-specific frame datasets from classed train videos."""
 
+    # -----------------------------------------------------------------------
+    # Class Constants
+    # -----------------------------------------------------------------------
+    # EMOTIONS: 3-class emotion taxonomy (aligned with Gate A validation)
+    # FRAMES_PER_VIDEO: Number of random frames extracted per source video
+    # RUN_ID_PATTERN: Enforces run_XXXX naming (e.g., run_0001, run_0042)
+    # FACE_DETECTOR_NAME: Identifier for OpenCV DNN face detector model
+    # -----------------------------------------------------------------------
     EMOTIONS = ("happy", "sad", "neutral")
     FRAMES_PER_VIDEO = 10
     RUN_ID_PATTERN = re.compile(r"^run_\d{4}$")
     FACE_DETECTOR_NAME = "opencv_dnn_res10_ssd"
     
+    # -----------------------------------------------------------------------
+    # Initialization
+    # -----------------------------------------------------------------------
+    # Sets up filesystem paths for source videos, extracted frames, and
+    # manifests.  Ensures required directories exist.
+    # -----------------------------------------------------------------------
     def __init__(self, base_path: str):
         """
         Initialize dataset preparer.
@@ -47,6 +68,12 @@ class DatasetPreparer:
         self.train_runs_path.mkdir(parents=True, exist_ok=True)
         self.test_path.mkdir(exist_ok=True)
 
+    # -----------------------------------------------------------------------
+    # Face Model Path Resolution
+    # -----------------------------------------------------------------------
+    # Resolves OpenCV DNN face detector model paths from environment variables
+    # or default locations within the project directory.
+    # -----------------------------------------------------------------------
     def _resolve_face_model_paths(self) -> Tuple[Path, Path]:
         """Resolve OpenCV DNN face detector model paths."""
         proto_env = os.getenv("REACHY_FACE_DNN_PROTO_PATH")
@@ -68,6 +95,14 @@ class DatasetPreparer:
         model = next((p for p in model_candidates if p.exists()), model_candidates[0])
         return proto, model
 
+    # -----------------------------------------------------------------------
+    # Face Detection Network (Lazy Loading)
+    # -----------------------------------------------------------------------
+    # Loads the OpenCV DNN face detector (SSD ResNet-10 300x300) on first
+    # use.  The model files (deploy.prototxt, .caffemodel) must be present
+    # in trainer/models/face_detector/ or specified via environment variables.
+    # Used when face_crop=True during frame extraction.
+    # -----------------------------------------------------------------------
     def _get_face_net(self):
         """Load the OpenCV DNN face detector network lazily."""
         if self._face_net is not None:
@@ -85,6 +120,14 @@ class DatasetPreparer:
         self._face_net = cv2.dnn.readNetFromCaffe(str(proto_path), str(model_path))
         return self._face_net
 
+    # -----------------------------------------------------------------------
+    # Face Bounding Box Detection
+    # -----------------------------------------------------------------------
+    # Runs the SSD face detector on a single frame and returns the highest-
+    # confidence face bbox (if confidence >= threshold).  Expands the bbox
+    # by margin_ratio (default 20%) to include more context around the face.
+    # Returns None if no face is detected above the confidence threshold.
+    # -----------------------------------------------------------------------
     def _detect_face_bbox(
         self,
         frame: np.ndarray,
@@ -150,6 +193,21 @@ class DatasetPreparer:
             "confidence": float(best["confidence"]),
         }
     
+    # -----------------------------------------------------------------------
+    # Main Dataset Preparation Entry Point
+    # -----------------------------------------------------------------------
+    # Orchestrates the complete frame extraction workflow:
+    #   1. Validate run_id or auto-generate next run_XXXX
+    #   2. Collect source videos from train/<emotion>/*.mp4
+    #   3. Extract N random frames per video (with optional face cropping)
+    #   4. Generate JSONL manifests with frame metadata
+    #   5. Calculate dataset hash for reproducibility
+    #
+    # Called by:
+    #   - n8n Agent 3 (Promotion/Curation Agent)
+    #   - Streamlit UI (03_Train.py)
+    #   - run_efficientnet_pipeline.py
+    # -----------------------------------------------------------------------
     def prepare_training_dataset(
         self,
         run_id: Optional[str] = None,
@@ -560,6 +618,23 @@ class DatasetPreparer:
                 return file_name[len(prefix):]
         return file_name
 
+    # -----------------------------------------------------------------------
+    # Train/Valid Dataset Splitting
+    # -----------------------------------------------------------------------
+    # After frame extraction, this method splits the flat frame directory
+    # into separate train_ds/ and valid_ds/ subdirectories.  The split is
+    # stratified by emotion class to maintain class balance.
+    #
+    # Key behaviors:
+    #   - Default 90/10 train/valid split (configurable via train_ratio)
+    #   - Validation frames have labels stripped from filenames (optional)
+    #   - Generates 3 manifests:
+    #       1. train_ds.jsonl (labeled training frames)
+    #       2. valid_ds_labeled.jsonl (validation frames WITH labels)
+    #       3. valid_ds_unlabeled.jsonl (validation frames WITHOUT labels)
+    #
+    # The unlabeled manifest is used during training to prevent label leakage.
+    # -----------------------------------------------------------------------
     def split_run_dataset(
         self,
         run_id: str,
@@ -698,6 +773,20 @@ class DatasetPreparer:
             "valid_unlabeled_manifest": str(valid_unlabeled_manifest),
         }
 
+    # -----------------------------------------------------------------------
+    # Dataset Hash Calculation (Reproducibility Tracking)
+    # -----------------------------------------------------------------------
+    # Computes a SHA256 hash of the dataset based on file paths and sizes.
+    # This hash is logged to MLflow and used to detect dataset drift between
+    # training runs.  If the hash changes, it indicates the dataset has been
+    # modified (new videos added, frames re-extracted, etc.).
+    #
+    # IMPORTANT: This is a path+size hash, NOT a content hash.  Two files
+    # with identical paths and sizes but different pixel data will produce
+    # the same hash.  This is a deliberate speed/accuracy tradeoff for large
+    # image datasets.  For content-level guarantees, extend with a
+    # hash_contents=True parameter that reads and hashes pixel data.
+    # -----------------------------------------------------------------------
     def calculate_dataset_hash(self, run_id: Optional[str] = None) -> str:
         """
         Calculate SHA256 hash of dataset for reproducibility.

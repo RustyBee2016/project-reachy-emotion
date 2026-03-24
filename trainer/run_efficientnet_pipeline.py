@@ -2,6 +2,18 @@
 """
 End-to-end EfficientNet-B0 pipeline runner:
 train -> evaluate -> Gate A validate -> statistical outputs.
+
+This script orchestrates the complete ML workflow for Agent 5 (Training
+Orchestrator) and Agent 6 (Evaluation Agent).  It can either:
+  1. Train a model from scratch, then evaluate it, OR
+  2. Skip training and evaluate an existing checkpoint (--skip-train mode)
+
+Key responsibilities:
+  - Emit Agent 5/6 contract events to the FastAPI gateway for n8n tracking
+  - Run Gate A validation on predictions
+  - Export ONNX when gates pass
+  - Write dashboard payload files for the web UI (06_Dashboard.py)
+  - Support variant/run-type partitioning for A/B testing
 """
 
 from __future__ import annotations
@@ -16,8 +28,28 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+# ---------------------------------------------------------------------------
+# Variant naming pattern validator (e.g., variant_1, variant_2, base_model)
+# Used for organizing outputs under stats/results/<variant>/<run_type>/<run_id>
+# ---------------------------------------------------------------------------
 _VARIANT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
+
+# ===========================================================================
+# Gateway Contract Client
+# ===========================================================================
+# This client posts structured event payloads to the FastAPI gateway
+# (Ubuntu 2) at /api/training/status/<run_id>.  The gateway persists these
+# events to Postgres and forwards them to n8n workflows (Agent 5 & Agent 6)
+# for orchestration tracking, alerting, and dashboard updates.
+#
+# Event types emitted:
+#   - training.started
+#   - training.completed
+#   - training.failed
+#   - evaluation.started
+#   - evaluation.completed
+# ===========================================================================
 
 class GatewayContractClient:
     """Minimal client for Agent 5/6 status contracts via gateway."""
@@ -34,6 +66,7 @@ class GatewayContractClient:
         self.session = session or requests.Session()
 
     def post_training_status(self, run_id: str, payload: Dict[str, Any]) -> None:
+        """POST event payload to gateway /api/training/status/<run_id> endpoint."""
         url = f"{self.base_url}/api/training/status/{run_id}"
         response = self.session.post(url, json=payload, timeout=self.timeout_seconds)
         response.raise_for_status()
@@ -192,6 +225,18 @@ def _post_contract_payload(
         )
 
 
+# ===========================================================================
+# Prediction Collection (Evaluation Phase)
+# ===========================================================================
+# Load a trained checkpoint and run inference on the validation dataset to
+# collect ground-truth labels (y_true), predicted labels (y_pred), and
+# softmax probabilities (y_prob).  These arrays are saved as .npz files and
+# used by gate_a_validator.py to compute Gate A metrics (F1, ECE, Brier).
+#
+# This function is called after training completes OR in --skip-train mode
+# when evaluating an existing checkpoint against test data.
+# ===========================================================================
+
 def _collect_predictions(
     checkpoint_path: Path,
     data_root: str,
@@ -266,9 +311,27 @@ def _normalize_run_type(run_type: str) -> str:
     return aliases[normalized]
 
 
+# ===========================================================================
+# Artifact Directory Resolution
+# ===========================================================================
+# Organize outputs by variant/run_type/run_id hierarchy:
+#   stats/results/variant_1/training/run_0042/
+#   stats/results/variant_2/validation/run_0043/
+# This enables A/B testing and clean separation of training vs validation runs.
+# ===========================================================================
+
 def _resolve_artifact_dir(output_dir: str, variant: str, run_type: str, run_id: str) -> Path:
     return Path(output_dir) / variant / run_type / run_id
 
+
+# ===========================================================================
+# Dashboard Payload Generation
+# ===========================================================================
+# Write a JSON payload file consumed by the Streamlit dashboard (06_Dashboard.py)
+# to display Gate A metrics, confusion matrices, and artifact paths.
+# Payloads are organized under:
+#   stats/results/dashboard_runs/<variant>/<run_type>/<run_id>.json
+# ===========================================================================
 
 def _write_dashboard_run_payload(
     *,
@@ -301,7 +364,27 @@ def _write_dashboard_run_payload(
     return dashboard_payload_path
 
 
+# ===========================================================================
+# Main Pipeline Orchestration
+# ===========================================================================
+# This function coordinates the full train -> evaluate -> validate -> export
+# workflow.  It handles both training mode (default) and evaluation-only mode
+# (--skip-train), emitting contract events to the gateway at each phase.
+# ===========================================================================
+
 def main() -> int:
+    # -------------------------------------------------------------------
+    # CLI Argument Parsing
+    # -------------------------------------------------------------------
+    # Key flags:
+    #   --config         : Training config YAML (hyperparameters, data paths)
+    #   --run-id         : Unique identifier for this pipeline run
+    #   --skip-train     : Evaluate existing checkpoint without training
+    #   --checkpoint     : Path to checkpoint (required with --skip-train)
+    #   --variant        : Model variant slug (variant_1, variant_2, etc.)
+    #   --run-type       : training | validation | test
+    #   --gateway-base   : FastAPI gateway URL for contract events
+    # -------------------------------------------------------------------
     parser = argparse.ArgumentParser(description="Run complete EfficientNet pipeline")
     parser.add_argument("--config", default="trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml")
     parser.add_argument("--run-id", default="efficientnet_pipeline_run")
@@ -350,10 +433,25 @@ def main() -> int:
     if test_data_dir and args.skip_train:
         config.data.data_root = test_data_dir
 
+    # -------------------------------------------------------------------
+    # Gateway Contract Client Initialization
+    # -------------------------------------------------------------------
+    # If --no-contract-updates is NOT set, create a client to emit
+    # training/evaluation events to the FastAPI gateway.  This enables
+    # n8n workflows (Agent 5 & 6) to track pipeline progress in real-time.
+    # -------------------------------------------------------------------
     contract_client: Optional[GatewayContractClient] = None
     if not args.no_contract_updates:
         contract_client = GatewayContractClient(base_url=args.gateway_base)
 
+    # -------------------------------------------------------------------
+    # Training Phase (or Skip)
+    # -------------------------------------------------------------------
+    # If --skip-train is set, bypass training and jump straight to
+    # evaluation.  Otherwise, instantiate EfficientNetTrainer and run
+    # the full training loop.  Emit training.started and training.completed
+    # events to the gateway.
+    # -------------------------------------------------------------------
     train_result: Dict[str, Any] = {
         "run_id": args.run_id,
         "status": "skipped",
@@ -414,9 +512,18 @@ def main() -> int:
             )
             raise
 
-    # -----------------------------------------------------------------
-    # Evaluation phase — wrapped so any crash updates the DB to "failed"
-    # -----------------------------------------------------------------
+    # -------------------------------------------------------------------
+    # Evaluation Phase
+    # -------------------------------------------------------------------
+    # Wrapped in try/except to emit training.failed events on crashes.
+    # Steps:
+    #   1. Collect predictions (y_true, y_pred, y_prob) from validation set
+    #   2. Save predictions.npz for reproducibility
+    #   3. Run Gate A validation (F1, balanced accuracy, ECE, Brier)
+    #   4. Export to ONNX if gates pass
+    #   5. Write dashboard payload JSON
+    #   6. Emit evaluation.completed event to gateway
+    # -------------------------------------------------------------------
     try:
         preds = _collect_predictions(
             checkpoint_path=checkpoint_path,
@@ -455,7 +562,13 @@ def main() -> int:
         gate_path = output_dir / "gate_a.json"
         gate_path.write_text(json.dumps(gate_report, indent=2))
 
-        # Export to ONNX when Gate A passes
+        # ---------------------------------------------------------------
+        # Conditional ONNX Export
+        # ---------------------------------------------------------------
+        # If Gate A validation passed (F1 ≥ 0.84, ECE ≤ 0.08, etc.),
+        # export the checkpoint to ONNX format.  The ONNX file is later
+        # converted to TensorRT by Agent 7 (Deployment Agent) on Jetson.
+        # ---------------------------------------------------------------
         onnx_path: Optional[str] = None
         if gate_report["overall_pass"]:
             from trainer.fer_finetune.export import export_efficientnet_for_deployment
