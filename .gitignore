@@ -33,4 +33,5 @@ dist/
 *.egg-info/
 
 # Ignore any generated data
-temp/
+temp/presentations/*.deb
+presentations/~$*
