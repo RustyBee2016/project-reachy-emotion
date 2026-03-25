@@ -1,15 +1,73 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Menu, X, Github, Linkedin } from 'lucide-react'
+import { Menu, X, Github, Linkedin, ChevronDown, Heart, Shield, Layers, BarChart2 } from 'lucide-react'
 import LogoSVG from './LogoSVG'
 
 const NAV_LINKS = [
+  { to: '/platform',     label: 'Platform' },
+  {
+    label: 'Solutions',
+    children: [
+      { to: '/careflow',   label: 'CareFlow', desc: 'Healthcare Operations', icon: Heart, color: '#10B981' },
+      { to: '/secureflow', label: 'SecureFlow', desc: 'Cybersecurity / Secure Facilities', icon: Shield, color: '#F59E0B' },
+      { to: '/dashboard',  label: 'Live Dashboard', desc: 'Simulated Ops Demo', icon: BarChart2, color: '#7B2FF7' },
+    ],
+  },
   { to: '/technology',   label: 'Technology' },
   { to: '/architecture', label: 'Architecture' },
-  { to: '/privacy',      label: 'Privacy & Safety' },
-  { to: '/use-cases',    label: 'Use Cases' },
+  { to: '/governance',   label: 'Governance' },
   { to: '/about',        label: 'About' },
 ]
+
+function SolutionsDropdown({ item, pathname }) {
+  const [dropOpen, setDropOpen] = useState(false)
+  const ref = useRef(null)
+  const isActive = item.children.some(c => pathname === c.to)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setDropOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className="nav-link flex items-center gap-1"
+        style={{ color: isActive ? 'white' : undefined }}
+        onClick={() => setDropOpen(!dropOpen)}
+      >
+        {item.label} <ChevronDown size={13} style={{ transition: 'transform 0.2s', transform: dropOpen ? 'rotate(180deg)' : 'none' }} />
+      </button>
+      {dropOpen && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 rounded-xl py-2 z-50"
+          style={{
+            background: 'rgba(13,13,32,0.97)',
+            border: '1px solid rgba(123,47,247,0.25)',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+          }}>
+          {item.children.map(({ to, label, desc, icon: Icon, color }) => (
+            <Link key={to} to={to} onClick={() => setDropOpen(false)}
+              className="flex items-start gap-3 px-4 py-3 transition-all duration-200"
+              style={{ color: pathname === to ? color : 'rgba(255,255,255,0.75)' }}
+              onMouseOver={e => e.currentTarget.style.background = 'rgba(123,47,247,0.08)'}
+              onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
+                <Icon size={15} style={{ color }} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">{label}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.40)' }}>{desc}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
@@ -49,21 +107,25 @@ export default function Navbar() {
               backgroundClip: 'text',
             }}
           >
-            Affective AI
+            ReachyOps AI
           </span>
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-7">
-          {NAV_LINKS.map(({ to, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className="nav-link"
-              style={{ color: pathname === to ? 'white' : undefined }}
-            >
-              {label}
-            </Link>
+        <div className="hidden md:flex items-center gap-6">
+          {NAV_LINKS.map((item) => (
+            item.children ? (
+              <SolutionsDropdown key={item.label} item={item} pathname={pathname} />
+            ) : (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="nav-link"
+                style={{ color: pathname === item.to ? 'white' : undefined }}
+              >
+                {item.label}
+              </Link>
+            )
           ))}
         </div>
 
@@ -93,9 +155,6 @@ export default function Navbar() {
           >
             <Linkedin size={18} />
           </a>
-          <Link to="/contact" className="btn-secondary text-xs px-4 py-2">
-            Investor Inquiry
-          </Link>
           <Link to="/contact" className="btn-primary text-xs px-4 py-2">
             Request Demo
           </Link>
@@ -123,18 +182,28 @@ export default function Navbar() {
             WebkitBackdropFilter: 'blur(20px)',
           }}
         >
-          {NAV_LINKS.map(({ to, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className="text-sm font-medium py-2"
-              style={{ color: pathname === to ? 'white' : 'rgba(255,255,255,0.7)' }}
-            >
-              {label}
-            </Link>
+          {NAV_LINKS.map((item) => (
+            item.children ? (
+              <div key={item.label} className="flex flex-col gap-1">
+                <span className="text-xs font-semibold tracking-widest uppercase py-2" style={{ color: 'rgba(255,255,255,0.35)' }}>{item.label}</span>
+                {item.children.map(({ to, label, icon: Icon, color }) => (
+                  <Link key={to} to={to} className="flex items-center gap-2 text-sm font-medium py-1.5 pl-2" style={{ color: pathname === to ? color : 'rgba(255,255,255,0.7)' }}>
+                    <Icon size={14} style={{ color }} /> {label}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="text-sm font-medium py-2"
+                style={{ color: pathname === item.to ? 'white' : 'rgba(255,255,255,0.7)' }}
+              >
+                {item.label}
+              </Link>
+            )
           ))}
           <div className="pt-2 flex flex-col gap-2 border-t" style={{ borderColor: 'rgba(123,47,247,0.15)' }}>
-            <Link to="/contact" className="btn-secondary text-sm justify-center">Investor Inquiry</Link>
             <Link to="/contact" className="btn-primary text-sm justify-center">Request Demo</Link>
             <div className="flex items-center gap-3 pt-1">
               <a

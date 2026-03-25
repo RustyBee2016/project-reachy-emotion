@@ -1,23 +1,24 @@
 import { Link } from 'react-router-dom'
 import LogoSVG from './LogoSVG'
-import { Mail, Shield, Cpu, GitBranch, Github, Linkedin } from 'lucide-react'
+import { Mail, Shield, Cpu, GitBranch, Github, Linkedin, Heart } from 'lucide-react'
 
 const LINKS = {
   Platform: [
+    { to: '/platform',     label: 'Platform Overview' },
     { to: '/technology',   label: 'Technology' },
     { to: '/architecture', label: 'Architecture' },
+    { to: '/governance',   label: 'Governance' },
     { to: '/privacy',      label: 'Privacy & Safety' },
   ],
-  Company: [
-    { to: '/use-cases',                   label: 'Use Cases' },
-    { to: '/about',                       label: 'About' },
-    { to: '/contact',                     label: 'Contact' },
-    { to: '/contact?type=collaboration',  label: 'Careers' },
+  Solutions: [
+    { to: '/careflow',   label: 'CareFlow — Healthcare' },
+    { to: '/secureflow', label: 'SecureFlow — Security' },
+    { to: '/dashboard',  label: 'Live Dashboard' },
   ],
-  Resources: [
-    { to: '/contact', label: 'Investor Inquiry' },
-    { to: '/contact', label: 'Request Demo' },
-    { to: '/technology', label: 'Technical Overview' },
+  Company: [
+    { to: '/about',    label: 'About' },
+    { to: '/contact',  label: 'Contact' },
+    { to: '/contact',  label: 'Request Demo' },
   ],
 }
 
@@ -48,12 +49,12 @@ export default function Footer() {
                   backgroundClip: 'text',
                 }}
               >
-                Affective AI
+                ReachyOps AI
               </span>
             </Link>
             <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Privacy-first emotion recognition meets empathetic robotics.
-              Your companion that truly understands how you feel.
+              A governed physical-AI operations platform. Two enterprise verticals:
+              healthcare operations and secure facilities.
             </p>
             <div className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
               <Mail size={13} />
@@ -91,9 +92,9 @@ export default function Footer() {
             {/* Trust badges */}
             <div className="flex gap-3 mt-5">
               {[
-                { icon: Shield, label: 'Privacy-First' },
+                { icon: Heart, label: 'CareFlow' },
+                { icon: Shield, label: 'SecureFlow' },
                 { icon: Cpu, label: 'Edge AI' },
-                { icon: GitBranch, label: 'Open Research' },
               ].map(({ icon: Icon, label }) => (
                 <span
                   key={label}
@@ -144,7 +145,7 @@ export default function Footer() {
             color: 'rgba(255,255,255,0.30)',
           }}
         >
-          <span>© 2022-2026 Affective AI — Emotionally Intelligent Robotics</span>
+          <span>© 2022-2026 ReachyOps AI — Governed Physical AI for Enterprise Operations</span>
           <div className="flex items-center gap-4">
             <a
               href="https://github.com/RustyBee2016/project-reachy-emotion"

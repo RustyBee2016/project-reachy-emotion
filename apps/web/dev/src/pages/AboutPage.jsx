@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, ExternalLink, Cpu, Brain, Shield, GitBranch, Layers, Bot, Heart } from 'lucide-react'
+import { ArrowRight, ExternalLink, Cpu, Brain, Shield, GitBranch, Layers, Bot, Heart, Briefcase, Target, Award, Users } from 'lucide-react'
 import { Reveal } from '../hooks/useReveal'
 import { GradientOrbs } from '../components/AnimatedBackground'
 
@@ -78,24 +78,24 @@ export default function AboutPage() {
                   background: 'linear-gradient(135deg, #D4166A 0%, #7B2FF7 50%, #00B4D8 100%)',
                   WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
                 }}>
-                  Affective AI
+                  ReachyOps AI
                 </div>
                 <div className="text-xs font-semibold tracking-[0.28em] uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  Emotionally Intelligent Robotics
+                  Governed Physical AI for Enterprise Operations
                 </div>
               </div>
             </div>
           </Reveal>
           <Reveal delay={0.1}>
             <h1 className="text-4xl font-black mb-5 tracking-tight">
-              About the <G>Project</G>
+              Built by a <G>Solutions Architect</G>
             </h1>
           </Reveal>
           <Reveal delay={0.2}>
             <p className="text-lg max-w-2xl mx-auto leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              We are building the foundation layer for emotionally intelligent robotics —
-              a platform that combines edge AI perception, privacy-first architecture, and
-              embodied empathetic response.
+              ReachyOps AI is a governed physical-AI operations platform designed, built, and
+              operated by <strong style={{ color: 'rgba(255,255,255,0.85)' }}>Russell Bray</strong> — 
+              demonstrating enterprise-grade agentic AI architecture adapted to two high-demand verticals.
             </p>
           </Reveal>
           <Reveal delay={0.3}>
@@ -107,11 +107,11 @@ export default function AboutPage() {
                 className="btn-primary flex items-center gap-2"
                 style={{ padding: '0.85rem 1.6rem' }}
               >
-                View ML Lab Repo
+                View Source Code
                 <ExternalLink size={16} />
               </a>
-              <Link to="/contact" className="btn-secondary flex items-center gap-2" style={{ padding: '0.85rem 1.6rem' }}>
-                Partner / Collaborate
+              <Link to="/platform" className="btn-secondary flex items-center gap-2" style={{ padding: '0.85rem 1.6rem' }}>
+                Platform Architecture
                 <ArrowRight size={16} />
               </Link>
             </div>
@@ -119,29 +119,30 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Mission */}
+      {/* Architect Profile */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-widest uppercase mb-5"
               style={{ border: '1px solid rgba(212,22,106,0.35)', color: 'rgba(212,22,106,0.85)', background: 'rgba(212,22,106,0.08)' }}>
-              <Heart size={11} /> Mission
+              <Briefcase size={11} /> Positioning
             </div>
             <h2 className="text-3xl font-black mb-5 tracking-tight">
-              Making robots that <G>genuinely understand</G> how you feel
+              Not a tinkerer. A <G>solutions architect.</G>
             </h2>
             <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              The gap between technically capable robots and emotionally intelligent companions
-              is not a hardware problem. It's a perception and response architecture problem.
+              "I built a governed physical-AI operations platform and adapted it to two 
+              high-demand verticals: healthcare operations and secure facilities."
             </p>
             <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Affective AI addresses this with a complete embodied AI system: from video-based
-              emotion recognition to gesture-aware robotic response, with calibrated confidence
-              metrics ensuring the system knows when to act and when to hold back.
+              Same platform. Different workflow logic. Different policy model. Different operator
+              dashboard. Same core architecture. That framing demonstrates the ability to design
+              reusable systems that scale across business domains.
             </p>
             <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Everything runs on-premise. No cloud exposure. No external dependencies. No surveillance-
-              adjacent data flows. Just emotionally aware, locally trustworthy AI.
+              The project showcases agentic workflow design, edge computer vision, embodied AI UX,
+              event-driven operations, human-in-the-loop escalation, and enterprise-safe architecture — 
+              the full stack a consulting engagement demands.
             </p>
           </div>
           <div className="rounded-2xl p-6" style={{
@@ -149,13 +150,14 @@ export default function AboutPage() {
             border: '1px solid rgba(123,47,247,0.20)',
           }}>
             <div className="text-xs font-semibold tracking-widest uppercase mb-5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              Core Values
+              Skills Demonstrated
             </div>
             {[
-              { val: 'Privacy-first', desc: 'Emotion data stays where it belongs—on-premise, under institutional control.', color: '#D4166A' },
-              { val: 'Trustworthy', desc: 'Calibration metrics (ECE, Brier) quantify reliability. Abstain logic handles uncertainty.', color: '#7B2FF7' },
-              { val: 'Reproducible', desc: 'Dataset hashing, MLflow lineage, and Alembic migrations make every result auditable.', color: '#00B4D8' },
-              { val: 'Human-in-the-loop', desc: 'Promotion, deployment, and policy changes require explicit human approval.', color: '#00C8A0' },
+              { val: 'Agentic AI Architecture', desc: 'Multi-agent orchestration with n8n, policy-gated decisions, and human approval loops across 10 cooperating agents.', color: '#D4166A' },
+              { val: 'Edge AI & MLOps', desc: 'EfficientNet-B0 on Jetson Xavier NX with TensorRT, MLflow tracking, and gated deployment pipelines.', color: '#7B2FF7' },
+              { val: 'Enterprise Governance', desc: 'Bounded autonomy, least-privilege actions, audit-complete logging, and compliance-ready architecture.', color: '#00B4D8' },
+              { val: 'Vertical Adaptation', desc: 'One reusable platform adapted to healthcare (CareFlow) and cybersecurity (SecureFlow) with distinct workflow logic.', color: '#10B981' },
+              { val: 'Business Process Design', desc: 'Workflow redesign for front-desk operations, incident response, and human-centered AI deployment.', color: '#F59E0B' },
             ].map(({ val, desc, color }) => (
               <div key={val} className="flex gap-3 mb-4 last:mb-0">
                 <div className="w-1 rounded-full flex-shrink-0" style={{ background: color }} />
@@ -241,29 +243,62 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Team / origin */}
+      {/* Flagship Projects */}
       <section className="py-16" style={{ background: 'rgba(9,9,20,0.90)' }}>
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-widest uppercase mb-6"
-            style={{ border: '1px solid rgba(123,47,247,0.35)', color: 'rgba(123,47,247,0.85)', background: 'rgba(123,47,247,0.08)' }}>
-            Origin
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-widest uppercase mb-6"
+              style={{ border: '1px solid rgba(123,47,247,0.35)', color: 'rgba(123,47,247,0.85)', background: 'rgba(123,47,247,0.08)' }}>
+              <Target size={11} /> Flagship Projects
+            </div>
+            <h2 className="text-2xl font-black mb-5 tracking-tight">
+              Two enterprise-grade <G>vertical proofs</G>
+            </h2>
           </div>
-          <h2 className="text-2xl font-black mb-5 tracking-tight">
-            From research project to <G>deployable platform</G>
-          </h2>
-          <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Affective AI emerged from Project Reachy (v0.09.1 / Reachy_Local_08.4.2)—
-            a deep research effort into privacy-first emotion recognition for companion robotics.
-            The system is designed, built, and operated by Russell Bray with a focus on
-            rigorous engineering discipline and reproducible research.
-          </p>
-          <p className="text-sm leading-relaxed mb-8" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            The platform is offered for research, educational, and institutional use.
-            Investment partnerships and clinical collaborations are actively sought.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link to="/contact" className="btn-primary">Get in Touch <ArrowRight size={15} /></Link>
-            <Link to="/technology" className="btn-secondary">Technical Overview</Link>
+          <div className="grid md:grid-cols-2 gap-6 mb-10">
+            <div className="rounded-2xl p-6" style={{ background: 'rgba(13,13,32,0.80)', border: '1px solid rgba(16,185,129,0.25)' }}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.30)' }}>
+                  <Heart size={20} style={{ color: '#10B981' }} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg" style={{ color: '#10B981' }}>CareFlow</h3>
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>Healthcare Operations</span>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Arrival detection, queue-aware reassurance, distress escalation, and staff notification — 
+                showing empathy, service design, and bounded autonomy.
+              </p>
+              <Link to="/careflow" className="text-sm font-semibold inline-flex items-center gap-1.5" style={{ color: '#10B981' }}>
+                Explore CareFlow <ArrowRight size={13} />
+              </Link>
+            </div>
+            <div className="rounded-2xl p-6" style={{ background: 'rgba(13,13,32,0.80)', border: '1px solid rgba(245,158,11,0.25)' }}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.30)' }}>
+                  <Shield size={20} style={{ color: '#F59E0B' }} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg" style={{ color: '#F59E0B' }}>SecureFlow</h3>
+                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>Cybersecurity / Secure Facilities</span>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                After-hours anomaly detection, policy-gated escalation, approval workflows, and audit trails — 
+                showing governance, least privilege, and trustworthy autonomy.
+              </p>
+              <Link to="/secureflow" className="text-sm font-semibold inline-flex items-center gap-1.5" style={{ color: '#F59E0B' }}>
+                Explore SecureFlow <ArrowRight size={13} />
+              </Link>
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="flex flex-wrap justify-center gap-3">
+              <Link to="/contact" className="btn-primary">Get in Touch <ArrowRight size={15} /></Link>
+              <Link to="/dashboard" className="btn-secondary">Live Dashboard</Link>
+              <Link to="/governance" className="btn-secondary">Governance Matrix</Link>
+            </div>
           </div>
         </div>
       </section>

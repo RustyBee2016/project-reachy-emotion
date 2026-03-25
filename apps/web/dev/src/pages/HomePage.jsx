@@ -696,6 +696,100 @@ function UseCases() {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   SECTION: REACHYOPS AI — ENTERPRISE VERTICALS
+   ═══════════════════════════════════════════════════════════ */
+function EnterpriseVerticals() {
+  const verticals = [
+    {
+      name: 'CareFlow',
+      subtitle: 'Healthcare Operations',
+      color: '#10B981',
+      icon: Heart,
+      desc: 'A governed AI operations assistant for clinics, outpatient centers, and care environments. Reduces front-desk friction, improves patient routing, and enables staff escalation — with human judgment always in the loop.',
+      features: ['Arrival detection & greeting', 'Queue-aware reassurance', 'Distress escalation to staff', 'Real-time operator dashboard'],
+      link: '/careflow',
+    },
+    {
+      name: 'SecureFlow',
+      subtitle: 'Cybersecurity / Secure Facilities',
+      color: '#F59E0B',
+      icon: Shield,
+      desc: 'A governed AI incident-assistance platform for secure offices, labs, and SOC-adjacent environments. Faster anomaly detection, approval-gated response, and complete audit trails.',
+      features: ['After-hours anomaly detection', 'Policy-gated escalation', 'Supervisor approval workflows', 'Incident logging & compliance'],
+      link: '/secureflow',
+    },
+  ]
+
+  return (
+    <section className="py-28 relative">
+      <GradientOrbs />
+      <div className="relative max-w-7xl mx-auto px-6 z-10">
+        <Reveal>
+          <div className="text-center mb-16">
+            <SectionTag icon={Layers}>Enterprise Editions</SectionTag>
+            <h2 className="text-4xl lg:text-5xl font-black mt-5 mb-5 tracking-tight">
+              One platform. <G>Two flagship verticals.</G>
+            </h2>
+            <p className="text-base max-w-2xl mx-auto" style={{ color: 'rgba(255,255,255,0.50)' }}>
+              ReachyOps AI adapts the same governed physical-AI architecture to two high-demand markets.
+              Same core stack. Different workflow logic. Different policy model. Different operator dashboard.
+            </p>
+          </div>
+        </Reveal>
+
+        <div className="grid lg:grid-cols-2 gap-8 mb-10">
+          {verticals.map(({ name, subtitle, color, icon: Icon, desc, features, link }, i) => (
+            <Reveal key={name} delay={i * 0.12}>
+              <div className="rounded-2xl p-8 h-full transition-all duration-300"
+                style={{ background: 'rgba(13,13,32,0.80)', border: `1px solid ${color}25` }}
+                onMouseOver={e => { e.currentTarget.style.borderColor = `${color}50`; e.currentTarget.style.boxShadow = `0 8px 40px ${color}15` }}
+                onMouseOut={e => { e.currentTarget.style.borderColor = `${color}25`; e.currentTarget.style.boxShadow = 'none' }}>
+                <div className="flex items-center gap-4 mb-5">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: `${color}15`, border: `1px solid ${color}35` }}>
+                    <Icon size={28} style={{ color }} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black" style={{ color }}>{name}</h3>
+                    <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: 'rgba(255,255,255,0.45)' }}>{subtitle}</span>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed mb-5" style={{ color: 'rgba(255,255,255,0.55)' }}>{desc}</p>
+                <ul className="flex flex-col gap-2 mb-6">
+                  {features.map(f => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm" style={{ color: 'rgba(255,255,255,0.60)' }}>
+                      <CheckCircle2 size={14} style={{ color, flexShrink: 0 }} />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link to={link} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white text-sm transition-all duration-200"
+                  style={{ background: `linear-gradient(135deg, ${color} 0%, ${color}CC 100%)`, boxShadow: `0 4px 20px ${color}30` }}>
+                  Explore {name} <ArrowRight size={15} />
+                </Link>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        <Reveal delay={0.25}>
+          <div className="flex flex-wrap justify-center gap-4">
+            <Link to="/platform" className="btn-secondary text-sm px-6 py-3">
+              Platform Architecture <ArrowRight size={15} />
+            </Link>
+            <Link to="/dashboard" className="btn-secondary text-sm px-6 py-3">
+              Live Dashboard Demo <ArrowRight size={15} />
+            </Link>
+            <Link to="/governance" className="btn-secondary text-sm px-6 py-3">
+              Governance Matrix <ArrowRight size={15} />
+            </Link>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════
    SECTION: FINAL CTA
    ═══════════════════════════════════════════════════════════ */
 function CTASection() {
@@ -714,15 +808,15 @@ function CTASection() {
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="text-5xl lg:text-6xl font-black tracking-tight mb-7 leading-tight">
-            Build the next generation
+            Governed physical AI
             <br />
-            of <G>empathetic robotics</G>
+            for <G>enterprise operations</G>
           </h2>
         </Reveal>
         <Reveal delay={0.2}>
           <p className="text-lg mb-12 max-w-xl mx-auto" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Affective AI combines edge emotion recognition, embodied response design,
-            and privacy-first infrastructure into a deployable robotics platform.
+            ReachyOps AI combines edge perception, agentic orchestration, embodied interaction,
+            and privacy-first governance into a platform that adapts to any vertical.
           </p>
         </Reveal>
         <Reveal delay={0.3}>
@@ -730,11 +824,11 @@ function CTASection() {
             <Link to="/contact" className="btn-primary text-base px-9 py-4">
               Request a Demo <ArrowRight size={18} />
             </Link>
-            <Link to="/technology" className="btn-secondary text-base px-9 py-4">
-              Technical Overview
+            <Link to="/platform" className="btn-secondary text-base px-9 py-4">
+              Platform Architecture
             </Link>
-            <Link to="/contact" className="btn-outline-cyan text-base px-9 py-4">
-              Investor Inquiry
+            <Link to="/dashboard" className="btn-outline-cyan text-base px-9 py-4">
+              Live Dashboard
             </Link>
           </div>
         </Reveal>
@@ -758,6 +852,7 @@ export default function HomePage() {
       <TechProof />
       <PrivacySafety />
       <UseCases />
+      <EnterpriseVerticals />
       <CTASection />
     </>
   )
