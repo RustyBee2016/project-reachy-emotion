@@ -1,12 +1,15 @@
 """
 Create an unlabeled test dataset from the AffectNet+ dataset.
 
+AffectNet+ images are already 224x224 cropped faces — the same format the
+pipeline produces after frame extraction and face cropping from source videos.
+This script copies them directly as unlabeled test images.
+
 This script:
 1. Reads AffectNet+ annotation JSONs and filters for happy/sad images
 2. Applies quality filters (complexity, soft-label confidence, balance)
-3. Wraps each selected image into a short synthetic MP4 video
-4. Outputs an unlabeled test directory (no labels in filenames or structure)
-5. Generates a separate JSONL label map for post-evaluation scoring
+3. Copies selected images into an unlabeled test directory (neutral filenames)
+4. Generates a separate JSONL label map for post-evaluation scoring
 
 Usage:
     python -m trainer.create_affectnet_test_dataset \
@@ -21,8 +24,8 @@ Directory layout produced:
     <output-root>/
     ├── test/
     │   └── affectnet_test_dataset/
-    │       ├── affectnet_00001.mp4      # unlabeled synthetic video
-    │       ├── affectnet_00002.mp4
+    │       ├── affectnet_00001.jpg      # unlabeled 224x224 face image
+    │       ├── affectnet_00002.jpg
     │       └── ...
     └── manifests/
         └── affectnet_test_labels.jsonl  # ground-truth label map (separate)
@@ -37,6 +40,8 @@ import random
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import shutil
 
 import cv2
 import numpy as np
@@ -72,11 +77,6 @@ COMPLEXITY_LABELS: Dict[int, str] = {
     1: "challenging",
     2: "difficult",
 }
-
-# Synthetic video parameters
-VIDEO_FPS = 25
-VIDEO_FRAMES = 20  # ~0.8 seconds
-VIDEO_FOURCC = "mp4v"
 
 
 # ---------------------------------------------------------------------------
@@ -282,26 +282,25 @@ def sample_balanced(
 
 
 # ---------------------------------------------------------------------------
-# Synthetic video creation
+# Image copying / resizing
 # ---------------------------------------------------------------------------
 
-def image_to_video(
+def copy_test_image(
     image_path: Path,
     output_path: Path,
-    fps: int = VIDEO_FPS,
-    num_frames: int = VIDEO_FRAMES,
+    target_size: int = 224,
 ) -> bool:
-    """Convert a static image to a short synthetic MP4 video.
+    """Copy an AffectNet+ image into the test directory.
 
-    The image is resized to 224x224 (AffectNet+ native) and repeated for
-    ``num_frames`` frames to produce a valid MP4 that the Reachy pipeline
-    can process through its normal video-based inference path.
+    AffectNet+ images are already 224x224 cropped faces — the same format
+    the pipeline produces after frame extraction and face cropping. This
+    function verifies the image is readable and ensures correct sizing,
+    then writes it to the output path with a neutral filename.
 
     Args:
-        image_path: Source image file.
-        output_path: Destination MP4 path.
-        fps: Video frame rate.
-        num_frames: Number of repeated frames.
+        image_path: Source AffectNet+ image.
+        output_path: Destination path (neutral filename, .jpg).
+        target_size: Expected image dimension (default: 224).
 
     Returns:
         True on success, False on failure.
@@ -311,20 +310,11 @@ def image_to_video(
         logger.warning(f"Cannot read image: {image_path}")
         return False
 
-    # Resize to 224x224 (model input size, AffectNet+ native)
-    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
+    h, w = img.shape[:2]
+    if h != target_size or w != target_size:
+        img = cv2.resize(img, (target_size, target_size), interpolation=cv2.INTER_AREA)
 
-    fourcc = cv2.VideoWriter_fourcc(*VIDEO_FOURCC)
-    writer = cv2.VideoWriter(str(output_path), fourcc, fps, (224, 224))
-
-    if not writer.isOpened():
-        logger.warning(f"Cannot create video writer for: {output_path}")
-        return False
-
-    for _ in range(num_frames):
-        writer.write(img)
-
-    writer.release()
+    cv2.imwrite(str(output_path), img)
     return True
 
 
@@ -381,19 +371,19 @@ def create_test_dataset(
     logger.info("Sampling balanced test set...")
     sampled = sample_balanced(filtered, samples_per_class=samples_per_class, seed=seed)
 
-    # Step 4: Generate videos + label map
-    logger.info("Creating synthetic videos and label map...")
+    # Step 4: Copy images + generate label map
+    logger.info("Copying test images and generating label map...")
     created = 0
     skipped = 0
     label_entries: List[Dict[str, Any]] = []
 
     with open(label_map_path, "w") as label_file:
         for idx, ann in enumerate(sampled, start=1):
-            video_name = f"affectnet_{idx:05d}.mp4"
-            video_path = test_dir / video_name
+            filename = f"affectnet_{idx:05d}.jpg"
+            dest_path = test_dir / filename
             image_path = Path(ann["_image_path"])
 
-            if not image_to_video(image_path, video_path):
+            if not copy_test_image(image_path, dest_path):
                 skipped += 1
                 continue
 
@@ -408,7 +398,7 @@ def create_test_dataset(
             subset_code = ann.get("Subset", ann.get("subset"))
 
             entry = {
-                "video_filename": video_name,
+                "filename": filename,
                 "label": ann["_assigned_class"],
                 "affectnet_emotion_code": human_label_code,
                 "soft_label": soft_label,
@@ -445,8 +435,8 @@ def create_test_dataset(
 
     logger.info("=" * 60)
     logger.info("Test dataset creation complete!")
-    logger.info(f"  Videos created: {created}")
-    logger.info(f"  Videos skipped: {skipped}")
+    logger.info(f"  Images copied: {created}")
+    logger.info(f"  Images skipped: {skipped}")
     logger.info(f"  Class distribution: {class_counts}")
     logger.info(f"  Test directory: {test_dir}")
     logger.info(f"  Label map: {label_map_path}")

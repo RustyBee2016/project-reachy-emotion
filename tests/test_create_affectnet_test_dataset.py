@@ -12,9 +12,9 @@ import pytest
 from trainer.create_affectnet_test_dataset import (
     AFFECTNET_EMOTION_CODES,
     TARGET_CLASSES,
+    copy_test_image,
     create_test_dataset,
     filter_annotations,
-    image_to_video,
     load_affectnet_annotations,
     sample_balanced,
 )
@@ -239,32 +239,40 @@ class TestSampleBalanced:
 
 
 # ---------------------------------------------------------------------------
-# Tests: synthetic video creation
+# Tests: image copying
 # ---------------------------------------------------------------------------
 
-class TestImageToVideo:
-    def test_creates_valid_mp4(self, tmp_path: Path):
+class TestCopyTestImage:
+    def test_copies_valid_image(self, tmp_path: Path):
         img_path = tmp_path / "test.jpg"
         _make_test_image(img_path)
 
-        video_path = tmp_path / "test.mp4"
-        result = image_to_video(img_path, video_path)
+        out_path = tmp_path / "output.jpg"
+        result = copy_test_image(img_path, out_path)
 
         assert result is True
-        assert video_path.exists()
-        assert video_path.stat().st_size > 0
+        assert out_path.exists()
+        assert out_path.stat().st_size > 0
 
-        # Verify video properties
-        cap = cv2.VideoCapture(str(video_path))
-        assert cap.isOpened()
-        assert int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) == 20
-        assert int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) == 224
-        assert int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) == 224
-        cap.release()
+        # Verify image properties
+        img = cv2.imread(str(out_path))
+        assert img is not None
+        assert img.shape[:2] == (224, 224)
+
+    def test_resizes_non_224_image(self, tmp_path: Path):
+        img_path = tmp_path / "big.jpg"
+        _make_test_image(img_path, size=512)
+
+        out_path = tmp_path / "resized.jpg"
+        result = copy_test_image(img_path, out_path)
+
+        assert result is True
+        img = cv2.imread(str(out_path))
+        assert img.shape[:2] == (224, 224)
 
     def test_missing_image_returns_false(self, tmp_path: Path):
-        video_path = tmp_path / "test.mp4"
-        result = image_to_video(tmp_path / "nonexistent.jpg", video_path)
+        out_path = tmp_path / "test.jpg"
+        result = copy_test_image(tmp_path / "nonexistent.jpg", out_path)
         assert result is False
 
 
@@ -286,15 +294,15 @@ class TestCreateTestDataset:
         assert summary["success"] is True
         assert summary["total_created"] == 10  # 5 happy + 5 sad
 
-        # Test directory should have videos with neutral names
+        # Test directory should have images with neutral names
         test_dir = Path(summary["test_dir"])
         assert test_dir.exists()
-        videos = sorted(test_dir.glob("*.mp4"))
-        assert len(videos) == 10
+        images = sorted(test_dir.glob("*.jpg"))
+        assert len(images) == 10
 
         # Verify filenames contain NO emotion labels
-        for video in videos:
-            name = video.name.lower()
+        for img in images:
+            name = img.name.lower()
             assert "happy" not in name
             assert "sad" not in name
             assert name.startswith("affectnet_")
@@ -320,7 +328,8 @@ class TestCreateTestDataset:
 
         # Each entry should have required fields
         for entry in entries:
-            assert "video_filename" in entry
+            assert "filename" in entry
+            assert entry["filename"].endswith(".jpg")
             assert "label" in entry
             assert entry["label"] in ("happy", "sad")
             assert "affectnet_emotion_code" in entry
