@@ -55,58 +55,122 @@ def _make_annotation(
     }
 
 
+def _populate_split(
+    ann_dir: Path,
+    img_dir: Path,
+    samples: List[Dict[str, Any]],
+) -> None:
+    """Write annotation JSONs and matching images into an AffectNet+ split."""
+    ann_dir.mkdir(parents=True, exist_ok=True)
+    img_dir.mkdir(parents=True, exist_ok=True)
+    for sample in samples:
+        stem = sample["stem"]
+        _make_test_image(img_dir / f"{stem}.jpg")
+        ann = _make_annotation(
+            stem,
+            human_label=sample["human_label"],
+            soft_label=sample["soft_label"],
+            subset=sample.get("subset", 0),
+        )
+        with open(ann_dir / f"{stem}.json", "w") as f:
+            json.dump(ann, f)
+
+
 @pytest.fixture
 def affectnet_dir(tmp_path: Path) -> Path:
-    """Create a mock AffectNet+ directory with images and annotations."""
-    ann_dir = tmp_path / "annotations"
-    img_dir = tmp_path / "images"
-    ann_dir.mkdir()
-    img_dir.mkdir()
+    """Create a mock AffectNet+ directory matching the official structure.
 
-    # Create happy samples (code=1)
-    for i in range(20):
-        stem = f"happy_{i:04d}"
-        _make_test_image(img_dir / f"{stem}.jpg")
-        soft = [0.05, 0.80, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02]
-        ann = _make_annotation(stem, human_label=1, soft_label=soft, subset=0)
-        with open(ann_dir / f"{stem}.json", "w") as f:
-            json.dump(ann, f)
+    Official layout (Figure 3):
+        AffectNet+/
+        ├── Human Annotated/
+        │   ├── Train Set/
+        │   │   ├── Images/        ← .jpg
+        │   │   └── Annotations/   ← .json
+        │   └── Validation Set/
+        │       ├── Images/
+        │       └── Annotations/
+        └── No Human Annotated/
+            ├── Images/
+            └── Annotations/
+    """
+    root = tmp_path / "AffectNet+"
 
-    # Create sad samples (code=2)
-    for i in range(20):
-        stem = f"sad_{i:04d}"
-        _make_test_image(img_dir / f"{stem}.jpg")
-        soft = [0.05, 0.05, 0.80, 0.02, 0.02, 0.02, 0.02, 0.02]
-        ann = _make_annotation(stem, human_label=2, soft_label=soft, subset=0)
-        with open(ann_dir / f"{stem}.json", "w") as f:
-            json.dump(ann, f)
+    # -- Human Annotated / Validation Set (primary source for test data) ----
+    val_base = root / "Human Annotated" / "Validation Set"
+    val_samples: List[Dict[str, Any]] = []
 
-    # Create neutral samples (code=0) — should be filtered out
-    for i in range(5):
-        stem = f"neutral_{i:04d}"
-        _make_test_image(img_dir / f"{stem}.jpg")
-        soft = [0.80, 0.05, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02]
-        ann = _make_annotation(stem, human_label=0, soft_label=soft, subset=0)
-        with open(ann_dir / f"{stem}.json", "w") as f:
-            json.dump(ann, f)
+    # 10 happy in validation
+    for i in range(10):
+        val_samples.append({
+            "stem": f"val_happy_{i:04d}",
+            "human_label": 1,
+            "soft_label": [0.05, 0.80, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02],
+        })
+    # 10 sad in validation
+    for i in range(10):
+        val_samples.append({
+            "stem": f"val_sad_{i:04d}",
+            "human_label": 2,
+            "soft_label": [0.05, 0.05, 0.80, 0.02, 0.02, 0.02, 0.02, 0.02],
+        })
+    # 3 neutral in validation (should be filtered out by target class)
+    for i in range(3):
+        val_samples.append({
+            "stem": f"val_neutral_{i:04d}",
+            "human_label": 0,
+            "soft_label": [0.80, 0.05, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02],
+        })
 
-    # Create low-confidence happy sample — should be filtered out
-    stem = "ambiguous_happy"
-    _make_test_image(img_dir / f"{stem}.jpg")
-    soft = [0.30, 0.40, 0.10, 0.05, 0.05, 0.05, 0.03, 0.02]
-    ann = _make_annotation(stem, human_label=1, soft_label=soft, subset=0)
-    with open(ann_dir / f"{stem}.json", "w") as f:
-        json.dump(ann, f)
+    _populate_split(
+        val_base / "Annotations", val_base / "Images", val_samples,
+    )
 
-    # Create difficult sample (subset=2) — should be filtered with max_complexity=1
-    stem = "difficult_sad"
-    _make_test_image(img_dir / f"{stem}.jpg")
-    soft = [0.05, 0.05, 0.75, 0.05, 0.02, 0.02, 0.04, 0.02]
-    ann = _make_annotation(stem, human_label=2, soft_label=soft, subset=2)
-    with open(ann_dir / f"{stem}.json", "w") as f:
-        json.dump(ann, f)
+    # -- Human Annotated / Train Set (larger pool) --------------------------
+    train_base = root / "Human Annotated" / "Train Set"
+    train_samples: List[Dict[str, Any]] = []
 
-    return tmp_path
+    # 10 happy in train
+    for i in range(10):
+        train_samples.append({
+            "stem": f"train_happy_{i:04d}",
+            "human_label": 1,
+            "soft_label": [0.05, 0.80, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02],
+        })
+    # 10 sad in train
+    for i in range(10):
+        train_samples.append({
+            "stem": f"train_sad_{i:04d}",
+            "human_label": 2,
+            "soft_label": [0.05, 0.05, 0.80, 0.02, 0.02, 0.02, 0.02, 0.02],
+        })
+    # 2 neutral in train
+    for i in range(2):
+        train_samples.append({
+            "stem": f"train_neutral_{i:04d}",
+            "human_label": 0,
+            "soft_label": [0.80, 0.05, 0.05, 0.02, 0.02, 0.02, 0.02, 0.02],
+        })
+
+    # Low-confidence happy (should be filtered with min_confidence=0.6)
+    train_samples.append({
+        "stem": "ambiguous_happy",
+        "human_label": 1,
+        "soft_label": [0.30, 0.40, 0.10, 0.05, 0.05, 0.05, 0.03, 0.02],
+    })
+
+    # Difficult sad (should be filtered with max_complexity=1)
+    train_samples.append({
+        "stem": "difficult_sad",
+        "human_label": 2,
+        "soft_label": [0.05, 0.05, 0.75, 0.05, 0.02, 0.02, 0.04, 0.02],
+        "subset": 2,
+    })
+
+    _populate_split(
+        train_base / "Annotations", train_base / "Images", train_samples,
+    )
+
+    return root
 
 
 @pytest.fixture
@@ -124,7 +188,7 @@ def output_dir(tmp_path: Path) -> Path:
 class TestLoadAnnotations:
     def test_loads_all_valid_annotations(self, affectnet_dir: Path):
         annotations = load_affectnet_annotations(affectnet_dir)
-        # 20 happy + 20 sad + 5 neutral + 1 ambiguous + 1 difficult = 47
+        # Validation: 10h + 10s + 3n = 23, Train: 10h + 10s + 2n + 1ambig + 1diff = 24
         assert len(annotations) == 47
 
     def test_annotations_have_image_paths(self, affectnet_dir: Path):

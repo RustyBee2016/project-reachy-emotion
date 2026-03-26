@@ -80,109 +80,178 @@ COMPLEXITY_LABELS: Dict[int, str] = {
 
 
 # ---------------------------------------------------------------------------
+# AffectNet+ directory structure (from official documentation, Figure 3):
+#
+#   AffectNet+/
+#   ├── Human Annotated/
+#   │   ├── Train Set/
+#   │   │   ├── Images/          ← .jpg files (224x224 cropped faces)
+#   │   │   └── Annotations/     ← .json files (one per image, same stem)
+#   │   └── Validation Set/
+#   │       ├── Images/
+#   │       └── Annotations/
+#   └── No Human Annotated/
+#       ├── Images/
+#       └── Annotations/
+#
+# Each annotation JSON has the same filename stem as its corresponding
+# image (e.g. ``12345.json`` ↔ ``12345.jpg``).  Images and annotations
+# live in sibling directories, NOT alongside each other.
+# ---------------------------------------------------------------------------
+
+# Canonical directory names used by AffectNet+.  We also accept common
+# variations (e.g. underscores, different casing) for robustness.
+_SPLIT_SEARCH_PATHS: List[List[str]] = [
+    # Human-annotated validation set — preferred source for test data
+    # because it has verified human labels.
+    ["Human Annotated", "Validation Set"],
+    ["Human_Annotated", "Validation_Set"],
+    ["Human Annotated", "Validation"],
+    # Human-annotated training set — much larger pool to sample from.
+    ["Human Annotated", "Train Set"],
+    ["Human_Annotated", "Train_Set"],
+    ["Human Annotated", "Train"],
+]
+
+
+# ---------------------------------------------------------------------------
 # Annotation loading
 # ---------------------------------------------------------------------------
+
+def _find_annotation_image_pairs(
+    affectnet_root: Path,
+) -> List[tuple[Path, Path]]:
+    """Discover (annotations_dir, images_dir) pairs in the AffectNet+ tree.
+
+    Walks the canonical directory structure and returns every pair of
+    sibling ``Annotations/`` and ``Images/`` directories found.
+    """
+    pairs: List[tuple[Path, Path]] = []
+
+    # Strategy 1: canonical split paths from official docs
+    for segments in _SPLIT_SEARCH_PATHS:
+        base = affectnet_root
+        for seg in segments:
+            base = base / seg
+        ann_dir = base / "Annotations"
+        img_dir = base / "Images"
+        if ann_dir.is_dir() and img_dir.is_dir():
+            pairs.append((ann_dir, img_dir))
+
+    # Strategy 2: recursive search for any Annotations/Images siblings
+    # (handles renamed or reorganised extractions)
+    if not pairs:
+        for ann_dir in sorted(affectnet_root.rglob("Annotations")):
+            if not ann_dir.is_dir():
+                continue
+            img_dir = ann_dir.parent / "Images"
+            if img_dir.is_dir():
+                pair = (ann_dir, img_dir)
+                if pair not in pairs:
+                    pairs.append(pair)
+
+    # Strategy 3: fall back to lowercase variants
+    if not pairs:
+        for ann_dir in sorted(affectnet_root.rglob("annotations")):
+            if not ann_dir.is_dir():
+                continue
+            img_dir = ann_dir.parent / "images"
+            if not img_dir.is_dir():
+                img_dir = ann_dir.parent / "Images"
+            if img_dir.is_dir():
+                pair = (ann_dir, img_dir)
+                if pair not in pairs:
+                    pairs.append(pair)
+
+    return pairs
+
 
 def load_affectnet_annotations(
     affectnet_root: Path,
 ) -> List[Dict[str, Any]]:
-    """Load all AffectNet+ annotation JSONs from the dataset.
+    """Load all AffectNet+ annotation JSONs and resolve matching images.
 
-    AffectNet+ stores one JSON per image. The JSON contains:
-    - Human-Label: int (0-10)
-    - Soft-Label: list of 8 floats
-    - Subset: int (0=easy, 1=challenging, 2=difficult)
-    - Metadata: dict with age, gender, race, pose, landmarks, valence, arousal
+    Follows the official AffectNet+ directory structure where each split
+    contains sibling ``Annotations/`` (JSON) and ``Images/`` (JPG) dirs.
+    Each annotation JSON shares the same filename stem as its image.
 
     Args:
         affectnet_root: Root directory of extracted AffectNet+ dataset.
 
     Returns:
-        List of annotation dicts, each augmented with ``image_path``.
+        List of annotation dicts, each augmented with ``_image_path``
+        and ``_json_path``.
     """
     annotations: List[Dict[str, Any]] = []
 
-    # AffectNet+ stores annotations as individual JSON files alongside images,
-    # or in a combined annotations directory. Support both layouts.
-    json_paths: List[Path] = []
+    dir_pairs = _find_annotation_image_pairs(affectnet_root)
 
-    # Layout 1: annotations/ directory with JSON files
-    annotations_dir = affectnet_root / "annotations"
-    if annotations_dir.is_dir():
-        json_paths.extend(sorted(annotations_dir.glob("**/*.json")))
+    if not dir_pairs:
+        logger.warning(
+            f"No Annotations/Images directory pairs found under {affectnet_root}. "
+            "Expected AffectNet+ structure: <split>/Annotations/ + <split>/Images/"
+        )
+        return annotations
 
-    # Layout 2: JSON files alongside images in train/validation dirs
-    for subdir_name in ("train", "validation", "Train", "Validation"):
-        subdir = affectnet_root / subdir_name
-        if subdir.is_dir():
-            json_paths.extend(sorted(subdir.glob("**/*.json")))
+    logger.info(f"Found {len(dir_pairs)} annotation/image directory pair(s)")
 
-    # Layout 3: flat structure with images and JSONs in root
-    if not json_paths:
-        json_paths.extend(sorted(affectnet_root.glob("*.json")))
+    for ann_dir, img_dir in dir_pairs:
+        logger.info(f"  Scanning: {ann_dir}")
+        json_paths = sorted(ann_dir.glob("*.json"))
+        loaded = 0
 
-    logger.info(f"Found {len(json_paths)} annotation JSON files")
+        for json_path in json_paths:
+            try:
+                with open(json_path, "r") as f:
+                    ann = json.load(f)
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning(f"Skipping invalid JSON {json_path}: {exc}")
+                continue
 
-    for json_path in json_paths:
-        try:
-            with open(json_path, "r") as f:
-                ann = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning(f"Skipping invalid JSON {json_path}: {exc}")
-            continue
+            # Resolve matching image in the sibling Images/ directory
+            image_path = _resolve_image_path(json_path, img_dir)
+            if image_path is None:
+                continue
 
-        # Resolve the matching image path (same stem, image extension)
-        image_path = _resolve_image_path(json_path, affectnet_root)
-        if image_path is None:
-            continue
+            ann["_json_path"] = str(json_path)
+            ann["_image_path"] = str(image_path)
+            annotations.append(ann)
+            loaded += 1
 
-        ann["_json_path"] = str(json_path)
-        ann["_image_path"] = str(image_path)
-        annotations.append(ann)
+        logger.info(f"    Loaded {loaded} / {len(json_paths)} annotations")
 
-    logger.info(f"Loaded {len(annotations)} valid annotations with images")
+    logger.info(f"Total: {len(annotations)} valid annotations with images")
     return annotations
 
 
-def _resolve_image_path(json_path: Path, root: Path) -> Optional[Path]:
+def _resolve_image_path(json_path: Path, images_dir: Path) -> Optional[Path]:
     """Find the image file corresponding to a JSON annotation.
 
-    Checks common image extensions in the same directory as the JSON and
-    also in parallel image directories (e.g., images/ vs annotations/).
+    In AffectNet+ the image shares the same stem as the JSON but lives
+    in the sibling ``Images/`` directory.
+
+    Args:
+        json_path: Path to the annotation JSON file.
+        images_dir: The ``Images/`` directory that is a sibling of the
+            ``Annotations/`` directory containing *json_path*.
+
+    Returns:
+        Path to the matching image, or ``None`` if not found.
     """
     stem = json_path.stem
     image_exts = (".jpg", ".jpeg", ".png", ".bmp")
 
-    # Check same directory
+    # Primary: look in the sibling Images/ directory (official layout)
+    for ext in image_exts:
+        candidate = images_dir / f"{stem}{ext}"
+        if candidate.exists():
+            return candidate
+
+    # Fallback: check same directory as the JSON (non-standard layout)
     for ext in image_exts:
         candidate = json_path.with_suffix(ext)
         if candidate.exists():
             return candidate
-
-    # Check parallel images/ directory
-    for images_dir_name in ("images", "Images"):
-        images_dir = root / images_dir_name
-        if images_dir.is_dir():
-            for ext in image_exts:
-                candidate = images_dir / f"{stem}{ext}"
-                if candidate.exists():
-                    return candidate
-            # Try preserving subdirectory structure
-            relative = json_path.relative_to(json_path.parent)
-            parent_relative = json_path.parent.relative_to(root)
-            for ext in image_exts:
-                candidate = images_dir / parent_relative.name / f"{stem}{ext}"
-                if candidate.exists():
-                    return candidate
-
-    # Check train/validation image directories
-    for subdir_name in ("train", "validation", "Train", "Validation"):
-        subdir = root / subdir_name
-        if subdir.is_dir():
-            for ext in image_exts:
-                candidate = subdir / f"{stem}{ext}"
-                if candidate.exists():
-                    return candidate
 
     return None
 
