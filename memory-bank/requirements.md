@@ -38,12 +38,6 @@
     
     * Key metrics reflect actual data pipelines
       
-      
-
-### File list - 3.19.26
-
-All files available here:  **source code/update_1.0**
-
 
 
 ### Summary
