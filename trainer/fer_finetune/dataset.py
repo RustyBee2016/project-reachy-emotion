@@ -522,8 +522,7 @@ def get_train_transforms(
         return A.Compose([
             # Resize with random crop
             A.RandomResizedCrop(
-                height=input_size,
-                width=input_size,
+                size=(input_size, input_size),
                 scale=(0.8, 1.0),
                 ratio=(0.9, 1.1),
             ),
@@ -671,12 +670,25 @@ def create_dataloaders(
 
     has_dedicated_val = roots.uses_run_scoped_val or bool(val_manifest_path)
 
+    # Detect default val directory that contains class subdirectories
+    # (e.g. videos/test/happy/, videos/test/sad/).  This covers the common
+    # case where --skip-train evaluates on the default test split without a
+    # run-scoped directory or manifest.
+    if not has_dedicated_val and roots.val_root.exists():
+        _cls = class_names or list(EmotionDataset.DEFAULT_CLASSES.keys())
+        if any((roots.val_root / cn).is_dir() for cn in _cls):
+            has_dedicated_val = True
+
     if roots.uses_run_scoped_val and not val_manifest_path:
         val_data_dir = str(roots.val_root)
         val_split = ""
     elif val_manifest_path:
         val_data_dir = data_dir
         val_split = "test"
+    elif has_dedicated_val:
+        # Default test dir with class subdirectories
+        val_data_dir = str(roots.val_root)
+        val_split = ""
     else:
         val_data_dir = None
         val_split = None

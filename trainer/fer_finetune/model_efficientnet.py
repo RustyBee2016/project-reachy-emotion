@@ -141,10 +141,18 @@ class HSEmotionEfficientNet(nn.Module):
         # Try timm
         backbone = self._try_timm_backbone(pretrained_weights)
         if backbone is not None:
+            logger.warning(
+                "HSEmotion weights unavailable — using timm ImageNet backbone. "
+                "Model quality may be reduced. Install hsemotion/emotiefflib "
+                "for emotion-optimised pre-training."
+            )
             return backbone, feature_dim
-        
+
         # Fallback to torchvision
-        logger.warning("Using torchvision EfficientNet-B0 (ImageNet weights)")
+        logger.warning(
+            "HSEmotion AND timm unavailable — falling back to torchvision "
+            "EfficientNet-B0 (ImageNet weights). Model quality WILL be reduced."
+        )
         return self._create_torchvision_backbone(), feature_dim
     
     def _try_hsemotion_weights(self) -> Optional[nn.Module]:

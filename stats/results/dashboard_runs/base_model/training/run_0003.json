@@ -1,0 +1,51 @@
+{
+  "run_id": "run_0003",
+  "model_variant": "base_model",
+  "run_type": "training",
+  "gate_a_metrics": {
+    "accuracy": 0.9629629629629629,
+    "precision_macro": 0.9633781844228393,
+    "recall_macro": 0.9629629629629629,
+    "f1_macro": 0.963021417049139,
+    "balanced_accuracy": 0.9629629629629629,
+    "f1_class_0": 0.9686221009549796,
+    "f1_happy": 0.9686221009549796,
+    "f1_class_1": 0.9643835616438357,
+    "f1_sad": 0.9643835616438357,
+    "f1_class_2": 0.9560585885486018,
+    "f1_neutral": 0.9560585885486018,
+    "confusion_matrix": [
+      [
+        355,
+        4,
+        10
+      ],
+      [
+        4,
+        352,
+        13
+      ],
+      [
+        5,
+        5,
+        359
+      ]
+    ],
+    "ece": 0.08281793762351765,
+    "brier": 0.07221219570582539,
+    "mce": 0.24333248734474178
+  },
+  "gate_a_gates": {
+    "macro_f1": true,
+    "balanced_accuracy": true,
+    "per_class_f1": true,
+    "ece": false,
+    "brier": true
+  },
+  "overall_pass": false,
+  "artifacts": {
+    "predictions_npz": "stats/results/base_model/training/run_0003/predictions.npz",
+    "gate_a_report_json": "stats/results/base_model/training/run_0003/gate_a.json",
+    "onnx_path": null
+  }
+}

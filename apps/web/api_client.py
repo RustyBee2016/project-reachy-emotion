@@ -728,3 +728,23 @@ def stage_to_train(
         "dry_run": dry_run,
         "message": "batch promotion completed via /api/v1/media/promote",
     }
+
+
+@retry_on_failure()
+def get_deployment_status(pipeline_id: str) -> Dict[str, Any]:
+    """Get deployment status for a pipeline run."""
+    url = f"{_gateway_base()}/api/deployment/status/{pipeline_id}"
+    resp = requests.get(url, headers=_headers(), timeout=15,
+                        verify=_request_verify(_gateway_base(), "GATEWAY"))
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def update_deployment_status(pipeline_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Update deployment status for a pipeline run."""
+    url = f"{_gateway_base()}/api/deployment/status/{pipeline_id}"
+    resp = requests.post(url, headers=_headers(), json=payload, timeout=15,
+                         verify=_request_verify(_gateway_base(), "GATEWAY"))
+    resp.raise_for_status()
+    return resp.json()

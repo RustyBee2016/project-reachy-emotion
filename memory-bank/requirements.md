@@ -37,8 +37,6 @@
     * Static version provides snapshots summarize key concepts
     
     * Key metrics reflect actual data pipelines
-      
-
 
 ### Summary
 
@@ -155,12 +153,8 @@ apps/web/dev/
 * AboutPage.jsx — Project background and team
 
 * ContactPage.jsx — Contact form
-  
-  
 
 ------
-
-
 
 # Project Requirements — Reachy_EQ_PPE_Degree_Mini_01
 
@@ -371,8 +365,6 @@ The system prioritizes user privacy through on‑device processing, minimal data
   - Feature toggles: `SSH_ACTIONS_ENABLED`, `TRAINING_ENABLED`, `EVALUATION_ENABLED`, `DEPLOYMENT_ENABLED`.
   - LLM integrations: `CLAUDE_API_KEY`, `LLM_STUDIO_BASE_URL`, `LLM_STUDIO_API_KEY`.
 - **Compose alignment**: Docker Compose expects the `.env` to define `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `N8N_USER`, `N8N_PASSWORD`, `N8N_HOST`, and `WEBHOOK_URL` so that container environment interpolation resolves correctly.
-  
-  
 
 ### 6.6 Model Selection Rationale — EfficientNet Family (2.30.26)
 
@@ -381,8 +373,6 @@ The system prioritizes user privacy through on‑device processing, minimal data
 * **EfficientNet-B2 trade-off:** HSEmotion’s `enet_b2_8` offers higher accuracy in unconstrained settings but is expected to exceed Jetson latency and memory limits (≤120 ms, ≤2.5 GB). Requirements now mandate a benchmark/validation cycle before any promotion to B2, and Gate B metrics must be re-established if constraints change.
 
 * **Sources:** HSEmotion / EmotiEffLib (`pip install emotiefflib`) for video-optimized EfficientNet-B0/B2 weights, plus timm fallbacks when custom checkpoints are unavailable. Google’s canonical EfficientNet repo is considered legacy for this stack.
-  
-  
 
 ---
 

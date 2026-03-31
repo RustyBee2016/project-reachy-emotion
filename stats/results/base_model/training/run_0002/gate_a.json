@@ -1,0 +1,62 @@
+{
+  "timestamp_utc": "2026-03-31T01:22:55.504454+00:00",
+  "class_names": [
+    "happy",
+    "sad",
+    "neutral"
+  ],
+  "thresholds": {
+    "macro_f1": 0.84,
+    "balanced_accuracy": 0.85,
+    "per_class_f1": 0.75,
+    "per_class_floor": 0.7,
+    "ece": 0.08,
+    "brier": 0.16
+  },
+  "metrics": {
+    "accuracy": 0.9535353535353536,
+    "precision_macro": 0.9540827377084687,
+    "recall_macro": 0.9535353535353535,
+    "f1_macro": 0.9536551623707586,
+    "balanced_accuracy": 0.9535353535353535,
+    "f1_class_0": 0.9694189602446484,
+    "f1_happy": 0.9694189602446484,
+    "f1_class_1": 0.9510703363914373,
+    "f1_sad": 0.9510703363914373,
+    "f1_class_2": 0.9404761904761905,
+    "f1_neutral": 0.9404761904761905,
+    "confusion_matrix": [
+      [
+        317,
+        3,
+        10
+      ],
+      [
+        3,
+        311,
+        16
+      ],
+      [
+        4,
+        10,
+        316
+      ]
+    ],
+    "ece": 0.06896169444527286,
+    "brier": 0.083560770527354,
+    "mce": 0.16727769374847412
+  },
+  "per_class_f1": {
+    "happy": 0.9694189602446484,
+    "sad": 0.9510703363914373,
+    "neutral": 0.9404761904761905
+  },
+  "gates": {
+    "macro_f1": true,
+    "balanced_accuracy": true,
+    "per_class_f1": true,
+    "ece": true,
+    "brier": true
+  },
+  "overall_pass": true
+}

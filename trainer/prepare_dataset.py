@@ -10,11 +10,12 @@ Handles run-specific frame extraction, manifest generation, and dataset hashing.
 import hashlib
 import json
 import logging
+import os
 import random
 import re
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # OpenCV for video frame extraction and face detection (DNN-based SSD model)

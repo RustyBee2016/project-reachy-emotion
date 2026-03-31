@@ -19,7 +19,7 @@ Reachy_Local_08.4.2 is a **privacy-first, LAN-contained pipeline** for real-time
 - **MLflow** — Experiment tracking and model lineage
 
 ### Primary Objective
-Emotion classification from short synthetic videos (2-class: `happy`, `sad`) using EfficientNet-B0 with human-in-the-loop labeling and dataset curation.
+Emotion classification from short synthetic videos (3-class: `happy`, `sad`, `neutral`) using EfficientNet-B0 with human-in-the-loop labeling and dataset curation.
 
 ### Non-Goals
 - Audio emotion recognition
@@ -218,15 +218,15 @@ When starting work on this project, read these files in order:
 - **Pre-training**: VGGFace2 + AffectNet (emotion-optimized)
 - **Input**: 224×224×3 RGB images
 - **Output**: Emotion class probabilities + optional valence/arousal
-- **Project Classes**: 2 (happy, sad) — fine-tuned for binary classification
+- **Project Classes**: 3 (happy, sad, neutral) — fine-tuned for ternary classification
 - **Expandable to**: 8-class Ekman taxonomy (Phase 2 PPE)
 
-### Training Configuration (`efficientnet_emotion_2cls.yaml`)
+### Training Configuration (`efficientnet_b0_emotion_3cls.yaml`)
 ```yaml
 model:
   arch: "efficientnet_b0"
   input_shape: [224, 224, 3]
-  num_classes: 2
+  num_classes: 3
   pretrained_weights: "hsemotion"  # enet_b0_8_best_vgaf
   freeze_blocks: ["conv_stem", "blocks.0", "blocks.1"]
   dropout_rate: 0.3
