@@ -8,11 +8,8 @@ Current runtime flow promotes clips directly temp -> train/<label> via
 from __future__ import annotations
 
 import logging
-import math
-import random
 import re
 import uuid
-from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,14 +19,13 @@ from typing import Iterable, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.enums import EmotionEnum, SelectionTargetEnum
-from ..fs import FileMover, FileMoverError
+from ..fs import FileMover
 from ..manifest import ManifestBackend, get_default_backend
 from ..metrics import (
-    PROMOTION_FILESYSTEM_FAILURES,
     PROMOTION_OPERATION_COUNTER,
     PROMOTION_OPERATION_DURATION,
 )
-from ..repositories import SamplingMutation, StageMutation, VideoRecord, VideoRepository
+from ..repositories import VideoRepository
 
 
 class PromotionError(RuntimeError):
@@ -130,59 +126,6 @@ class PromoteService:
 
         self._manifest.reset(reason=reason, run_id=run_id)
 
-    async def stage_to_train(
-        self,
-        video_ids: Iterable[str],
-        *,
-        label: str | None,
-        dry_run: bool = False,
-    ) -> StageResult:
-        """Compatibility shim for deprecated /api/v1/promote/stage endpoint.
-
-        Current runtime policy uses direct promotion via `/api/v1/media/promote` with:
-        - dest_split='train'
-        - label in {'happy','sad','neutral'}
-        """
-
-        async with self._track_operation("stage"):
-            # Touch validators for consistent error messaging if payload is malformed.
-            self._parse_video_ids(video_ids)
-            self._normalize_label(label)
-            _ = dry_run
-            raise PromotionValidationError(
-                "Deprecated endpoint: /api/v1/promote/stage is no longer supported. "
-                "Use /api/v1/media/promote with dest_split='train' and a 3-class label."
-            )
-
-    async def sample_split(
-        self,
-        *,
-        run_id: str,
-        target_split: str,
-        sample_fraction: float,
-        strategy: str,
-        seed: int | None = None,
-        dry_run: bool = False,
-    ) -> SampleResult:
-        """Compatibility shim for deprecated /api/v1/promote/sample endpoint.
-
-        Run-scoped frame datasets are now created by training dataset preparation
-        from train/<label> sources (e.g., train/<label>/run_xxxx) and consolidated
-        train/run/run_xxxx and test/run_xxxx outputs.
-        """
-
-        async with self._track_operation("sample"):
-            self._normalize_run_id(run_id)
-            self._normalize_target_split(target_split)
-            self._normalize_fraction(sample_fraction)
-            self._validate_strategy(strategy)
-            _ = seed
-            _ = dry_run
-            raise PromotionValidationError(
-                "Deprecated endpoint: /api/v1/promote/sample is no longer supported. "
-                "Use run-scoped frame dataset preparation for training runs."
-            )
-
     def _parse_video_ids(self, video_ids: Iterable[str]) -> list[str]:
         ids = [self._parse_uuid(raw_id, "video_id") for raw_id in video_ids]
         if not ids:
@@ -241,38 +184,3 @@ class PromoteService:
     def _validate_strategy(strategy: str) -> None:
         if strategy not in {"balanced_random"}:
             raise PromotionValidationError(f"Unsupported sampling strategy '{strategy}'.")
-
-    def _balanced_sample(  # DEAD CODE — retained for reference; unreachable via deprecated sample_split()
-        self,
-        candidates: Sequence[VideoRecord],
-        desired_total: int,
-        seed: int | None,
-    ) -> list[VideoRecord]:
-        if desired_total <= 0:
-            return []
-
-        rng = random.Random(seed)
-        buckets: dict[str | None, list[VideoRecord]] = {}
-        for record in candidates:
-            buckets.setdefault(record.label, []).append(record)
-
-        queues: dict[str | None, deque[VideoRecord]] = {}
-        for label, records in buckets.items():
-            shuffled = list(records)
-            rng.shuffle(shuffled)
-            queues[label] = deque(shuffled)
-
-        label_order = [label for label, queue in queues.items() if queue]
-        rng.shuffle(label_order)
-
-        selected: list[VideoRecord] = []
-        while label_order and len(selected) < desired_total:
-            for label in list(label_order):
-                queue = queues[label]
-                if not queue:
-                    label_order.remove(label)
-                    continue
-                selected.append(queue.popleft())
-                if len(selected) >= desired_total:
-                    break
-        return selected

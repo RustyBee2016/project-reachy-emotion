@@ -13,7 +13,7 @@ from typing import AsyncIterator
 import httpx
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables from the API .env file early so config picks them up.
@@ -38,6 +38,7 @@ from .routers import (
     training_control,
     websocket_cues,
 )
+from .auth import require_api_key
 from .config import load_and_validate_config
 from .services.thumbnail_watcher import ThumbnailWatcherService
 
@@ -108,7 +109,8 @@ def create_app() -> FastAPI:
         title="Reachy Media Mover",
         version="0.08.4.3",
         root_path=config.api_root_path,
-        lifespan=lifespan
+        lifespan=lifespan,
+        dependencies=[Depends(require_api_key)],
     )
 
     # CORS is enabled for the UI/gateway origins if configured.

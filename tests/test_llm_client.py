@@ -210,9 +210,63 @@ class TestEmotionPromptBuilder:
     def test_get_recommended_gestures(self, builder):
         """Test getting recommended gestures for emotion."""
         gestures = builder.get_recommended_gestures("sad")
-        
+
         assert isinstance(gestures, list)
         assert len(gestures) > 0
+
+    # ── PPE behavioral profile injection tests ─────────────────────────
+
+    def test_behavior_note_injected_for_happy(self, builder):
+        """Verify PPE behavior note is present in the system prompt."""
+        prompt = builder.build_system_prompt("happy")
+        assert "PPE Behavioral Guidance" in prompt
+        assert "Response strategy" in prompt
+
+    def test_behavior_note_contains_strategy(self, builder):
+        """Verify behavior note contains the response strategy from Ekman taxonomy."""
+        prompt = builder.build_system_prompt("sad")
+        assert "provide_support" in prompt.lower() or "Response strategy" in prompt
+
+    def test_anger_triggers_de_escalation(self, builder):
+        """Verify anger emotion triggers de-escalation guidance."""
+        prompt = builder.build_system_prompt("anger")
+        assert "DE-ESCALATION ACTIVE" in prompt
+
+    def test_sad_triggers_validate_first(self, builder):
+        """Verify sad emotion triggers validate-first guidance."""
+        prompt = builder.build_system_prompt("sad")
+        assert "VALIDATE FIRST" in prompt
+
+    def test_happy_no_de_escalation(self, builder):
+        """Verify happy emotion does NOT trigger de-escalation."""
+        prompt = builder.build_system_prompt("happy")
+        assert "DE-ESCALATION ACTIVE" not in prompt
+
+    def test_behavior_note_includes_gesture_expressiveness(self, builder):
+        """Verify behavior note includes gesture expressiveness hint."""
+        prompt = builder.build_system_prompt("happy")
+        assert "Gesture expressiveness ceiling" in prompt
+
+    def test_behavior_note_includes_intensity(self, builder):
+        """Verify behavior note includes intensity label."""
+        prompt = builder.build_system_prompt("sad")
+        assert "Intensity level" in prompt
+
+    def test_all_ekman_emotions_produce_behavior_note(self, builder):
+        """Verify all 8 Ekman emotions produce a PPE behavior note."""
+        emotions = ["happy", "sad", "neutral", "anger", "fear",
+                     "disgust", "contempt", "surprise"]
+        for emotion in emotions:
+            prompt = builder.build_system_prompt(emotion)
+            assert "PPE Behavioral Guidance" in prompt, (
+                f"No PPE guidance injected for emotion '{emotion}'"
+            )
+
+    def test_unknown_emotion_falls_back_to_neutral_profile(self, builder):
+        """Verify unknown emotion falls back to neutral PPE profile."""
+        prompt = builder.build_system_prompt("bewildered")
+        # Should still have guidance (neutral fallback), not crash
+        assert "PPE Behavioral Guidance" in prompt
 
 
 class TestEmotionSystemPrompts:

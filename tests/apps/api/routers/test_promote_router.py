@@ -7,23 +7,6 @@ from httpx import ASGITransport, AsyncClient
 from apps.api.app import deps
 from apps.api.app.main import create_app
 from apps.api.app.routers import promote as promote_router
-from apps.api.app.services import PromotionValidationError, SampleResult, StageResult
-
-
-class StubServiceBase:
-    def __init__(self) -> None:
-        self.correlation_id = None
-        self.committed = False
-        self.rolled_back = False
-
-    def set_correlation_id(self, correlation_id: str) -> None:
-        self.correlation_id = correlation_id
-
-    async def commit(self) -> None:
-        self.committed = True
-
-    async def rollback(self) -> None:
-        self.rolled_back = True
 
 
 @pytest_asyncio.fixture
@@ -36,120 +19,31 @@ async def api_client():
     app.dependency_overrides.clear()
 
 
+# ── /api/v1/promote/stage — removed, returns 410 ──────────────────────────
+
+
 @pytest.mark.asyncio
-async def test_legacy_stage_endpoint_deprecated_videos_success(api_client):
+async def test_stage_endpoint_returns_410_gone(api_client):
     client, app = api_client
-
-    class StubService(StubServiceBase):
-        async def stage_to_train(self, video_ids, *, label, dry_run=False):
-            return StageResult(
-                promoted_ids=tuple(video_ids),
-                skipped_ids=tuple(),
-                failed_ids=tuple(),
-                dry_run=dry_run,
-            )
-
-        async def sample_split(self, **kwargs):  # pragma: no cover - not used here
-            raise AssertionError("sample_split should not be called")
-
-    stub = StubService()
-    app.dependency_overrides[deps.get_promote_service] = lambda: stub
 
     payload = {
         "video_ids": ["550e8400-e29b-41d4-a716-446655440000"],
         "label": "happy",
     }
     response = await client.post("/api/v1/promote/stage", json=payload)
-    assert response.status_code == 202
+    assert response.status_code == 410
     body = response.json()
-    assert body["status"] == "accepted"
-    assert body["promoted_ids"] == payload["video_ids"]
+    assert "removed" in body["detail"]["error"].lower()
+    assert "/api/v1/media/promote" in body["detail"]["error"]
     assert promote_router.CORRELATION_ID_HEADER in response.headers
-    assert stub.committed
-    assert not stub.rolled_back
+
+
+# ── /api/v1/promote/sample — removed, returns 410 ─────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_legacy_stage_endpoint_deprecated_videos_service_validation_error(api_client):
+async def test_sample_endpoint_returns_410_gone(api_client):
     client, app = api_client
-
-    class StubService(StubServiceBase):
-        async def stage_to_train(self, video_ids, *, label, dry_run=False):
-            raise PromotionValidationError("invalid label")
-
-        async def sample_split(self, **kwargs):  # pragma: no cover - not used here
-            raise AssertionError("sample_split should not be called")
-
-    stub = StubService()
-    app.dependency_overrides[deps.get_promote_service] = lambda: stub
-
-    payload = {
-        "video_ids": ["550e8400-e29b-41d4-a716-446655440000"],
-        "label": "happy",
-    }
-    response = await client.post("/api/v1/promote/stage", json=payload)
-    assert response.status_code == 422
-    body = response.json()
-    assert body["detail"]["error"] == "invalid label"
-    assert body["detail"]["correlation_id"]
-    assert response.headers[promote_router.CORRELATION_ID_HEADER] == body["detail"]["correlation_id"]
-    assert stub.rolled_back
-    assert not stub.committed
-
-
-@pytest.mark.asyncio
-async def test_legacy_stage_endpoint_deprecated_videos_request_validation(api_client):
-    client, app = api_client
-
-    class StubService(StubServiceBase):
-        def __init__(self) -> None:
-            super().__init__()
-            self.called = False
-
-        async def stage_to_train(self, video_ids, *, label, dry_run=False):
-            self.called = True
-            return StageResult(
-                promoted_ids=tuple(video_ids),
-                skipped_ids=tuple(),
-                failed_ids=tuple(),
-                dry_run=dry_run,
-            )
-
-        async def sample_split(self, **kwargs):  # pragma: no cover - not used here
-            raise AssertionError("sample_split should not be called")
-
-    stub = StubService()
-    app.dependency_overrides[deps.get_promote_service] = lambda: stub
-
-    payload = {"video_ids": [], "label": "happy"}
-    response = await client.post("/api/v1/promote/stage", json=payload)
-    assert response.status_code == 422
-    assert stub.called is False
-    assert promote_router.CORRELATION_ID_HEADER not in response.headers
-    assert not stub.committed
-    assert not stub.rolled_back
-
-
-@pytest.mark.asyncio
-async def test_sample_split_success(api_client):
-    client, app = api_client
-
-    class StubService(StubServiceBase):
-        async def stage_to_train(self, *args, **kwargs):  # pragma: no cover - not used here
-            raise AssertionError("stage_to_train should not be called")
-
-        async def sample_split(self, **kwargs):
-            return SampleResult(
-                run_id=kwargs["run_id"],
-                target_split=kwargs["target_split"],
-                copied_ids=(kwargs["run_id"],),
-                skipped_ids=tuple(),
-                failed_ids=tuple(),
-                dry_run=kwargs.get("dry_run", False),
-            )
-
-    stub = StubService()
-    app.dependency_overrides[deps.get_promote_service] = lambda: stub
 
     payload = {
         "run_id": "run_0001",
@@ -158,81 +52,40 @@ async def test_sample_split_success(api_client):
         "strategy": "balanced_random",
     }
     response = await client.post("/api/v1/promote/sample", json=payload)
-    assert response.status_code == 202
+    assert response.status_code == 410
     body = response.json()
-    assert body["status"] == "accepted"
-    assert body["run_id"] == payload["run_id"]
+    assert "removed" in body["detail"]["error"].lower()
     assert promote_router.CORRELATION_ID_HEADER in response.headers
-    assert stub.committed
-    assert not stub.rolled_back
+
+
+# ── /api/v1/promote/reset-manifest — still functional ─────────────────────
 
 
 @pytest.mark.asyncio
-async def test_sample_split_service_validation_error(api_client):
+async def test_reset_manifest_still_works(api_client):
+    """Ensure the non-deprecated endpoint wasn't affected."""
     client, app = api_client
 
-    class StubService(StubServiceBase):
-        async def stage_to_train(self, *args, **kwargs):  # pragma: no cover - not used here
-            raise AssertionError("stage_to_train should not be called")
-
-        async def sample_split(self, **kwargs):
-            raise PromotionValidationError("bad request")
-
-    stub = StubService()
-    app.dependency_overrides[deps.get_promote_service] = lambda: stub
-
-    # Provide sample_fraction as string to exercise schema coercion
-    payload = {
-        "run_id": "run_0001",
-        "target_split": "train",
-        "sample_fraction": "0.50",
-        "strategy": "balanced_random",
-    }
-    response = await client.post("/api/v1/promote/sample", json=payload)
-    assert response.status_code == 422
-    body = response.json()
-    assert body["detail"]["error"] == "bad request"
-    assert body["detail"]["correlation_id"]
-    assert response.headers[promote_router.CORRELATION_ID_HEADER] == body["detail"]["correlation_id"]
-    assert stub.rolled_back
-    assert not stub.committed
-
-
-@pytest.mark.asyncio
-async def test_sample_split_request_validation(api_client):
-    client, app = api_client
-
-    class StubService(StubServiceBase):
+    class StubService:
         def __init__(self) -> None:
-            super().__init__()
-            self.called = False
+            self.correlation_id = None
+            self.committed = False
+            self.reset_called = False
 
-        async def stage_to_train(self, *args, **kwargs):  # pragma: no cover - not used here
-            raise AssertionError("stage_to_train should not be called")
+        def set_correlation_id(self, correlation_id: str) -> None:
+            self.correlation_id = correlation_id
 
-        async def sample_split(self, **kwargs):
-            self.called = True
-            return SampleResult(
-                run_id=kwargs["run_id"],
-                target_split=kwargs["target_split"],
-                copied_ids=(kwargs["run_id"],),
-                skipped_ids=tuple(),
-                failed_ids=tuple(),
-                dry_run=kwargs.get("dry_run", False),
-            )
+        async def commit(self) -> None:
+            self.committed = True
+
+        def reset_manifest(self, *, reason: str, run_id: str | None = None) -> None:
+            self.reset_called = True
 
     stub = StubService()
     app.dependency_overrides[deps.get_promote_service] = lambda: stub
 
-    payload = {
-        "run_id": "run_0001",
-        "target_split": "train",
-        "sample_fraction": 0.0,
-        "strategy": "balanced_random",
-    }
-    response = await client.post("/api/v1/promote/sample", json=payload)
-    assert response.status_code == 422
-    assert stub.called is False
-    assert promote_router.CORRELATION_ID_HEADER not in response.headers
-    assert not stub.committed
-    assert not stub.rolled_back
+    payload = {"reason": "test reset"}
+    response = await client.post("/api/v1/promote/reset-manifest", json=payload)
+    assert response.status_code == 202
+    assert stub.committed
+    assert stub.reset_called
