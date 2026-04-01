@@ -65,7 +65,7 @@ Jetson deployment: TensorRT conversion, DeepStream pipeline, real-time inference
 │   Ubuntu 1          │    │   Ubuntu 2          │    │   Jetson Xavier NX  │
 │   10.0.4.130        │    │   10.0.4.140        │    │   10.0.4.150        │
 │                     │    │                     │    │                     │
-│ • Media Mover :8081 │◄───│ • FastAPI :8000     │◄───│ • DeepStream        │
+│ • Media Mover :8083 │◄───│ • FastAPI :8000     │◄───│ • DeepStream        │
 │ • PostgreSQL :5432  │    │ • Streamlit :8501   │    │ • TensorRT Engine   │
 │ • LM Studio :1234   │    │ • Nginx :443        │    │ • WebSocket Client  │
 │ • MLflow :5000      │    │                     │    │                     │
@@ -339,7 +339,7 @@ sudo journalctl -u reachy-emotion -f
 | GET | `/metrics` | Prometheus metrics |
 | WS | `/ws/cues/{device_id}` | Real-time cues to Jetson |
 
-### Media Mover (Ubuntu 1 — Port 8081)
+### Media Mover (Ubuntu 1 — Port 8083)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/media/promote` | Atomic file move |
@@ -453,7 +453,7 @@ DB_NAME=reachy_emotion
 DB_USER=reachy_dev
 
 # Services
-MEDIA_MOVER_BASE_URL=http://10.0.4.130:8081/api
+MEDIA_MOVER_BASE_URL=http://10.0.4.130:8083/api
 GATEWAY_BASE_URL=http://10.0.4.140:8000
 MLFLOW_URL=http://10.0.4.130:5000
 
