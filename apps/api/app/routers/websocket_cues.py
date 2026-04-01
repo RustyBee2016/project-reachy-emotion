@@ -229,6 +229,27 @@ async def websocket_cues_endpoint(websocket: WebSocket, device_id: str):
                         extra={"correlation_id": correlation_id}
                     )
                 
+                elif msg_type == "cue_result":
+                    # Gesture/TTS execution feedback from Jetson
+                    correlation_id = data.get("correlation_id")
+                    success = data.get("success", False)
+                    duration_ms = data.get("duration_ms", 0.0)
+                    error_msg = data.get("error")
+                    if success:
+                        logger.info(
+                            "Cue executed on %s: correlation=%s duration=%.1fms",
+                            device_id,
+                            correlation_id,
+                            duration_ms,
+                        )
+                    else:
+                        logger.warning(
+                            "Cue failed on %s: correlation=%s error=%s",
+                            device_id,
+                            correlation_id,
+                            error_msg,
+                        )
+
                 elif msg_type == "error":
                     # Log client-side error
                     error_msg = data.get("message", "Unknown error")
@@ -236,7 +257,7 @@ async def websocket_cues_endpoint(websocket: WebSocket, device_id: str):
                         f"Client error from {device_id}: {error_msg}",
                         extra={"device_id": device_id, "error": error_msg}
                     )
-                
+
                 else:
                     logger.warning(
                         f"Unknown message type from {device_id}: {msg_type}"

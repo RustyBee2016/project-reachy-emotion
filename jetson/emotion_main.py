@@ -21,6 +21,11 @@ from typing import Optional
 from emotion_client import EmotionClient
 from monitoring.system_monitor import JetsonMonitor
 
+try:
+    from health_server import HealthServer
+except ImportError:
+    HealthServer = None  # aiohttp not installed
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -46,6 +51,7 @@ class EmotionDetectionService:
 
         self.ws_client: Optional[EmotionClient] = None
         self.monitor: Optional[JetsonMonitor] = None
+        self._health_server = None
         self.running = False
 
         # DeepStream pipeline (only used in deepstream mode).
@@ -73,6 +79,16 @@ class EmotionDetectionService:
         await self.ws_client.connect()
         logger.info("Connected to gateway")
 
+        # Start health endpoint for deployment agent checks.
+        if HealthServer is not None:
+            self._health_server = HealthServer(
+                monitor=self.monitor,
+                ws_client=self.ws_client,
+                deepstream_running_fn=lambda: self._ds_thread is not None
+                and self._ds_thread.is_alive(),
+            )
+            await self._health_server.start()
+
         self.running = True
         asyncio.create_task(self._monitoring_loop())
 
@@ -91,6 +107,9 @@ class EmotionDetectionService:
             self._ds_pipeline.stop()
         if self._ds_thread and self._ds_thread.is_alive():
             self._ds_thread.join(timeout=5)
+
+        if self._health_server:
+            await self._health_server.stop()
 
         if self.ws_client:
             await self.ws_client.disconnect()

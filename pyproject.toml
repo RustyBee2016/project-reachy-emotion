@@ -57,6 +57,13 @@ dev = [
   "httpx>=0.27",
   "pyright>=1.1.377",
 ]
+# Phase 3 edge deployment (Ubuntu gateway side)
+edge = [
+  "python-socketio[asyncio_server]>=5.11",
+  "aiohttp>=3.9",
+  "scikit-learn>=1.4",
+  "tenacity>=8.2",
+]
 
 [tool.hatch.build.targets.wheel]
 # Use src-layout for current code until we migrate to apps/* and shared/*

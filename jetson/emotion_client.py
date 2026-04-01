@@ -333,6 +333,42 @@ class EmotionClient:
             self._cue_processor_task = None
             logger.info("Cue processor task stopped")
     
+    async def send_cue_result(
+        self,
+        correlation_id: str,
+        success: bool,
+        duration_ms: float,
+        error: Optional[str] = None,
+    ) -> None:
+        """Report gesture/TTS execution result back to gateway.
+
+        Args:
+            correlation_id: Correlation ID from the original cue.
+            success: Whether the cue was executed successfully.
+            duration_ms: Execution duration in milliseconds.
+            error: Error message if execution failed.
+        """
+        if not self.connected:
+            logger.warning("Not connected, cannot send cue result")
+            return
+
+        payload = {
+            "device_id": self.device_id,
+            "correlation_id": correlation_id,
+            "success": success,
+            "duration_ms": round(duration_ms, 2),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        if error:
+            payload["error"] = error
+
+        try:
+            await self.sio.emit("cue_result", payload)
+            logger.debug("Cue result sent: %s success=%s", correlation_id, success)
+        except Exception as e:
+            logger.error("Failed to send cue result: %s", e)
+            self.errors_count += 1
+
     def get_metrics(self) -> Dict[str, Any]:
         """
         Get client metrics.

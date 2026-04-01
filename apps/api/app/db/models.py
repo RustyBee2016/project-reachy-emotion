@@ -389,6 +389,46 @@ class ObsSample(Base):
     )
 
 
+class EmotionEvent(Base):
+    """Real-time emotion events from Jetson edge devices (Phase 3)."""
+    __tablename__ = "emotion_event"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    device_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    emotion: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    inference_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    device_ts: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    meta: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=_utcnow,
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "emotion IN ('happy', 'sad', 'neutral')",
+            name="chk_emotion_event_label",
+        ),
+        CheckConstraint(
+            "confidence >= 0.0 AND confidence <= 1.0",
+            name="chk_emotion_event_confidence",
+        ),
+        Index("ix_emotion_event_device_ts", "device_id", "created_at"),
+        Index("ix_emotion_event_session", "session_id"),
+        Index("ix_emotion_event_emotion", "emotion"),
+    )
+
+
 class ReconcileReport(Base):
     """Filesystem/database reconciliation reports (Reconciler Agent - Agent 4)."""
     __tablename__ = "reconcile_report"

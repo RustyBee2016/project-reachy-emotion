@@ -27,6 +27,8 @@ from ..routers import media
 # Current v1 routers and internal service routers.
 from .routers import (
     dialogue,
+    emotion_events,
+    gate_c,
     gateway_upstream,
     health,
     ingest,
@@ -134,6 +136,8 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(training_control.router)
     app.include_router(observability.router)
+    app.include_router(emotion_events.router)
+    app.include_router(gate_c.router)
     
     # Register legacy routers for backward compatibility if enabled.
     if config.enable_legacy_endpoints:

@@ -103,6 +103,91 @@ def export_to_onnx(
     return str(output_path)
 
 
+def _build_int8_calibrator(
+    calibration_dir: str,
+    input_shape: tuple,
+    trt_logger,
+    max_images: int = 500,
+):
+    """Build an IInt8EntropyCalibrator2 from a directory of JPEG images.
+
+    The directory should contain representative images (any class) that
+    are pre-processed to 224x224 and normalised the same way the model
+    expects.  Returns *None* if TensorRT or image loading fails.
+    """
+    try:
+        import tensorrt as trt
+        import numpy as np
+        from pathlib import Path
+    except ImportError:
+        return None
+
+    cal_dir = Path(calibration_dir)
+    image_files = sorted(
+        [p for p in cal_dir.rglob("*") if p.suffix.lower() in (".jpg", ".jpeg", ".png")]
+    )[:max_images]
+
+    if not image_files:
+        logger.warning("No images found in calibration directory: %s", cal_dir)
+        return None
+
+    # Pre-load all images as a float32 numpy array.
+    try:
+        import cv2
+    except ImportError:
+        logger.warning("cv2 not available — cannot build INT8 calibrator")
+        return None
+
+    _, c, h, w = 1, input_shape[1], input_shape[2], input_shape[3]
+    batch = np.empty((len(image_files), c, h, w), dtype=np.float32)
+
+    for idx, fp in enumerate(image_files):
+        img = cv2.imread(str(fp))
+        if img is None:
+            continue
+        img = cv2.resize(img, (w, h))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = img.astype(np.float32) / 255.0
+        batch[idx] = np.transpose(img, (2, 0, 1))  # HWC → CHW
+
+    cache_path = str(cal_dir / "calibration_cache.bin")
+
+    class _Calibrator(trt.IInt8EntropyCalibrator2):
+        def __init__(self):
+            super().__init__()
+            self._idx = 0
+            import cuda  # type: ignore[import-untyped]
+
+            self._device_input = cuda.mem_alloc(batch[0].nbytes)
+
+        def get_batch_size(self):
+            return 1
+
+        def get_batch(self, names, p_str=None):
+            if self._idx >= len(batch):
+                return None
+            import cuda  # type: ignore[import-untyped]
+
+            cuda.memcpy_htod(self._device_input, np.ascontiguousarray(batch[self._idx]))
+            self._idx += 1
+            return [int(self._device_input)]
+
+        def read_calibration_cache(self):
+            cp = Path(cache_path)
+            if cp.exists():
+                return cp.read_bytes()
+            return None
+
+        def write_calibration_cache(self, cache):
+            Path(cache_path).write_bytes(cache)
+
+    try:
+        return _Calibrator()
+    except Exception as exc:
+        logger.warning("Failed to create INT8 calibrator: %s", exc)
+        return None
+
+
 def convert_to_tensorrt(
     onnx_path: str,
     engine_path: str,
@@ -177,14 +262,21 @@ def convert_to_tensorrt(
     elif precision == "int8":
         if builder.platform_has_fast_int8:
             config.set_flag(trt.BuilderFlag.INT8)
-            
+            # Also enable FP16 as a fallback for layers that don't quantize well.
+            if builder.platform_has_fast_fp16:
+                config.set_flag(trt.BuilderFlag.FP16)
+
             if calibration_data:
-                # Would need to implement calibrator
-                logger.warning("INT8 calibration not implemented, using FP16 fallback")
-                config.set_flag(trt.BuilderFlag.FP16)
+                calibrator = _build_int8_calibrator(
+                    calibration_data, input_shape, trt_logger
+                )
+                if calibrator is not None:
+                    config.int8_calibrator = calibrator
+                    logger.info("INT8 calibrator attached (%s)", calibration_data)
+                else:
+                    logger.warning("Calibrator build failed, falling back to FP16")
             else:
-                logger.warning("No calibration data for INT8, using FP16 fallback")
-                config.set_flag(trt.BuilderFlag.FP16)
+                logger.warning("No calibration data for INT8, falling back to FP16")
         else:
             logger.warning("INT8 not supported on this platform, using FP32")
     

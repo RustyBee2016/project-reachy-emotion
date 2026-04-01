@@ -46,7 +46,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,edge]"
       - name: Create test directories
         run: |
           mkdir -p /tmp/reachy_videos/{temp,train,test,thumbs,manifests,purged}

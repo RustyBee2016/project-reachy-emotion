@@ -5,6 +5,11 @@ from .dialogue import (
     DialogueRequest,
     DialogueResponse,
 )
+from .emotion_event import (
+    EmotionEventCreate,
+    EmotionEventData,
+    EmotionEventStatsData,
+)
 from .promote import (
     ResetManifestRequest,
     ResetManifestResponse,
@@ -37,6 +42,10 @@ __all__ = [
     "DialogueRequest",
     "DialogueResponse",
     "DialogueData",
+    # Emotion event schemas
+    "EmotionEventCreate",
+    "EmotionEventData",
+    "EmotionEventStatsData",
     # Promote schemas
     "StageRequest",
     "StageResponse",
