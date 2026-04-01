@@ -36,16 +36,17 @@ This workflow creates three dataset types:
 │       ├── train_ds_<run_id>/          # 90% training split
 │       └── valid_ds_<run_id>/          # 10% validation split (for early stopping)
 │
-├── validation/<run_id>/                # ← Run-scoped validation (variant comparison)
-│   └── affectnet_*.jpg                 # Unlabeled filenames
+├── validation/
+│   ├── run/<run_id>/                   # ← Run-scoped validation (variant comparison)
+│   │   └── affectnet_*.jpg             # Unlabeled filenames (COPIED, not moved)
+│   └── archive/                        # ← Archived validation sets
+│       └── <run_id>_<timestamp>/
 │
-├── validation/archive/                 # ← Archived validation sets
-│   └── <run_id>_<timestamp>/
-│
-├── test/<run_id>/                      # Test datasets (Gate A evaluation)
-│   └── affectnet_*.jpg                 # Unlabeled filenames
-│
-└── test/archive/                       # Archived test sets
+├── test/
+│   └── affectnet_test_dataset/
+│       ├── run<run_id>/                # Test datasets (Gate A evaluation)
+│       │   └── affectnet_*.jpg         # Unlabeled filenames (COPIED, not moved)
+│       └── archive/                    # Archived test sets
 
 /videos/manifests/
 ├── <run_id>_validation_labels.jsonl    # Ground truth for validation
@@ -67,7 +68,8 @@ This workflow creates three dataset types:
 4. **Prevents overfitting**: Using synthetic videos for validation could leak training distribution patterns
 
 **Implementation:**
-- Create one validation dataset per run: `/videos/validation/<run_id>/`
+- Create one validation dataset per run: `/videos/validation/run/<run_id>/`
+- AffectNet images are **COPIED** (not moved) from source directory
 - All variant models for that run use the same validation dataset
 - After run completion, archive to `/videos/validation/archive/`
 
@@ -94,38 +96,75 @@ This workflow creates three dataset types:
 
 **Purpose:** Move manual videos from `rename_prefix/` to `train/<label>/` with proper naming.
 
-**Script:** `./scripts/ingest_manual_videos.sh`
+**Script:** `./scripts/rename_and_move_manual_videos.sh`
+
+**Source Directories:**
+- `/media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/happy_rename/`
+- `/media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/sad_rename/`
+- `/media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/neutral_rename/`
+
+**Destination Directories:**
+- `/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/`
+- `/media/rusty_admin/project_data/reachy_emotion/videos/train/sad/`
+- `/media/rusty_admin/project_data/reachy_emotion/videos/train/neutral/`
 
 **What it does:**
+- Extracts emotion label from directory name (e.g., `happy_rename` → `happy`)
 - Renames videos to format: `<emotion>_luma_YYYYMMDD_HHMMSS.mp4`
-- Moves from `rename_prefix/<emotion>_rename/` to `train/<emotion>/`
-- Registers videos in database with metadata (sha256, duration, fps, resolution)
+- **Moves** (not copies) videos from `rename_prefix/<emotion>_rename/` to `train/<emotion>/`
+- Processes all three emotion classes automatically
 
 **Command:**
 ```bash
 cd /home/rusty_admin/projects/reachy_08.4.2
-./scripts/ingest_manual_videos.sh
+./scripts/rename_and_move_manual_videos.sh
 ```
 
 **Expected output:**
 ```
-Processing happy videos...
-  Renamed: happy_luma_20260401_120000.mp4
-  Renamed: happy_luma_20260401_120015.mp4
+============================================
+Manual Video Rename and Move
+============================================
+Processing videos from rename_prefix directories
+============================================
+
+Processing: happy (from happy_rename)
+----------------------------------------
+  Found 50 video files
+
+  ✓ Moved: video001.mp4 → happy_luma_20260401_120000.mp4
+  ✓ Moved: video002.mp4 → happy_luma_20260401_120001.mp4
   ...
-Processing sad videos...
+
+  Summary for happy:
+    Moved: 50
+    Skipped: 0
+    Destination: /media/.../videos/train/happy
+
+Processing: sad (from sad_rename)
+----------------------------------------
   ...
-Processing neutral videos...
+
+Processing: neutral (from neutral_rename)
+----------------------------------------
   ...
-Database registration complete: 150 videos registered
+
+============================================
+✓ All manual videos processed
+============================================
 ```
 
 **Verify:**
 ```bash
 # Count videos per class
-find /media/rusty_admin/project_data/reachy_emotion/videos/train/happy -name "*.mp4" | wc -l
-find /media/rusty_admin/project_data/reachy_emotion/videos/train/sad -name "*.mp4" | wc -l
-find /media/rusty_admin/project_data/reachy_emotion/videos/train/neutral -name "*.mp4" | wc -l
+find /media/rusty_admin/project_data/reachy_emotion/videos/train/happy -name "*_luma_*.mp4" | wc -l
+find /media/rusty_admin/project_data/reachy_emotion/videos/train/sad -name "*_luma_*.mp4" | wc -l
+find /media/rusty_admin/project_data/reachy_emotion/videos/train/neutral -name "*_luma_*.mp4" | wc -l
+
+# Verify rename_prefix directories are empty
+ls /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/happy_rename/
+ls /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/sad_rename/
+ls /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/neutral_rename/
 ```
 
 ---
@@ -266,8 +305,9 @@ cd /home/rusty_admin/projects/reachy_08.4.2
 
 **What it does:**
 1. Samples 500 images per class from AffectNet validation_set
-2. Copies to `/videos/validation/run_0001/` with **unlabeled filenames**
-3. Stores ground truth in `/videos/manifests/run_0001_validation_labels.jsonl`
+2. **COPIES** (not moves) images to `/videos/validation/run/run_0001/` with **unlabeled filenames**
+3. Source AffectNet images remain in original location
+4. Stores ground truth in `/videos/manifests/run_0001_validation_labels.jsonl`
 
 **Expected output:**
 ```
@@ -282,7 +322,7 @@ Balanced sampling complete:
   happy: 500 samples
   sad: 500 samples
   neutral: 500 samples
-Copying 1500 images to validation/run_0001/...
+Copying 1500 images to validation/run/run_0001/...
 Copied 1500 validation images
 Wrote manifest: /media/.../manifests/run_0001_validation_ingestion.jsonl
 Wrote manifest: /media/.../manifests/run_0001_validation_labels.jsonl
@@ -291,12 +331,15 @@ Wrote manifest: /media/.../manifests/run_0001_validation_labels.jsonl
 **Verify:**
 ```bash
 # Check validation dataset
-ls /media/rusty_admin/project_data/reachy_emotion/videos/validation/run_0001/ | head -10
+ls /media/rusty_admin/project_data/reachy_emotion/videos/validation/run/run_0001/ | head -10
 # Should show: affectnet_00000.jpg, affectnet_00001.jpg, ... (unlabeled)
 
 # Count samples
-find /media/rusty_admin/project_data/reachy_emotion/videos/validation/run_0001 -name "*.jpg" | wc -l
+find /media/rusty_admin/project_data/reachy_emotion/videos/validation/run/run_0001 -name "*.jpg" | wc -l
 # Should output: 1500
+
+# Confirm source images still exist (COPIED, not moved)
+ls /media/rusty_admin/project_data/reachy_emotion/affectnet/consolidated/AffectNet+/human_annotated/validation_set/images/ | head -5
 
 # Check ground truth manifest
 head -3 /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_validation_labels.jsonl
@@ -320,7 +363,7 @@ cd /home/rusty_admin/projects/reachy_08.4.2
 ```
 
 **Parameters:**
-- `--run-id run_0001`: Run identifier
+- `--run-id run_0001`: Run identifier (note: path will be `run<run_id>` = `runrun_0001`)
 - `--samples-per-class 250`: 250 images per class (750 total)
 - `--min-confidence 0.5`: Lower threshold (more challenging)
 - `--max-subset 2`: Include all difficulty levels
@@ -329,8 +372,9 @@ cd /home/rusty_admin/projects/reachy_08.4.2
 
 **What it does:**
 1. Samples 250 images per class from AffectNet validation_set
-2. Copies to `/videos/test/run_0001/` with **unlabeled filenames**
-3. Stores ground truth in `/videos/manifests/run_0001_test_labels.jsonl`
+2. **COPIES** (not moves) images to `/videos/test/affectnet_test_dataset/runrun_0001/` with **unlabeled filenames**
+3. Source AffectNet images remain in original location
+4. Stores ground truth in `/videos/manifests/run_0001_test_labels.jsonl`
 
 **Expected output:**
 ```
@@ -346,7 +390,7 @@ Balanced sampling complete:
   happy: 250 samples
   sad: 250 samples
   neutral: 250 samples
-Copying 750 images to test/run_0001/...
+Copying 750 images to test/affectnet_test_dataset/runrun_0001/...
 Copied 750 test images
 Wrote manifest: /media/.../manifests/run_0001_test_ingestion.jsonl
 Wrote manifest: /media/.../manifests/run_0001_test_labels.jsonl
@@ -355,12 +399,15 @@ Wrote manifest: /media/.../manifests/run_0001_test_labels.jsonl
 **Verify:**
 ```bash
 # Check test dataset
-ls /media/rusty_admin/project_data/reachy_emotion/videos/test/run_0001/ | head -10
+ls /media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset/runrun_0001/ | head -10
 # Should show: affectnet_00000.jpg, affectnet_00001.jpg, ... (unlabeled)
 
 # Count samples
-find /media/rusty_admin/project_data/reachy_emotion/videos/test/run_0001 -name "*.jpg" | wc -l
+find /media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset/runrun_0001 -name "*.jpg" | wc -l
 # Should output: 750
+
+# Confirm source images still exist (COPIED, not moved)
+ls /media/rusty_admin/project_data/reachy_emotion/affectnet/consolidated/AffectNet+/human_annotated/validation_set/images/ | head -5
 
 # Check ground truth manifest
 head -3 /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_test_labels.jsonl
@@ -381,7 +428,7 @@ tree -L 3 /media/rusty_admin/project_data/reachy_emotion/videos/
 ├── train/
 │   ├── happy/
 │   │   ├── happy_luma_*.mp4 (manual videos)
-│   │   └── affectnet_*.jpg (10K images)
+│   │   └── affectnet_*.jpg (10K images - COPIED from AffectNet)
 │   ├── sad/
 │   ├── neutral/
 │   └── run/
@@ -389,9 +436,13 @@ tree -L 3 /media/rusty_admin/project_data/reachy_emotion/videos/
 │           ├── train_ds_run_0001/ (28,350 images)
 │           └── valid_ds_run_0001/ (3,150 images)
 ├── validation/
-│   └── run_0001/ (1,500 unlabeled images)
+│   ├── run/
+│   │   └── run_0001/ (1,500 unlabeled images - COPIED from AffectNet)
+│   └── archive/
 ├── test/
-│   └── run_0001/ (750 unlabeled images)
+│   └── affectnet_test_dataset/
+│       ├── runrun_0001/ (750 unlabeled images - COPIED from AffectNet)
+│       └── archive/
 └── manifests/
     ├── affectnet_train_ingestion_*.jsonl
     ├── run_0001_train.jsonl
@@ -431,7 +482,7 @@ data:
     --run-id run_0001_variant1 \
     --mode validate \
     --checkpoint /path/to/variant1_checkpoint.pth \
-    --validation-dir /media/rusty_admin/project_data/reachy_emotion/videos/validation/run_0001 \
+    --validation-dir /media/rusty_admin/project_data/reachy_emotion/videos/validation/run/run_0001 \
     --ground-truth-manifest /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_validation_labels.jsonl
 
 # Variant 2
@@ -439,7 +490,7 @@ data:
     --run-id run_0001_variant2 \
     --mode validate \
     --checkpoint /path/to/variant2_checkpoint.pth \
-    --validation-dir /media/rusty_admin/project_data/reachy_emotion/videos/validation/run_0001 \
+    --validation-dir /media/rusty_admin/project_data/reachy_emotion/videos/validation/run/run_0001 \
     --ground-truth-manifest /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_validation_labels.jsonl
 ```
 
@@ -455,7 +506,9 @@ data:
 
 ---
 
-## Archiving Validation Datasets
+## Archiving Datasets
+
+### Archive Validation Dataset
 
 **When:** After all variant models have been evaluated and run is complete.
 
@@ -464,10 +517,11 @@ data:
 # Archive validation dataset
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p /media/rusty_admin/project_data/reachy_emotion/videos/validation/archive
-mv /media/rusty_admin/project_data/reachy_emotion/videos/validation/run_0001 \
+mv /media/rusty_admin/project_data/reachy_emotion/videos/validation/run/run_0001 \
    /media/rusty_admin/project_data/reachy_emotion/videos/validation/archive/run_0001_${TIMESTAMP}
 
 # Archive ground truth manifest
+mkdir -p /media/rusty_admin/project_data/reachy_emotion/videos/manifests/archive
 mv /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_validation_labels.jsonl \
    /media/rusty_admin/project_data/reachy_emotion/videos/manifests/archive/run_0001_validation_labels_${TIMESTAMP}.jsonl
 ```
@@ -477,27 +531,51 @@ mv /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_vali
 ls -lh /media/rusty_admin/project_data/reachy_emotion/videos/validation/archive/
 ```
 
+### Archive Test Dataset
+
+**When:** After Gate A evaluation is complete and results are recorded.
+
+**Command:**
+```bash
+# Archive test dataset
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+mkdir -p /media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset/archive
+mv /media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset/runrun_0001 \
+   /media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset/archive/runrun_0001_${TIMESTAMP}
+
+# Archive ground truth manifest
+mkdir -p /media/rusty_admin/project_data/reachy_emotion/videos/manifests/archive
+mv /media/rusty_admin/project_data/reachy_emotion/videos/manifests/run_0001_test_labels.jsonl \
+   /media/rusty_admin/project_data/reachy_emotion/videos/manifests/archive/run_0001_test_labels_${TIMESTAMP}.jsonl
+```
+
+**Verify:**
+```bash
+ls -lh /media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset/archive/
+```
+
 ---
 
 ## Summary
 
 ### Dataset Counts (run_0001)
 
-| Dataset | Source | Samples | Storage | Labels |
-|---------|--------|---------|---------|--------|
-| Training | Manual videos (50/class) + AffectNet train (10K/class) | 28,350 | `train/run/run_0001/train_ds_run_0001/` | In filenames |
-| Training Validation | 10% holdout from training | 3,150 | `train/run/run_0001/valid_ds_run_0001/` | In filenames |
-| Validation (variant comparison) | AffectNet validation_set | 1,500 | `validation/run_0001/` | Separate manifest |
-| Test (Gate A) | AffectNet validation_set | 750 | `test/run_0001/` | Separate manifest |
+| Dataset | Source | Samples | Storage | Labels | Copy/Move |
+|---------|--------|---------|---------|--------|-----------|
+| Training | Manual videos (50/class) + AffectNet train (10K/class) | 28,350 | `train/run/run_0001/train_ds_run_0001/` | In filenames | COPIED |
+| Training Validation | 10% holdout from training | 3,150 | `train/run/run_0001/valid_ds_run_0001/` | In filenames | Extracted |
+| Validation (variant comparison) | AffectNet validation_set | 1,500 | `validation/run/run_0001/` | Separate manifest | COPIED |
+| Test (Gate A) | AffectNet validation_set | 750 | `test/affectnet_test_dataset/runrun_0001/` | Separate manifest | COPIED |
 
 ### Key Points
 
 ✅ **Manual videos**: Training only (frames extracted)  
+✅ **AffectNet images**: **COPIED** (not moved) - source files remain in AffectNet directory  
 ✅ **AffectNet validation_set**: Source for both validation AND test (different seeds)  
 ✅ **Run-scoped**: Each run gets unique validation + test datasets  
 ✅ **Unlabeled storage**: Validation/test images stored without emotion in filename  
 ✅ **Ground truth separation**: Labels in separate manifests, not in DB  
-✅ **Archiving**: Validation datasets archived after use  
+✅ **Archiving**: Validation and test datasets archived after use  
 
 ### Deprecated Paths (NOT USED)
 

@@ -1,0 +1,21 @@
+[Unit]
+Description=Reachy Manual Video Rename Watcher
+After=network.target
+
+[Service]
+Type=simple
+User=rusty_admin
+Group=rusty_admin
+WorkingDirectory=/home/rusty_admin/projects/reachy_08.4.2
+ExecStart=/bin/bash /home/rusty_admin/projects/reachy_08.4.2/scripts/watch_rename_prefix.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/reachy_rename_watcher.log
+StandardError=append:/var/log/reachy_rename_watcher.log
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

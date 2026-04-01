@@ -48,8 +48,8 @@ Output Structure:
     │   ├── happy/affectnet_*.jpg
     │   ├── sad/affectnet_*.jpg
     │   └── neutral/affectnet_*.jpg
-    ├── validation/<run_id>/affectnet_*.jpg  # unlabeled filenames
-    └── test/<run_id>/affectnet_*.jpg  # unlabeled filenames
+    ├── validation/run/<run_id>/affectnet_*.jpg  # unlabeled filenames
+    └── test/affectnet_test_dataset/run<run_id>/affectnet_*.jpg  # unlabeled filenames
 
 Database Integration:
     - Inserts records into Video table (duration/fps=NULL for images)
@@ -317,7 +317,7 @@ class AffectNetIngester:
                 dst_path = label_dir / dst_name
                 rel_path = f"train/{label}/{dst_name}"
 
-                # Copy image
+                # Copy image (not move - source files remain in AffectNet directory)
                 shutil.copy2(src_path, dst_path)
 
                 # Read image for metadata
@@ -352,7 +352,7 @@ class AffectNetIngester:
         run_id: str,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Copy sampled images to test/<run_id>/ with unlabeled filenames.
+        Copy sampled images to test/affectnet_test_dataset/run<run_id>/ with unlabeled filenames.
 
         Args:
             sampled: Sampled annotations by emotion label
@@ -362,7 +362,7 @@ class AffectNetIngester:
         Returns:
             Tuple of (db_records, ground_truth_records)
         """
-        test_dir = self.videos_root / "test" / run_id
+        test_dir = self.videos_root / "test" / "affectnet_test_dataset" / f"run{run_id}"
         test_dir.mkdir(parents=True, exist_ok=True)
 
         db_records: List[Dict[str, Any]] = []
@@ -377,7 +377,7 @@ class AffectNetIngester:
         rng = random.Random(42)  # Fixed seed for consistent ordering
         rng.shuffle(all_samples)
 
-        logger.info(f"Copying {len(all_samples)} images to test/{run_id}/...")
+        logger.info(f"Copying {len(all_samples)} images to test/affectnet_test_dataset/run{run_id}/...")
 
         for idx, (label, ann) in enumerate(all_samples):
             src_path = images_dir / f"{ann.image_id}.jpg"
@@ -388,9 +388,9 @@ class AffectNetIngester:
             # Unlabeled filename (no emotion prefix)
             dst_name = f"affectnet_{idx:05d}.jpg"
             dst_path = test_dir / dst_name
-            rel_path = f"test/{run_id}/{dst_name}"
+            rel_path = f"test/affectnet_test_dataset/run{run_id}/{dst_name}"
 
-            # Copy image
+            # Copy image (not move - source files remain in AffectNet directory)
             shutil.copy2(src_path, dst_path)
 
             # Read image for metadata
@@ -569,7 +569,7 @@ class AffectNetIngester:
         run_id: str,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Copy sampled images to validation/<run_id>/ with unlabeled filenames.
+        Copy sampled images to validation/run/<run_id>/ with unlabeled filenames.
 
         Args:
             sampled: Sampled annotations by emotion label
@@ -579,7 +579,7 @@ class AffectNetIngester:
         Returns:
             Tuple of (db_records, ground_truth_records)
         """
-        validation_dir = self.videos_root / "validation" / run_id
+        validation_dir = self.videos_root / "validation" / "run" / run_id
         validation_dir.mkdir(parents=True, exist_ok=True)
 
         db_records: List[Dict[str, Any]] = []
@@ -594,7 +594,7 @@ class AffectNetIngester:
         rng = random.Random(42)  # Fixed seed for consistent ordering
         rng.shuffle(all_samples)
 
-        logger.info(f"Copying {len(all_samples)} images to validation/{run_id}/...")
+        logger.info(f"Copying {len(all_samples)} images to validation/run/{run_id}/...")
 
         for idx, (label, ann) in enumerate(all_samples):
             src_path = images_dir / f"{ann.image_id}.jpg"
@@ -605,9 +605,9 @@ class AffectNetIngester:
             # Unlabeled filename (no emotion prefix)
             dst_name = f"affectnet_{idx:05d}.jpg"
             dst_path = validation_dir / dst_name
-            rel_path = f"validation/{run_id}/{dst_name}"
+            rel_path = f"validation/run/{run_id}/{dst_name}"
 
-            # Copy image
+            # Copy image (not move - source files remain in AffectNet directory)
             shutil.copy2(src_path, dst_path)
 
             # Read image for metadata
