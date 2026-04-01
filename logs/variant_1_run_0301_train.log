@@ -1,0 +1,97 @@
+Albumentations not available, using torchvision transforms
+emotiefflib/hsemotion not installed, trying alternatives
+timm not installed, trying torchvision
+HSEmotion AND timm unavailable — falling back to torchvision EfficientNet-B0 (ImageNet weights). Model quality WILL be reduced.
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:111: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  self.scaler = GradScaler() if config.mixed_precision else None
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/grad_scaler.py:31: UserWarning: torch.cuda.amp.GradScaler is enabled, but CUDA is not available.  Disabling.
+  super().__init__(
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/mlflow/tracking/_tracking_service/utils.py:178: FutureWarning: The filesystem tracking backend (e.g., './mlruns') will be deprecated in February 2026. Consider transitioning to a database backend (e.g., 'sqlite:///mlflow.db') to take advantage of the latest MLflow features. See https://github.com/mlflow/mlflow/issues/18534 for more details and migration guidance. For migrating existing data, https://github.com/mlflow/mlflow-export-import can be used.
+  return FileStore(store_uri, store_uri)
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:1118: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+{"warning": "contract_emit_failed", "run_id": "run_0301", "event_type": "training.started", "error": "401 Client Error: Unauthorized for url: http://localhost:8083/api/training/status/run_0301"}
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:278: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/autocast_mode.py:54: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+  super().__init__(
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:1118: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:349: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/autocast_mode.py:54: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+  super().__init__(
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:1118: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:278: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/autocast_mode.py:54: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+  super().__init__(
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:1118: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:349: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/autocast_mode.py:54: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+  super().__init__(
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py:1118: UserWarning: 'pin_memory' argument is set as true but no accelerator is found, then device pinned memory won't be used.
+  super().__init__(loader)
+/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py:278: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with autocast():
+/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/cuda/amp/autocast_mode.py:54: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+  super().__init__(
+[ WARN:0@4229.443] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_3630.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4234.369] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_216417.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4238.568] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_274061.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4242.894] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_209360.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4248.039] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/affectnet_107889.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4252.780] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_307410.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4256.867] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_213174.jpg'): can't open/read file: check file path/integrity
+[ WARN:0@4261.297] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_322526.jpg'): can't open/read file: check file path/integrity
+Training error: Caught ValueError in DataLoader worker process 2.
+Original Traceback (most recent call last):
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/_utils/worker.py", line 358, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/_utils/fetch.py", line 54, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+            ~~~~~~~~~~~~^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/dataset.py", line 266, in __getitem__
+    image = self._load_image(sample["path"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/dataset.py", line 334, in _load_image
+    raise ValueError(f"Could not load image: {image_path}")
+ValueError: Could not load image: /media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_3630.jpg
+Traceback (most recent call last):
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py", line 574, in train
+    train_metrics = self.train_epoch(epoch)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/train_efficientnet.py", line 259, in train_epoch
+    for batch_idx, (images, labels) in enumerate(self.train_loader):
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py", line 741, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py", line 1548, in _next_data
+    return self._process_data(data, worker_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/dataloader.py", line 1586, in _process_data
+    data.reraise()
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/_utils.py", line 775, in reraise
+    raise exception
+ValueError: Caught ValueError in DataLoader worker process 2.
+Original Traceback (most recent call last):
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/_utils/worker.py", line 358, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/_utils/fetch.py", line 54, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+            ~~~~~~~~~~~~^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/dataset.py", line 266, in __getitem__
+    image = self._load_image(sample["path"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/dataset.py", line 334, in _load_image
+    raise ValueError(f"Could not load image: {image_path}")
+ValueError: Could not load image: /media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_3630.jpg
+
+Training failed: {'run_id': 'run_0301', 'model_type': 'efficientnet_b0_hsemotion', 'status': 'error', 'epochs_completed': 2, 'best_metric': 0.5610013406750349, 'gate_results': {'gate_a': False, 'gate_a_details': {'f1_macro': 0.5610013406750349, 'f1_per_class': [np.float64(0.6394279877425945), np.float64(0.4901277584204414), np.float64(0.553448275862069)], 'balanced_accuracy': 0.5633333333333334, 'ece': 0.05385506602128346, 'brier': 0.5610936649839039}}, 'resumed_from': None, 'error': 'Caught ValueError in DataLoader worker process 2.\nOriginal Traceback (most recent call last):\n  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/_utils/worker.py", line 358, in _worker_loop\n    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]\n           ^^^^^^^^^^^^^^^^^^^^\n  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/utils/data/_utils/fetch.py", line 54, in fetch\n    data = [self.dataset[idx] for idx in possibly_batched_index]\n            ~~~~~~~~~~~~^^^^^\n  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/dataset.py", line 266, in __getitem__\n    image = self._load_image(sample["path"])\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/dataset.py", line 334, in _load_image\n    raise ValueError(f"Could not load image: {image_path}")\nValueError: Could not load image: /media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_3630.jpg\n'}
+[ WARN:0@4265.962] global loadsave.cpp:278 findDecoder imread_('/media/rusty_admin/project_data/reachy_emotion/videos/train/happy/an_86811.jpg'): can't open/read file: check file path/integrity
+{"warning": "contract_emit_failed", "run_id": "run_0301", "event_type": "training.failed", "error": "401 Client Error: Unauthorized for url: http://localhost:8083/api/training/status/run_0301"}
