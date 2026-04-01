@@ -9,21 +9,49 @@ Complete guide for adding videos to the Reachy Emotion Recognition system.
 **Use case:** You have videos on your local machine that you want to add to the training dataset.
 
 **Process:**
+
 ```bash
-# Step 1: Copy videos to a temporary directory
-mkdir -p /tmp/my_videos
-cp /path/to/your/videos/*.mp4 /tmp/my_videos/
+# Step 1: Copy videos to the staging directory (by emotion type)
+cp /path/to/your/happy_videos/*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/happy_rename/
 
-# Step 2: Ingest with emotion label
-./scripts/ingest_manual_videos.sh /tmp/my_videos happy
+cp /path/to/your/sad_videos/*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/sad_rename/
 
-# Step 3: Videos are now in training dataset
-# Location: /media/rusty_admin/project_data/reachy_emotion/videos/train/happy/
+cp /path/to/your/neutral_videos/*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/neutral_rename/
+
+# Step 2: Run the ingest script to rename and move videos
+./scripts/ingest_manual_videos.sh
+
+# Step 3: Videos are now in the training source directory
+# Locations:
+# - Happy:   /media/rusty_admin/project_data/reachy_emotion/videos/train/happy/
+# - Sad:     /media/rusty_admin/project_data/reachy_emotion/videos/train/sad/
+# - Neutral: /media/rusty_admin/project_data/reachy_emotion/videos/train/neutral/
+
+# Step 4: Register videos in database (one-time after manual copy)
+python scripts/reconcile_videos.py --dry-run   # preview
+python scripts/reconcile_videos.py              # apply
 ```
 
-**Naming convention:** `manual_<emotion>_<timestamp>_<hash>.mp4`
+**Staging directories:**
+- `train/rename_prefix/happy_rename/` -- temporary holding area for happy videos
+- `train/rename_prefix/sad_rename/` -- temporary holding area for sad videos
+- `train/rename_prefix/neutral_rename/` -- temporary holding area for neutral videos
+
+**Final directories (after ingest script):**
+- `train/happy/` -- finalized happy videos ready for frame extraction
+- `train/sad/` -- finalized sad videos ready for frame extraction
+- `train/neutral/` -- finalized neutral videos ready for frame extraction
+
+**Naming convention (before):** Original filenames or any naming scheme
+**Naming convention (after ingest):** `<emotion>_luma_<timestamp>.mp4` (standardized format)
+- Example: `happy_luma_20260401_093015.mp4`, `sad_luma_20260331_145200.mp4`
 
 **Supported formats:** `.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`
+
+**Database registration:**
+- Videos are automatically registered during the `reconcile_videos.py` script execution
+- Script extracts metadata: SHA256, duration, fps, width, height, size
+- Only videos found in `train/<emotion>/` directories are registered with `split='train'` and the appropriate emotion label
 
 ---
 
@@ -70,7 +98,13 @@ cp /path/to/your/videos/*.mp4 /tmp/my_videos/
 
 ### 3. AffectNet Images (Test Dataset)
 
-**Use case:** Add AffectNet images to test dataset for evaluation.
+**⚠️ IMPORTANT:** AffectNet images are **NOT** stored in `train/happy/`, `train/sad/`, or `train/neutral/`. Those directories are **exclusively for labeled VIDEOS**, from which 10 frames will be extracted for training.
+
+**Use case:** Add AffectNet images to test dataset for evaluation (separate from video training source).
+
+**Storage location:** Videos are the **only** source for the training frame extraction pipeline.
+- AffectNet images (if used) are stored in the `test/` directory or a separate external location
+- They are **not** extracted as frames from videos in the same way manual/web-app videos are
 
 **Process:**
 ```bash
@@ -91,10 +125,13 @@ cp /path/to/your/videos/*.mp4 /tmp/my_videos/
   "file_path": "test/run_0004/test_run_0004_h_0042.jpg",
   "label": "happy",
   "source": "affectnet",
-  "original_path": "/media/.../train/happy/affectnet_12345.jpg",
-  "added_at": "2026-03-30T21:45:00"
+  "added_at": "2026-04-01T09:30:00"
 }
 ```
+
+**Key distinction:**
+- **Training source videos** (`train/happy/`, `train/sad/`, `train/neutral/`) → frames are extracted → frame dataset
+- **Test images** (`test/run_XXXX/`) → used directly for evaluation (no frame extraction)
 
 ---
 
@@ -103,20 +140,29 @@ cp /path/to/your/videos/*.mp4 /tmp/my_videos/
 ### Example 1: Manual Videos → Training
 
 ```bash
-# 1. Prepare videos
-mkdir -p /tmp/happy_videos /tmp/sad_videos /tmp/neutral_videos
-cp ~/Downloads/happy*.mp4 /tmp/happy_videos/
-cp ~/Downloads/sad*.mp4 /tmp/sad_videos/
-cp ~/Downloads/neutral*.mp4 /tmp/neutral_videos/
+# 1. Copy videos to staging directories (by emotion type)
+cp ~/Downloads/happy*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/happy_rename/
+cp ~/Downloads/sad*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/sad_rename/
+cp ~/Downloads/neutral*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/neutral_rename/
 
-# 2. Ingest all three emotions
-./scripts/ingest_manual_videos.sh /tmp/happy_videos happy
-./scripts/ingest_manual_videos.sh /tmp/sad_videos sad
-./scripts/ingest_manual_videos.sh /tmp/neutral_videos neutral
+# 2. Ingest and rename all videos at once
+./scripts/ingest_manual_videos.sh
 
-# 3. Create training run with new videos
+# 3. Register videos in database
+python scripts/reconcile_videos.py --dry-run   # preview changes
+python scripts/reconcile_videos.py              # apply changes
+
+# 4. Create training run with new videos and extract frames
+# (Videos are now ready in train/happy/, train/sad/, train/neutral/)
 ./scripts/create_and_archive_run.sh run_0004 3690
 ```
+
+**Expected result:**
+- Happy videos: `train/happy/happy_luma_*.mp4` (renamed and standardized)
+- Sad videos: `train/sad/sad_luma_*.mp4`
+- Neutral videos: `train/neutral/neutral_luma_*.mp4`
+- All registered in PostgreSQL with `split='train'` and appropriate emotion label
+- Ready for frame extraction in Phase E
 
 ---
 
@@ -145,22 +191,37 @@ cp ~/Downloads/neutral*.mp4 /tmp/neutral_videos/
 ### Example 3: Mixed Sources → Training + Test
 
 ```bash
-# 1. Add manual videos
-./scripts/ingest_manual_videos.sh /tmp/my_videos happy
+# 1. Add manual videos to staging directories
+cp /path/to/happy/*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/happy_rename/
+cp /path/to/sad/*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/sad_rename/
+cp /path/to/neutral/*.mp4 /media/rusty_admin/project_data/reachy_emotion/videos/train/rename_prefix/neutral_rename/
 
-# 2. Generate videos via web UI (10 videos)
+# 2. Ingest and register manual videos
+./scripts/ingest_manual_videos.sh
+python scripts/reconcile_videos.py
 
-# 3. Create training dataset (includes manual + web app videos)
+# 3. Generate additional videos via web UI (10 videos)
+# - Navigate to https://10.0.4.140/
+# - Generate and promote videos to training dataset
+
+# 4. Create training dataset (includes manual + web app videos)
+# Videos from train/happy/, train/sad/, train/neutral/ are extracted → run_0004
 ./scripts/create_and_archive_run.sh run_0004 3690
 
-# 4. Add AffectNet test set
+# 5. Add AffectNet test set (separate from video training source)
 ./scripts/add_affectnet_to_test.sh run_0004 500
 
-# 5. Training will use:
-#    - Train: 9,963 samples (manual + web app + AffectNet)
-#    - Valid: 1,107 samples
-#    - Test: 1,500 samples (500 per class from AffectNet)
+# 6. Training will use:
+#    - Train: 9,300 samples extracted from videos (manual + web app)
+#    - Valid: 1,050 samples extracted from videos
+#    - Test: 1,500 samples from AffectNet test set (500 per class)
 ```
+
+**Key workflow:**
+1. Manual videos → staging → rename + register
+2. Web app videos → temp → promote to train
+3. All videos in `train/<emotion>/` → extract frames → run dataset
+4. Test images (AffectNet) stored separately in `test/<run_id>/`
 
 ---
 
@@ -168,41 +229,82 @@ cp ~/Downloads/neutral*.mp4 /tmp/neutral_videos/
 
 ```
 /media/rusty_admin/project_data/reachy_emotion/videos/
-├── temp/                          # Unreviewed videos (web app)
-│   └── luma_happy_20260330_*.mp4
+├── temp/                          # Unreviewed videos (web app only)
+│   └── luma_happy_20260401_*.mp4  # Generated via Luma AI, awaiting label/promotion
 │
-├── train/                         # Training dataset
-│   ├── happy/
-│   │   ├── manual_happy_*.mp4     # Manual videos
-│   │   ├── luma_happy_*.mp4       # Web app videos
-│   │   └── affectnet_*.jpg        # AffectNet images
-│   ├── sad/
-│   └── neutral/
+├── train/
+│   ├── rename_prefix/             # Staging area for manual videos (TEMPORARY)
+│   │   ├── happy_rename/
+│   │   │   └── my_video.mp4       # User copies videos here
+│   │   ├── sad_rename/
+│   │   │   └── another_video.mp4
+│   │   └── neutral_rename/
+│   │       └── more_videos.mp4
+│   │
+│   ├── happy/                     # FINAL: Labeled source videos (happy)
+│   │   └── happy_luma_20260401_093015.mp4  # After ingest_manual_videos.sh
+│   │
+│   ├── sad/                       # FINAL: Labeled source videos (sad)
+│   │   └── sad_luma_20260331_145200.mp4
+│   │
+│   ├── neutral/                   # FINAL: Labeled source videos (neutral)
+│   │   └── neutral_luma_20260330_082030.mp4
+│   │
+│   └── run/                       # Per-run extracted frame datasets
+│       └── run_0004/
+│           ├── *.jpg              # Extracted frames (10 per source video)
+│           ├── train_ds_run_0004/ # Training split frames
+│           └── valid_ds_run_0004/ # Validation split frames
 │
-├── train/run/                     # Per-run datasets
-│   └── run_0004/
-│       ├── train_ds_run_0004/     # Training split
-│       └── valid_ds_run_0004/     # Validation split
+├── test/                          # Test datasets (NOT video source)
+│   ├── run_0004/
+│   │   └── test_run_0004_*.jpg    # Test images (e.g., from AffectNet)
+│   └── affectnet_test_dataset/    # Fixed external test set (reference)
 │
-├── test/                          # Test datasets
-│   └── run_0004/
-│       └── test_run_0004_*.jpg    # Unlabeled test images
+├── manifests/                     # JSONL manifest files
+│   ├── run_0004_train.jsonl       # Canonical frame extraction manifest
+│   ├── run_0004_train_ds.jsonl    # Training split manifest
+│   ├── run_0004_valid_ds_labeled.jsonl      # Validation with labels
+│   └── run_0004_valid_ds_unlabeled.jsonl    # Validation without labels
 │
-├── train/archive/                 # Archived training datasets
-├── validation/archive/            # Archived validation datasets
-└── test/archive/                  # Archived test datasets
+└── thumbs/                        # Video thumbnails (served by Nginx)
+    └── <video_id>.jpg
 ```
+
+**Key Points:**
+- **`train/rename_prefix/`** is a temporary staging area where you place manually-generated videos by emotion type
+- **`train/happy/`, `train/sad/`, `train/neutral/`** are the FINAL source directories containing labeled videos ready for frame extraction
+- **These directories contain VIDEOS ONLY** -- no images (10 frames will be extracted from each video)
+- **`train/run/<run_id>/`** contains extracted frames and splits created during frame extraction
+- **`test/`** is separate and contains test images (not video source)
 
 ---
 
 ## Video Naming Conventions
 
+### Manual Videos (Before & After Ingest)
+
+| Stage | Pattern | Example |
+|-------|---------|---------|
+| **Staging** (in `rename_prefix/`) | Any name (original filename) | `my_video.mp4`, `2026-01-22T00-30-58_clip.mp4`, `happy_recording.mp4` |
+| **Final** (in `train/<emotion>/`) | `<emotion>_luma_<YYYYMMDD_HHMMSS>.mp4` | `happy_luma_20260401_093015.mp4` |
+
+The `ingest_manual_videos.sh` and `reconcile_videos.py` scripts standardize the naming.
+
+### Web App Generated Videos
+
+| Stage | Pattern | Example |
+|--------|---------|---------|
+| Staging (in `temp/`) | Generated by Luma API | `luma_20260401_120000_abcdef123.mp4` |
+| Final (after promotion) | `<emotion>_luma_<timestamp>.mp4` | `sad_luma_20260331_145200.mp4` |
+
+### Test Datasets
+
 | Source | Pattern | Example |
 |--------|---------|---------|
-| Manual | `manual_<emotion>_<timestamp>_<hash>.mp4` | `manual_happy_20260330_214500_a1b2c3d4.mp4` |
-| Web App (Luma) | `luma_<emotion>_<timestamp>_<gen_id>.mp4` | `luma_sad_20260330_214500_abc123.mp4` |
-| AffectNet (Train) | `affectnet_<id>.jpg` | `affectnet_12345.jpg` |
 | AffectNet (Test) | `test_<run_id>_<label>_<index>.jpg` | `test_run_0004_h_0042.jpg` |
+
+**Note:** AffectNet images are stored in `test/` directories, NOT in `train/happy/`, `train/sad/`, or `train/neutral/`. The training source directories contain **videos only**.
 
 ---
 
