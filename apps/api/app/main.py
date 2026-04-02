@@ -26,6 +26,7 @@ if env_file.exists():
 from ..routers import media
 # Current v1 routers and internal service routers.
 from .routers import (
+    dataset_control,
     dialogue,
     emotion_events,
     gate_c,
@@ -135,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(gateway_upstream.router)
     app.include_router(ingest.router)
     app.include_router(training_control.router)
+    app.include_router(dataset_control.router)
     app.include_router(observability.router)
     app.include_router(emotion_events.router)
     app.include_router(gate_c.router)

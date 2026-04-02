@@ -268,11 +268,117 @@ with action_col5:
         st.rerun()
 
 st.divider()
-st.subheader("ML Runs — EfficientNet-B0 (Frozen Backbone)")
+st.subheader("📦 Dataset Preparation")
+st.caption(
+    "Create validation and test datasets from AffectNet for a specific run. "
+    "Use the same run_ID for datasets and training to ensure consistency."
+)
+
+# Dataset creation run ID (shared with training)
+dataset_run_id = st.text_input(
+    "Dataset Run ID (e.g., run_0300)",
+    value=st.session_state.get("train_run_id", ""),
+    key="dataset_run_id_input",
+    help="This run_ID will be used for both validation and test datasets, and should match your training run_ID"
+)
+
+# Dataset creation parameters in expander
+with st.expander("⚙️ Dataset Parameters", expanded=False):
+    val_samples = st.number_input(
+        "Validation samples per class",
+        min_value=100,
+        max_value=2000,
+        value=500,
+        step=50,
+        help="Number of images per emotion class for validation (default: 500)"
+    )
+    test_samples = st.number_input(
+        "Test samples per class",
+        min_value=50,
+        max_value=1000,
+        value=250,
+        step=50,
+        help="Number of images per emotion class for test (default: 250)"
+    )
+    val_confidence = st.slider(
+        "Validation min confidence",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.6,
+        step=0.1,
+        help="Minimum soft-label confidence for validation images"
+    )
+    val_seed = st.number_input("Validation seed", value=42, help="Random seed for validation sampling")
+    test_seed = st.number_input("Test seed", value=142, help="Random seed for test sampling (different from validation)")
+
+
+def _create_validation_dataset() -> None:
+    """Create validation dataset via API."""
+    if not dataset_run_id:
+        st.error("Please enter a run_ID for the dataset")
+        return
+    
+    try:
+        with st.spinner(f"Creating validation dataset for {dataset_run_id}..."):
+            resp = api_client.create_validation_dataset(
+                run_id=dataset_run_id,
+                samples_per_class=val_samples,
+                min_confidence=val_confidence,
+                seed=val_seed,
+            )
+        st.success(f"✓ Validation dataset created: {resp['total_samples']} images")
+        st.json(resp)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Validation dataset creation failed: {exc}")
+
+
+def _create_test_dataset() -> None:
+    """Create test dataset via API."""
+    if not dataset_run_id:
+        st.error("Please enter a run_ID for the dataset")
+        return
+    
+    try:
+        with st.spinner(f"Creating test dataset for {dataset_run_id}..."):
+            resp = api_client.create_test_dataset(
+                run_id=dataset_run_id,
+                samples_per_class=test_samples,
+                source="validation",
+                seed=test_seed,
+            )
+        st.success(f"✓ Test dataset created: {resp['total_samples']} images (unlabeled)")
+        st.json(resp)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Test dataset creation failed: {exc}")
+
+
+dataset_col1, dataset_col2, dataset_col3 = st.columns(3)
+with dataset_col1:
+    st.markdown("**Validation Dataset**")
+    st.caption(f"Create {val_samples} images/class from AffectNet")
+    if st.button("📊 Create Validation Dataset", use_container_width=True, type="primary"):
+        _create_validation_dataset()
+
+with dataset_col2:
+    st.markdown("**Test Dataset**")
+    st.caption(f"Create {test_samples} images/class (unlabeled)")
+    if st.button("🧪 Create Test Dataset", use_container_width=True):
+        _create_test_dataset()
+
+with dataset_col3:
+    st.markdown("**Create Both**")
+    st.caption("Validation + Test in sequence")
+    if st.button("📦 Create Both Datasets", use_container_width=True):
+        _create_validation_dataset()
+        _create_test_dataset()
+
+st.divider()
+st.subheader("🚀 ML Runs — EfficientNet-B0 (Frozen Backbone)")
 st.caption(
     "Launch training, validation, or test runs using the EfficientNet-B0 model "
     "with HSEmotion pretrained weights (`enet_b0_8_best_vgaf`). "
-    "All runs use frozen-backbone settings from `efficientnet_b0_emotion_3cls.yaml`."
+    "All runs use frozen-backbone settings from `efficientnet_b0_emotion_3cls.yaml`. "
+    "Use the same run_ID as your datasets above."
 )
 
 ml_run_id = st.text_input(

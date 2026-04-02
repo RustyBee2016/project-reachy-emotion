@@ -748,3 +748,78 @@ def update_deployment_status(pipeline_id: str, payload: Dict[str, Any]) -> Dict[
                          verify=_request_verify(_gateway_base(), "GATEWAY"))
     resp.raise_for_status()
     return resp.json()
+
+
+@retry_on_failure()
+def create_validation_dataset(
+    run_id: str,
+    samples_per_class: int = 500,
+    min_confidence: float = 0.6,
+    max_subset: int = 1,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Create validation dataset from AffectNet validation_set.
+    
+    Args:
+        run_id: Run identifier (e.g., run_0300)
+        samples_per_class: Number of samples per emotion class (default: 500)
+        min_confidence: Minimum soft-label confidence (default: 0.6)
+        max_subset: Maximum subset difficulty 0=easy, 1=challenging, 2=difficult (default: 1)
+        seed: Random seed for reproducibility (default: 42)
+        
+    Returns:
+        Dataset creation response with paths and sample counts
+    """
+    url = f"{_base_url()}/api/v1/datasets/validation/create"
+    payload = {
+        "run_id": run_id,
+        "samples_per_class": samples_per_class,
+        "min_confidence": min_confidence,
+        "max_subset": max_subset,
+        "seed": seed,
+    }
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=600,  # 10 minute timeout for dataset creation
+        verify=_request_verify(_base_url(), "MEDIA"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def create_test_dataset(
+    run_id: str,
+    samples_per_class: int = 250,
+    source: str = "validation",
+    seed: int = 142,
+) -> Dict[str, Any]:
+    """Create test dataset from AffectNet validation_set.
+    
+    Args:
+        run_id: Run identifier (e.g., run_0300)
+        samples_per_class: Number of samples per emotion class (default: 250)
+        source: Source dataset - 'validation' or 'no_human' (default: validation)
+        seed: Random seed for reproducibility (default: 142)
+        
+    Returns:
+        Dataset creation response with paths and sample counts
+    """
+    url = f"{_base_url()}/api/v1/datasets/test/create"
+    payload = {
+        "run_id": run_id,
+        "samples_per_class": samples_per_class,
+        "source": source,
+        "seed": seed,
+    }
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=600,  # 10 minute timeout for dataset creation
+        verify=_request_verify(_base_url(), "MEDIA"),
+    )
+    resp.raise_for_status()
+    return resp.json()

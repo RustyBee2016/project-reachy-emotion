@@ -68,7 +68,7 @@ from sqlalchemy import insert, select
 from apps.api.app.db.models import Video
 
 # Database connection
-DB_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://reachy_dev:reachy_dev_password@localhost:5432/reachy_emotion')
+DB_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://reachy_dev:tweetwd4959@/reachy_emotion?host=/var/run/postgresql')
 engine = create_async_engine(DB_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
