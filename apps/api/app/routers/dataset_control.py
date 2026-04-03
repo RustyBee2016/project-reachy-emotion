@@ -110,7 +110,7 @@ async def create_validation_dataset(
         
         # Construct response
         validation_path = config.videos_root / "validation" / "run" / request.run_id
-        manifest_path = config.manifests_path / f"{request.run_id}_valid_ds_labeled.jsonl"
+        manifest_path = config.manifests_path / f"{request.run_id}_validation_labels.jsonl"
         
         return DatasetCreationResponse(
             run_id=request.run_id,

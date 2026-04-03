@@ -168,9 +168,9 @@ face_confidence = st.slider(
     disabled=not face_crop,
 )
 split_run = st.toggle(
-    "Split run into train_ds/valid_ds",
+    "Split run into train_ds/valid_ds (DEPRECATED)",
     key="prepare_split_run",
-    help="When enabled, move frames into train_ds_<run_id> and valid_ds_<run_id> after extraction.",
+    help="DEPRECATED: Creates 90/10 split subdirectories. Use 'Dataset Preparation' section below to create dedicated AffectNet validation datasets instead.",
 )
 split_train_ratio = st.slider(
     "Split train ratio",

@@ -147,8 +147,9 @@ class PrepareRunFramesRequest(BaseModel):
     split_run: bool = Field(
         default=False,
         description=(
-            "If true, move extracted frames into train_ds_<run_id>/valid_ds_<run_id> "
-            "subfolders after extraction."
+            "DEPRECATED: If true, move extracted frames into train_ds_<run_id>/valid_ds_<run_id> "
+            "subdirectories after extraction (90/10 split). This is a legacy fallback - "
+            "use dedicated AffectNet validation datasets instead via /api/v1/datasets/validation/create."
         ),
     )
     split_train_ratio: float = Field(
