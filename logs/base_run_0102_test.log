@@ -1,0 +1,28 @@
+Albumentations not available, using torchvision transforms
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/run_efficientnet_pipeline.py", line 638, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/run_efficientnet_pipeline.py", line 528, in main
+    preds = _collect_predictions(
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/run_efficientnet_pipeline.py", line 257, in _collect_predictions
+    model = load_pretrained_model(str(checkpoint_path), num_classes=len(class_names), device=device)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/trainer/fer_finetune/model_efficientnet.py", line 436, in load_pretrained_model
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/serialization.py", line 1500, in load
+    with _open_file_like(f, "rb") as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/serialization.py", line 768, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/rusty_admin/projects/reachy_08.4.2/venv/lib/python3.12/site-packages/torch/serialization.py", line 749, in __init__
+    super().__init__(open(name, mode))  # noqa: SIM115
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/media/rusty_admin/project_data/reachy_emotion/checkpoints/hsemotion/enet_b0_8_best_vgaf.pth'
+{"warning": "contract_emit_failed", "run_id": "run_0102", "event_type": "evaluation.started", "error": "401 Client Error: Unauthorized for url: http://localhost:8083/api/training/status/run_0102"}
+{"warning": "contract_emit_failed", "run_id": "run_0102", "event_type": "training.failed", "error": "401 Client Error: Unauthorized for url: http://localhost:8083/api/training/status/run_0102"}
