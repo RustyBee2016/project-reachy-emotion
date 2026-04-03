@@ -97,26 +97,26 @@ def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
 col1, col2 = st.columns(2)
 with col1:
     try:
-        train_data = api_client.list_videos(split="train", limit=1, offset=0)
+        train_data = api_client.list_videos(split="train", limit=10, offset=0)
         train_total = train_data.get("total", 0)
-        train_items = _items_for_split("train")
-        train_counts = Counter(_resolve_label(it) for it in train_items)
+        train_sample = train_data.get("items", [])
+        train_counts = Counter(_resolve_label(it) for it in train_sample if isinstance(it, dict))
         st.subheader("Train Split")
         st.metric("Total", train_total)
-        st.caption(f"Label distribution (sample of {len(train_items)})")
+        st.caption("Label distribution (first 10 videos)")
         st.json(dict(train_counts))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load train split: {exc}")
 
 with col2:
     try:
-        test_data = api_client.list_videos(split="test", limit=1, offset=0)
+        test_data = api_client.list_videos(split="test", limit=10, offset=0)
         test_total = test_data.get("total", 0)
-        test_items = _items_for_split("test")
-        test_counts = Counter((it.get("label") or "no_label") for it in test_items)
+        test_sample = test_data.get("items", [])
+        test_counts = Counter((it.get("label") or "no_label") for it in test_sample if isinstance(it, dict))
         st.subheader("Test Split")
         st.metric("Total", test_total)
-        st.caption(f"Label distribution (sample of {len(test_items)})")
+        st.caption("Label distribution (first 10 videos)")
         st.json(dict(test_counts))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load test split: {exc}")

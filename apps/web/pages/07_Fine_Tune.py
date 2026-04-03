@@ -74,25 +74,6 @@ def _resolve_label(item: Dict[str, Any]) -> str:
     return "unlabeled"
 
 
-def _items_for_split(split: str, max_items: int = 500) -> list[dict]:
-    items: list[dict] = []
-    offset = 0
-    page_limit = 10
-    while len(items) < max_items:
-        data = api_client.list_videos(split=split, limit=page_limit, offset=offset)
-        raw_items = data.get("items", []) if isinstance(data, dict) else []
-        if not isinstance(raw_items, list):
-            break
-        batch = [it for it in raw_items if isinstance(it, dict)]
-        items.extend(batch)
-        if not data.get("has_more"):
-            break
-        offset += len(batch)
-        if not batch:
-            break
-    return items
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Dataset Overview
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,18 +81,24 @@ st.subheader("Dataset Overview")
 col_train, col_test = st.columns(2)
 with col_train:
     try:
-        train_items = _items_for_split("train")
-        train_counts = Counter(_resolve_label(it) for it in train_items)
-        st.metric("Train Total", len(train_items))
+        train_data = api_client.list_videos(split="train", limit=10, offset=0)
+        train_total = train_data.get("total", 0)
+        train_sample = [it for it in train_data.get("items", []) if isinstance(it, dict)]
+        train_counts = Counter(_resolve_label(it) for it in train_sample)
+        st.metric("Train Total", train_total)
+        st.caption("Label distribution (first 10 videos)")
         st.json(dict(train_counts))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load train split: {exc}")
 
 with col_test:
     try:
-        test_items = _items_for_split("test")
-        test_counts = Counter((it.get("label") or "no_label") for it in test_items)
-        st.metric("Test Total (AffectNet)", len(test_items))
+        test_data = api_client.list_videos(split="test", limit=10, offset=0)
+        test_total = test_data.get("total", 0)
+        test_sample = [it for it in test_data.get("items", []) if isinstance(it, dict)]
+        test_counts = Counter((it.get("label") or "no_label") for it in test_sample)
+        st.metric("Test Total (AffectNet)", test_total)
+        st.caption("Label distribution (first 10 videos)")
         st.json(dict(test_counts))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load test split: {exc}")

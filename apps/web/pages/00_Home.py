@@ -98,42 +98,26 @@ def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[s
 
 
 def _render_train_balance_counters() -> None:
-    def _iter_train_items(max_items: int = 500) -> list[dict]:
-        items: list[dict] = []
-        offset = 0
-        page_limit = 10
-        while len(items) < max_items:
-            listing = api_client.list_videos(split="train", limit=page_limit, offset=offset)
-            batch = listing.get("items", [])
-            if not isinstance(batch, list):
-                break
-            items.extend([it for it in batch if isinstance(it, dict)])
-            if not listing.get("has_more"):
-                break
-            offset += len(batch)
-            if not batch:
-                break
-        return items
-
-    counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
     try:
-        for item in _iter_train_items():
-            label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
-            if label in counts:
-                counts[label] += 1
+        listing = api_client.list_videos(split="train", limit=10, offset=0)
+        total = listing.get("total", 0)
+        sample = [it for it in listing.get("items", []) if isinstance(it, dict)]
     except Exception as exc:  # noqa: BLE001
         st.warning(f"Unable to load train label counters: {exc}")
         return
 
-    min_count = min(counts.values()) if counts else 0
-    underrepresented = sorted([label for label, value in counts.items() if value == min_count])
+    counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
+    for item in sample:
+        label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
+        if label in counts:
+            counts[label] += 1
+
     col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("Happy", counts["happy"])
     col_b.metric("Sad", counts["sad"])
     col_c.metric("Neutral", counts["neutral"])
-    col_d.metric("Total Labeled", counts["happy"] + counts["sad"] + counts["neutral"])
-    if underrepresented:
-        st.caption(f"Underrepresented class(es): {', '.join(underrepresented)}")
+    col_d.metric("Total", total)
+    st.caption("Label counts from first 10 videos. Total reflects full train split.")
 
 
 def _refresh_video_metadata(current: Dict[str, Any]) -> Optional[str]:
