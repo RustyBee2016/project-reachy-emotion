@@ -217,7 +217,7 @@ def list_videos(split: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
             url,
             headers=_headers(),
             params={"split": split, "limit": batch_limit, "offset": current_offset},
-            timeout=10,
+            timeout=60,
             verify=_request_verify(_base_url(), "API"),
         )
         resp.raise_for_status()

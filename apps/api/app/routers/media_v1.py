@@ -145,7 +145,12 @@ async def list_videos(
 
     files = []
     try:
-        iterator = root.rglob("*") if split == "train" else root.iterdir()
+        if split == "train":
+            # Only scan label subdirectories (happy/sad/neutral), not run/ or other dirs
+            label_dirs = [root / lbl for lbl in ("happy", "sad", "neutral") if (root / lbl).is_dir()]
+            iterator = (f for d in label_dirs for f in d.iterdir())
+        else:
+            iterator = root.iterdir()
         for p in iterator:
             if not p.is_file():
                 continue
