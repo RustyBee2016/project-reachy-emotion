@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from ..config import AppConfig, get_config
@@ -62,7 +62,7 @@ class DatasetCreationResponse(BaseModel):
 @router.post("/api/v1/datasets/validation/create", response_model=DatasetCreationResponse)
 async def create_validation_dataset(
     request: CreateValidationDatasetRequest,
-    config: AppConfig = get_config(),
+    config: AppConfig = Depends(get_config),
 ) -> DatasetCreationResponse:
     """
     Create validation dataset from AffectNet validation_set.
@@ -143,7 +143,7 @@ async def create_validation_dataset(
 @router.post("/api/v1/datasets/test/create", response_model=DatasetCreationResponse)
 async def create_test_dataset(
     request: CreateTestDatasetRequest,
-    config: AppConfig = get_config(),
+    config: AppConfig = Depends(get_config),
 ) -> DatasetCreationResponse:
     """
     Create test dataset from AffectNet validation_set.

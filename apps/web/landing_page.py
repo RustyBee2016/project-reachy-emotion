@@ -197,11 +197,11 @@ def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[s
 
 
 def _render_train_balance_counters() -> None:
-    def _iter_train_items() -> list[dict]:
+    def _iter_train_items(max_items: int = 500) -> list[dict]:
         items: list[dict] = []
         offset = 0
         page_limit = 10
-        while True:
+        while len(items) < max_items:
             listing = list_videos_api(split="train", limit=page_limit, offset=offset)
             batch = listing.get("items", [])
             if not isinstance(batch, list):

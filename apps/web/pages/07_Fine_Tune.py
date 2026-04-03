@@ -74,11 +74,11 @@ def _resolve_label(item: Dict[str, Any]) -> str:
     return "unlabeled"
 
 
-def _items_for_split(split: str) -> list[dict]:
+def _items_for_split(split: str, max_items: int = 500) -> list[dict]:
     items: list[dict] = []
     offset = 0
     page_limit = 10
-    while True:
+    while len(items) < max_items:
         data = api_client.list_videos(split=split, limit=page_limit, offset=offset)
         raw_items = data.get("items", []) if isinstance(data, dict) else []
         if not isinstance(raw_items, list):

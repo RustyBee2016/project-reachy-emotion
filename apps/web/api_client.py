@@ -5,11 +5,19 @@ import os
 import time
 import ipaddress
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar
 from urllib.parse import urlparse
 
 import requests
+from dotenv import load_dotenv
 from requests.exceptions import ConnectionError, HTTPError, Timeout
+
+# Load web app .env so REACHY_API_TOKEN and REACHY_API_BASE are available.
+# override=False means shell/systemd env vars take precedence.
+_env_file = Path(__file__).parent / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file, override=False)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -664,6 +672,102 @@ def post_obs_samples(samples: list) -> Dict[str, Any]:
     url = f"{_base_url()}/api/v1/obs/samples"
     resp = requests.post(url, headers=_headers(), json={"samples": samples},
                          timeout=15, verify=_request_verify(_base_url(), "API"))
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def create_training_dataset(
+    *,
+    run_id: Optional[str] = None,
+    train_fraction: float = 0.9,
+    split_run: bool = True,
+    split_train_ratio: float = 0.9,
+    face_crop: bool = False,
+    face_confidence: float = 0.6,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Create a training dataset (frame extraction) for a specific run_id.
+
+    Calls the prepare-run-frames endpoint which extracts frames from labeled
+    videos in videos/train/ and organises them into train_ds_<run_id> and
+    valid_ds_<run_id> sub-directories.
+    """
+    url = f"{_base_url()}/api/v1/ingest/prepare-run-frames"
+    payload: Dict[str, Any] = {
+        "train_fraction": train_fraction,
+        "dry_run": dry_run,
+        "face_crop": face_crop,
+        "face_target_size": 224,
+        "face_confidence": face_confidence,
+        "split_run": split_run,
+        "split_train_ratio": split_train_ratio,
+        "strip_valid_labels": True,
+        "persist_valid_metadata": split_run,
+    }
+    if run_id:
+        payload["run_id"] = run_id
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=120,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def create_validation_dataset(
+    *,
+    run_id: str,
+    samples_per_class: int = 500,
+    min_confidence: float = 0.6,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Create a validation dataset from AffectNet for a specific run_id."""
+    url = f"{_base_url()}/api/v1/datasets/validation/create"
+    payload: Dict[str, Any] = {
+        "run_id": run_id,
+        "samples_per_class": samples_per_class,
+        "min_confidence": min_confidence,
+        "seed": seed,
+    }
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=600,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
+def create_test_dataset(
+    *,
+    run_id: str,
+    samples_per_class: int = 250,
+    source: str = "validation",
+    seed: int = 142,
+) -> Dict[str, Any]:
+    """Create a test dataset (unlabeled) from AffectNet for a specific run_id."""
+    url = f"{_base_url()}/api/v1/datasets/test/create"
+    payload: Dict[str, Any] = {
+        "run_id": run_id,
+        "samples_per_class": samples_per_class,
+        "source": source,
+        "seed": seed,
+    }
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=600,
+        verify=_request_verify(_base_url(), "API"),
+    )
     resp.raise_for_status()
     return resp.json()
 

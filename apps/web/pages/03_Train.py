@@ -14,11 +14,14 @@ render_navigation_bar()
 st.title("03 - Training")
 
 
-def _items_for_split(split: str) -> list[dict]:
+_SPLIT_COUNT_LIMIT = 500  # enough for label distribution; avoids fetching 40K+ items
+
+
+def _items_for_split(split: str, limit: int = _SPLIT_COUNT_LIMIT) -> list[dict]:
     items: list[dict] = []
     offset = 0
     page_limit = 10
-    while True:
+    while len(items) < limit:
         data = api_client.list_videos(split=split, limit=page_limit, offset=offset)
         raw_items = data.get("items", []) if isinstance(data, dict) else []
         if not isinstance(raw_items, list):
@@ -94,20 +97,26 @@ def _render_status_panel(title: str, payload: Dict[str, Any]) -> None:
 col1, col2 = st.columns(2)
 with col1:
     try:
+        train_data = api_client.list_videos(split="train", limit=1, offset=0)
+        train_total = train_data.get("total", 0)
         train_items = _items_for_split("train")
         train_counts = Counter(_resolve_label(it) for it in train_items)
         st.subheader("Train Split")
-        st.metric("Total", len(train_items))
+        st.metric("Total", train_total)
+        st.caption(f"Label distribution (sample of {len(train_items)})")
         st.json(dict(train_counts))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load train split: {exc}")
 
 with col2:
     try:
+        test_data = api_client.list_videos(split="test", limit=1, offset=0)
+        test_total = test_data.get("total", 0)
         test_items = _items_for_split("test")
         test_counts = Counter((it.get("label") or "no_label") for it in test_items)
         st.subheader("Test Split")
-        st.metric("Total", len(test_items))
+        st.metric("Total", test_total)
+        st.caption(f"Label distribution (sample of {len(test_items)})")
         st.json(dict(test_counts))
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load test split: {exc}")
@@ -352,24 +361,44 @@ def _create_test_dataset() -> None:
         st.error(f"Test dataset creation failed: {exc}")
 
 
+def _create_training_dataset() -> None:
+    """Create training dataset (frame extraction) via API."""
+    if not dataset_run_id:
+        st.error("Please enter a run_ID for the dataset")
+        return
+
+    try:
+        with st.spinner(f"Creating training dataset for {dataset_run_id}..."):
+            resp = api_client.create_training_dataset(
+                run_id=dataset_run_id,
+                train_fraction=0.9,
+                split_run=True,
+                split_train_ratio=0.9,
+                dry_run=False,
+            )
+        st.success(f"✓ Training dataset created for run: {resp.get('run_id', dataset_run_id)}")
+        st.json(resp)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Training dataset creation failed: {exc}")
+
+
 dataset_col1, dataset_col2, dataset_col3 = st.columns(3)
 with dataset_col1:
-    st.markdown("**Validation Dataset**")
-    st.caption(f"Create {val_samples} images/class from AffectNet")
-    if st.button("📊 Create Validation Dataset", use_container_width=True, type="primary"):
-        _create_validation_dataset()
+    st.markdown("**Training Dataset**")
+    st.caption("Extract frames from labeled videos (train_ds + valid_ds)")
+    if st.button("🎬 Create Training Dataset", use_container_width=True, type="primary"):
+        _create_training_dataset()
 
 with dataset_col2:
+    st.markdown("**Validation Dataset**")
+    st.caption(f"Create {val_samples} images/class from AffectNet")
+    if st.button("📊 Create Validation Dataset", use_container_width=True):
+        _create_validation_dataset()
+
+with dataset_col3:
     st.markdown("**Test Dataset**")
     st.caption(f"Create {test_samples} images/class (unlabeled)")
     if st.button("🧪 Create Test Dataset", use_container_width=True):
-        _create_test_dataset()
-
-with dataset_col3:
-    st.markdown("**Create Both**")
-    st.caption("Validation + Test in sequence")
-    if st.button("📦 Create Both Datasets", use_container_width=True):
-        _create_validation_dataset()
         _create_test_dataset()
 
 st.divider()
