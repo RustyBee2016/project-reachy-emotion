@@ -101,23 +101,16 @@ def _render_train_balance_counters() -> None:
     try:
         listing = api_client.list_videos(split="train", limit=10, offset=0)
         total = listing.get("total", 0)
-        sample = [it for it in listing.get("items", []) if isinstance(it, dict)]
+        label_counts = listing.get("label_counts") or {}
     except Exception as exc:  # noqa: BLE001
         st.warning(f"Unable to load train label counters: {exc}")
         return
 
-    counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
-    for item in sample:
-        label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
-        if label in counts:
-            counts[label] += 1
-
     col_a, col_b, col_c, col_d = st.columns(4)
-    col_a.metric("Happy", counts["happy"])
-    col_b.metric("Sad", counts["sad"])
-    col_c.metric("Neutral", counts["neutral"])
+    col_a.metric("Happy", label_counts.get("happy", 0))
+    col_b.metric("Sad", label_counts.get("sad", 0))
+    col_c.metric("Neutral", label_counts.get("neutral", 0))
     col_d.metric("Total", total)
-    st.caption("Label counts from first 10 videos. Total reflects full train split.")
 
 
 def _refresh_video_metadata(current: Dict[str, Any]) -> Optional[str]:

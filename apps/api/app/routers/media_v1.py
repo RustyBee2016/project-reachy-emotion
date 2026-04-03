@@ -194,12 +194,20 @@ async def list_videos(
 
     total = len(videos)
     sliced = videos[offset : offset + limit]
-    
+
+    label_counts: dict[str, int] | None = None
+    if split == "train":
+        label_counts = {"happy": 0, "sad": 0, "neutral": 0}
+        for v in videos:
+            if v.label in label_counts:
+                label_counts[v.label] += 1
+
     data = ListVideosData(
         items=sliced,
-        pagination=PaginationMeta.from_params(total=total, limit=limit, offset=offset)
+        pagination=PaginationMeta.from_params(total=total, limit=limit, offset=offset),
+        label_counts=label_counts,
     )
-    
+
     return create_success_response(data, _get_correlation_id(request))
 
 

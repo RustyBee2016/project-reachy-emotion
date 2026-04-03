@@ -104,9 +104,13 @@ class VideoMetadata(BaseModel):
 
 class ListVideosData(BaseModel):
     """Data payload for list videos response."""
-    
+
     items: List[VideoMetadata] = Field(description="List of video metadata")
     pagination: PaginationMeta = Field(description="Pagination information")
+    label_counts: Optional[Dict[str, int]] = Field(
+        default=None,
+        description="Per-label video counts (happy, sad, neutral) when split is train.",
+    )
 
 
 class ThumbnailData(BaseModel):
