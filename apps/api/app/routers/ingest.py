@@ -144,27 +144,6 @@ class PrepareRunFramesRequest(BaseModel):
         le=1.0,
         description="Minimum OpenCV DNN face detection confidence.",
     )
-    split_run: bool = Field(
-        default=False,
-        description=(
-            "DEPRECATED: If true, move extracted frames into train_ds_<run_id>/valid_ds_<run_id> "
-            "subdirectories after extraction (90/10 split). This is a legacy fallback - "
-            "use dedicated AffectNet validation datasets instead via /api/v1/datasets/validation/create."
-        ),
-    )
-    split_train_ratio: float = Field(
-        default=0.9,
-        gt=0.0,
-        lt=1.0,
-        description="Train ratio used when split_run=true (e.g., 0.9 => 90/10 train/valid).",
-    )
-    strip_valid_labels: bool = Field(
-        default=True,
-        description=(
-            "When split_run=true, remove label prefixes from valid_ds filenames "
-            "while preserving labels in manifests."
-        ),
-    )
     persist_valid_metadata: bool = Field(
         default=False,
         description=(
@@ -193,11 +172,7 @@ class PrepareRunFramesResponse(BaseModel):
     face_crop: bool = False
     face_target_size: int = 224
     face_confidence: float = 0.6
-    split_run_applied: bool = False
     persisted_train_frames: int = 0
-    persisted_valid_frames: int = 0
-    train_ds_manifest_path: Optional[str] = None
-    valid_ds_manifest_path: Optional[str] = None
     correlation_id: Optional[str] = None
 
 
@@ -434,10 +409,8 @@ async def _persist_run_frame_metadata(
     run_id: str,
     correlation_id: str,
     idempotency_key: Optional[str],
-    split_run_applied: bool,
-    persist_valid_metadata: bool,
-) -> tuple[int, int]:
-    """Persist extracted frame metadata for train and optional valid manifests."""
+) -> int:
+    """Persist extracted frame metadata for train manifest."""
     canonical_train_manifest = config.manifests_path / f"{run_id}_train.jsonl"
     canonical_train_entries = _load_manifest_rows(canonical_train_manifest)
     if not canonical_train_entries:
@@ -448,23 +421,10 @@ async def _persist_run_frame_metadata(
         videos_root=config.videos_root,
     )
 
-    selected_train_manifest = (
-        config.manifests_path / f"{run_id}_train_ds.jsonl"
-        if split_run_applied
-        else canonical_train_manifest
-    )
-    train_entries = _load_manifest_rows(selected_train_manifest)
-    if not train_entries and split_run_applied:
-        # Fall back to canonical train manifest if split manifest was not created.
-        train_entries = canonical_train_entries
-
-    valid_entries: List[Dict[str, Any]] = []
-    if persist_valid_metadata:
-        valid_labeled_manifest = config.manifests_path / f"{run_id}_valid_ds_labeled.jsonl"
-        valid_entries = _load_manifest_rows(valid_labeled_manifest)
+    train_entries = canonical_train_entries
 
     source_paths = set()
-    for entry in train_entries + valid_entries:
+    for entry in train_entries:
         if entry.get("source_video"):
             source_paths.add(_normalize_relative_path(str(entry["source_video"]), config.videos_root))
             continue
@@ -535,15 +495,12 @@ async def _persist_run_frame_metadata(
         return payload_rows
 
     train_rows = _rows_from_entries(train_entries, "train")
-    valid_rows = _rows_from_entries(valid_entries, "valid")
 
     await db.execute(delete(ExtractedFrame).where(ExtractedFrame.run_id == run_id))
     if train_rows:
         await db.execute(insert(ExtractedFrame), train_rows)
-    if valid_rows:
-        await db.execute(insert(ExtractedFrame), valid_rows)
     await db.commit()
-    return len(train_rows), len(valid_rows)
+    return len(train_rows)
 
 
 # ============================================================================
@@ -1143,9 +1100,7 @@ async def prepare_run_frames(
 
     Expected outputs:
     - train/run/<run_id>/*.jpg (single consolidated training dataset for the run)
-    - manifests/<run_id>_train.jsonl and manifests/<run_id>_test.jsonl
-    - optional split outputs when split_run=true:
-      train/run/<run_id>/train_ds_<run_id>/ and valid_ds_<run_id>/ + split manifests
+    - manifests/<run_id>_train.jsonl
     """
     correlation_id = request.correlation_id or str(uuid.uuid4())
     try:
@@ -1198,31 +1153,14 @@ async def prepare_run_frames(
         train_manifest_path = config.manifests_path / f"{run_id}_train.jsonl"
         test_manifest_path = config.manifests_path / f"{run_id}_test.jsonl"
         train_run_root = config.videos_root / "train" / "run" / run_id
-        split_run_applied = False
-        train_ds_manifest_path: Optional[Path] = None
-        valid_ds_manifest_path: Optional[Path] = None
         persisted_train_frames = 0
-        persisted_valid_frames = 0
         if not request.dry_run:
-            if request.split_run:
-                split_result = preparer.split_run_dataset(
-                    run_id=run_id,
-                    train_ratio=request.split_train_ratio,
-                    seed=request.seed,
-                    strip_valid_labels=request.strip_valid_labels,
-                )
-                split_run_applied = True
-                train_ds_manifest_path = Path(str(split_result["train_manifest"]))
-                valid_ds_manifest_path = Path(str(split_result["valid_labeled_manifest"]))
-
-            persisted_train_frames, persisted_valid_frames = await _persist_run_frame_metadata(
+            persisted_train_frames = await _persist_run_frame_metadata(
                 db=db,
                 config=config,
                 run_id=run_id,
                 correlation_id=correlation_id,
                 idempotency_key=idempotency_key,
-                split_run_applied=split_run_applied,
-                persist_valid_metadata=bool(request.persist_valid_metadata or split_run_applied),
             )
 
         logger.info(
@@ -1233,9 +1171,7 @@ async def prepare_run_frames(
                 "train_count": result["train_count"],
                 "videos_processed": result["videos_processed"],
                 "frames_per_video": result["frames_per_video"],
-                "split_run_applied": split_run_applied,
                 "persisted_train_frames": persisted_train_frames,
-                "persisted_valid_frames": persisted_valid_frames,
                 "idempotency_key": idempotency_key,
                 "dry_run": request.dry_run,
             },
@@ -1257,11 +1193,7 @@ async def prepare_run_frames(
             face_crop=bool(result.get("face_crop", request.face_crop)),
             face_target_size=int(result.get("target_size", request.face_target_size)),
             face_confidence=float(result.get("face_confidence", request.face_confidence)),
-            split_run_applied=split_run_applied,
             persisted_train_frames=persisted_train_frames,
-            persisted_valid_frames=persisted_valid_frames,
-            train_ds_manifest_path=str(train_ds_manifest_path) if train_ds_manifest_path else None,
-            valid_ds_manifest_path=str(valid_ds_manifest_path) if valid_ds_manifest_path else None,
             correlation_id=correlation_id,
         )
     except HTTPException:

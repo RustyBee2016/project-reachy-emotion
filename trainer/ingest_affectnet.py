@@ -49,7 +49,7 @@ Output Structure:
     │   ├── sad/affectnet_*.jpg
     │   └── neutral/affectnet_*.jpg
     ├── validation/run/<run_id>/affectnet_*.jpg  # unlabeled filenames
-    └── test/affectnet_test_dataset/run<run_id>/affectnet_*.jpg  # unlabeled filenames
+    └── test/run/<run_id>/affectnet_*.jpg  # unlabeled filenames
 
 Database Integration:
     - Inserts records into Video table (duration/fps=NULL for images)
@@ -352,7 +352,7 @@ class AffectNetIngester:
         run_id: str,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Copy sampled images to test/affectnet_test_dataset/run<run_id>/ with unlabeled filenames.
+        Copy sampled images to test/run/<run_id>/ with unlabeled filenames.
 
         Args:
             sampled: Sampled annotations by emotion label
@@ -362,7 +362,7 @@ class AffectNetIngester:
         Returns:
             Tuple of (db_records, ground_truth_records)
         """
-        test_dir = self.videos_root / "test" / "affectnet_test_dataset" / f"run{run_id}"
+        test_dir = self.videos_root / "test" / run_id
         test_dir.mkdir(parents=True, exist_ok=True)
 
         db_records: List[Dict[str, Any]] = []
@@ -388,7 +388,7 @@ class AffectNetIngester:
             # Unlabeled filename (no emotion prefix)
             dst_name = f"affectnet_{idx:05d}.jpg"
             dst_path = test_dir / dst_name
-            rel_path = f"test/affectnet_test_dataset/run{run_id}/{dst_name}"
+            rel_path = f"test/{run_id}/{dst_name}"
 
             # Copy image (not move - source files remain in AffectNet directory)
             shutil.copy2(src_path, dst_path)
@@ -514,7 +514,14 @@ class AffectNetIngester:
         seed: int = 42,
     ) -> Dict[str, Any]:
         """
-        Ingest AffectNet human-annotated validation images.
+        DEPRECATED: Legacy validation set ingestion that copies to train/<label>/.
+        
+        This method is deprecated and should not be used. It incorrectly copies
+        validation images to the training directory instead of a run-scoped
+        validation directory.
+        
+        Use create_validation_dataset() instead, which creates run-scoped
+        validation datasets at /videos/validation/run/<run_id>/.
 
         Args:
             samples_per_class: Target samples per emotion class
@@ -525,7 +532,11 @@ class AffectNetIngester:
         Returns:
             Summary statistics
         """
-        logger.info("=== Ingesting AffectNet Validation Set ===")
+        logger.warning(
+            "DEPRECATED: ingest_validation_set() copies to train/<label>/ which is incorrect. "
+            "Use create_validation_dataset() instead for run-scoped validation datasets."
+        )
+        logger.info("=== Ingesting AffectNet Validation Set (LEGACY) ===")
         logger.info(f"Samples per class: {samples_per_class}")
 
         annotations_dir = self.affectnet_root / "human_annotated" / "validation_set" / "annotations"

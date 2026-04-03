@@ -1,12 +1,25 @@
 #!/usr/bin/env python3
 """
-Create balanced train/test datasets from AffectNet+ annotations.
+DEPRECATED: Legacy AffectNet dataset creation script.
 
-Filters for 3-class emotions (0=neutral, 1=happy, 2=sad), balances
-classes, splits into train and test-pool, then creates a run-specific
-test set.  Inserts DB records and generates manifests.
+This script is deprecated and should not be used. It uses incorrect directory
+paths and mixes AffectNet images with Luma synthetic videos.
 
-Usage:
+ISSUES:
+- Copies validation images to /test/validation/<emotion>/ (wrong location)
+- Copies test images to /test/<emotion>/ (wrong location)
+- Does not support run-scoped datasets
+
+REPLACEMENT:
+Use the following scripts instead:
+- trainer.ingest_affectnet validation-run  (for validation datasets)
+- trainer.manage_test_datasets create      (for test datasets)
+
+These create run-scoped datasets with correct paths:
+- /videos/validation/run/<run_id>/
+- /videos/test/<run_id>/
+
+Original Usage (DO NOT USE):
     python -m trainer.create_affectnet_datasets \
         --run-id run_0300 \
         --train-per-class 20000 \

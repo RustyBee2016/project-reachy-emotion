@@ -46,10 +46,6 @@ def _default_checkpoint_dir(config: AppConfig) -> Path:
     return config.videos_root.parent / "checkpoints" / "efficientnet_b0_3cls"
 
 
-def _affectnet_test_dataset(config: AppConfig) -> Path:
-    return config.test_path / "affectnet_test_dataset"
-
-
 def _run_dir(config: AppConfig) -> Path:
     return config.train_path / "run"
 
@@ -198,8 +194,8 @@ async def launch_training(
     - **train** — full training pipeline (train → evaluate → Gate A)
     - **validate** — evaluation-only using an existing checkpoint against the
       run's validation split (``valid_ds_<run_id>`` or ``test/``)
-    - **test** — evaluation-only against the fixed AffectNet test dataset at
-      ``/videos/test/affectnet_test_dataset``
+    - **test** — evaluation-only against the run-scoped AffectNet test dataset at
+      ``/videos/test/<run_id>``
     """
     mode = body.mode.strip().lower()
     if mode not in {"train", "validate", "test"}:
@@ -267,7 +263,7 @@ async def launch_training(
     # or we patch the config YAML on the fly.  Simpler: use an env override.
     env = {**os.environ}
     if mode == "test":
-        test_dir = body.test_data_dir or str(_affectnet_test_dataset(config))
+        test_dir = body.test_data_dir or str(config.test_path / run_id)
         env["REACHY_TEST_DATA_DIR"] = test_dir
 
     if mode == "validate" and body.test_data_dir:

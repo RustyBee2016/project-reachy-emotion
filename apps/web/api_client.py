@@ -367,10 +367,6 @@ def prepare_run_frames(
     face_crop: bool = False,
     face_target_size: int = 224,
     face_confidence: float = 0.6,
-    split_run: bool = False,
-    split_train_ratio: float = 0.9,
-    strip_valid_labels: bool = True,
-    persist_valid_metadata: bool = False,
     correlation_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -382,10 +378,6 @@ def prepare_run_frames(
         "face_crop": bool(face_crop),
         "face_target_size": int(face_target_size),
         "face_confidence": float(face_confidence),
-        "split_run": bool(split_run),
-        "split_train_ratio": split_train_ratio,
-        "strip_valid_labels": bool(strip_valid_labels),
-        "persist_valid_metadata": bool(persist_valid_metadata),
     }
     if run_id:
         payload["run_id"] = run_id
@@ -681,8 +673,6 @@ def create_training_dataset(
     *,
     run_id: Optional[str] = None,
     train_fraction: float = 0.9,
-    split_run: bool = True,
-    split_train_ratio: float = 0.9,
     face_crop: bool = False,
     face_confidence: float = 0.6,
     dry_run: bool = False,
@@ -700,10 +690,6 @@ def create_training_dataset(
         "face_crop": face_crop,
         "face_target_size": 224,
         "face_confidence": face_confidence,
-        "split_run": split_run,
-        "split_train_ratio": split_train_ratio,
-        "strip_valid_labels": True,
-        "persist_valid_metadata": split_run,
     }
     if run_id:
         payload["run_id"] = run_id

@@ -126,14 +126,6 @@ st.subheader("Manifest + Frame Extraction")
 
 if "train_run_id" not in st.session_state:
     st.session_state["train_run_id"] = ""
-if "prepare_split_run" not in st.session_state:
-    st.session_state["prepare_split_run"] = False
-if "prepare_split_train_ratio" not in st.session_state:
-    st.session_state["prepare_split_train_ratio"] = 0.9
-if "prepare_strip_valid_labels" not in st.session_state:
-    st.session_state["prepare_strip_valid_labels"] = True
-if "prepare_persist_valid_metadata" not in st.session_state:
-    st.session_state["prepare_persist_valid_metadata"] = True
 if "prepare_face_crop" not in st.session_state:
     st.session_state["prepare_face_crop"] = False
 if "prepare_face_confidence" not in st.session_state:
@@ -167,34 +159,6 @@ face_confidence = st.slider(
     key="prepare_face_confidence",
     disabled=not face_crop,
 )
-split_run = st.toggle(
-    "Split run into train_ds/valid_ds (DEPRECATED)",
-    key="prepare_split_run",
-    help="DEPRECATED: Creates 90/10 split subdirectories. Use 'Dataset Preparation' section below to create dedicated AffectNet validation datasets instead.",
-)
-split_train_ratio = st.slider(
-    "Split train ratio",
-    min_value=0.5,
-    max_value=0.95,
-    value=float(st.session_state["prepare_split_train_ratio"]),
-    step=0.05,
-    key="prepare_split_train_ratio",
-    disabled=not split_run,
-)
-strip_valid_labels = st.toggle(
-    "Strip valid_ds label prefixes",
-    key="prepare_strip_valid_labels",
-    disabled=not split_run,
-    help="Removes happy_/sad_/neutral_ prefixes from valid_ds filenames while keeping labels in manifests.",
-)
-persist_valid_metadata = st.toggle(
-    "Persist valid_ds metadata",
-    key="prepare_persist_valid_metadata",
-    disabled=not split_run,
-    help="Writes valid split frame rows to extracted_frame for run-level lineage/auditing.",
-)
-if dry_run and split_run:
-    st.caption("Dry run validates extraction only. Split/move and valid metadata persistence run when Dry run is OFF.")
 
 st.caption(
     "Source videos are read from local folders: "
@@ -223,10 +187,6 @@ def _trigger_prepare_run(*, mode: str = "inherit") -> None:
             face_crop=face_crop,
             face_target_size=224,
             face_confidence=face_confidence,
-            split_run=split_run,
-            split_train_ratio=split_train_ratio,
-            strip_valid_labels=strip_valid_labels,
-            persist_valid_metadata=bool(split_run and persist_valid_metadata),
             correlation_id=corr_id,
             idempotency_key=corr_id,
         )
@@ -362,21 +322,22 @@ def _create_test_dataset() -> None:
 
 
 def _create_training_dataset() -> None:
-    """Create training dataset (frame extraction) via API."""
+    """Create training dataset (frame extraction) via API - no split."""
     if not dataset_run_id:
         st.error("Please enter a run_ID for the dataset")
         return
 
     try:
-        with st.spinner(f"Creating training dataset for {dataset_run_id}..."):
-            resp = api_client.create_training_dataset(
+        with st.spinner(f"Extracting training frames for {dataset_run_id}..."):
+            resp = api_client.prepare_run_frames(
                 run_id=dataset_run_id,
-                train_fraction=0.9,
-                split_run=True,
-                split_train_ratio=0.9,
+                train_fraction=1.0,  # Use all videos
                 dry_run=False,
+                face_crop=False,
+                correlation_id=None,
+                idempotency_key=None,
             )
-        st.success(f"✓ Training dataset created for run: {resp.get('run_id', dataset_run_id)}")
+        st.success(f"✓ Training dataset created: {resp.get('train_count', 0)} frames in /train/run/{dataset_run_id}/")
         st.json(resp)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Training dataset creation failed: {exc}")
@@ -385,7 +346,7 @@ def _create_training_dataset() -> None:
 dataset_col1, dataset_col2, dataset_col3 = st.columns(3)
 with dataset_col1:
     st.markdown("**Training Dataset**")
-    st.caption("Extract frames from labeled videos (train_ds + valid_ds)")
+    st.caption("Extract frames from Luma videos (all in one directory)")
     if st.button("🎬 Create Training Dataset", use_container_width=True, type="primary"):
         _create_training_dataset()
 
@@ -402,13 +363,38 @@ with dataset_col3:
         _create_test_dataset()
 
 st.divider()
-st.subheader("🚀 ML Runs — EfficientNet-B0 (Frozen Backbone)")
+st.subheader("🚀 ML Runs — EfficientNet-B0")
 st.caption(
-    "Launch training, validation, or test runs using the EfficientNet-B0 model "
-    "with HSEmotion pretrained weights (`enet_b0_8_best_vgaf`). "
-    "All runs use frozen-backbone settings from `efficientnet_b0_emotion_3cls.yaml`. "
-    "Use the same run_ID as your datasets above."
+    "Launch training, validation, or test runs. Select model type to determine available operations."
 )
+
+# Model type selection
+model_type = st.selectbox(
+    "Model Type",
+    options=["Variant 1", "Variant 2", "Base Model"],
+    index=0,
+    help=(
+        "**Base Model**: HSEmotion pretrained (test only)\n\n"
+        "**Variant 1**: Base + Luma synthetic videos (train/validate/test)\n\n"
+        "**Variant 2**: Fine-tuned Variant 1 (validate/test only)"
+    ),
+    key="ml_model_type",
+)
+
+# Map display name to variant identifier
+model_variant_map = {
+    "Base Model": "base",
+    "Variant 1": "variant_1",
+    "Variant 2": "variant_2",
+}
+selected_variant = model_variant_map[model_type]
+
+# Default checkpoint paths per model type
+default_checkpoints = {
+    "base": "/media/rusty_admin/project_data/reachy_emotion/checkpoints/hsemotion/enet_b0_8_best_vgaf.pth",
+    "variant_1": "/media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls/best_model.pth",
+    "variant_2": "/media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls_finetuned/best_model.pth",
+}
 
 ml_run_id = st.text_input(
     "ML Run ID (auto-generated if empty)",
@@ -416,12 +402,19 @@ ml_run_id = st.text_input(
     key="ml_run_id_input",
 )
 ml_checkpoint = st.text_input(
-    "Checkpoint path (required for Validate/Test; defaults to best_model.pth)",
-    value="/media/rusty_admin/project_data/reachy_emotion/checkpoints/efficientnet_b0_3cls/best_model.pth",
+    "Checkpoint path (required for Validate/Test)",
+    value=default_checkpoints[selected_variant],
     key="ml_checkpoint_input",
+    help=f"Default checkpoint for {model_type}",
 )
 
-AFFECTNET_TEST_DIR = "/media/rusty_admin/project_data/reachy_emotion/videos/test/affectnet_test_dataset"
+# Display model-specific requirements
+if model_type == "Base Model":
+    st.info("ℹ️ **Base Model**: Only test evaluation available. Requires test dataset.")
+elif model_type == "Variant 1":
+    st.info("ℹ️ **Variant 1**: Full pipeline available. Requires training frames + validation + test datasets.")
+else:  # Variant 2
+    st.info("ℹ️ **Variant 2**: Validation and test available. Uses Variant 1 checkpoint as starting point.")
 
 
 def _launch_ml_run(mode: str) -> None:
@@ -430,9 +423,9 @@ def _launch_ml_run(mode: str) -> None:
         resp = api_client.launch_ml_run(
             mode=mode,
             run_id=ml_run_id or None,
-            variant="variant_1",
+            variant=selected_variant,
             checkpoint=ml_checkpoint or None,
-            test_data_dir=AFFECTNET_TEST_DIR if mode == "test" else None,
+            test_data_dir=None,  # Uses run-scoped test dataset at /test/<run_id>
         )
         st.success(f"{mode.capitalize()} run launched: {resp.get('run_id', 'unknown')}")
         st.json(resp)
@@ -451,22 +444,38 @@ def _launch_ml_run(mode: str) -> None:
             st.error(f"{mode.capitalize()} run failed to launch: {exc}")
 
 
+# Button availability based on model type
+can_train = model_type == "Variant 1"
+can_validate = model_type in ["Variant 1", "Variant 2"]
+can_test = True  # All models can be tested
+
 ml_col1, ml_col2, ml_col3 = st.columns(3)
 with ml_col1:
     st.markdown("**Training Run**")
     st.caption("Full pipeline: train → evaluate → Gate A")
-    if st.button("🚀 Start Training", use_container_width=True, type="primary"):
+    if st.button(
+        "🚀 Start Training",
+        use_container_width=True,
+        type="primary",
+        disabled=not can_train,
+        help="Only available for Variant 1" if not can_train else "Train model on Luma synthetic videos",
+    ):
         _launch_ml_run("train")
 
 with ml_col2:
     st.markdown("**Validation Run**")
     st.caption("Evaluate checkpoint on validation split")
-    if st.button("📊 Start Validation", use_container_width=True):
+    if st.button(
+        "📊 Start Validation",
+        use_container_width=True,
+        disabled=not can_validate,
+        help="Not available for Base Model" if not can_validate else "Evaluate on AffectNet validation set",
+    ):
         _launch_ml_run("validate")
 
 with ml_col3:
-    st.markdown("**Test Run (AffectNet)**")
-    st.caption(f"Evaluate on `{AFFECTNET_TEST_DIR}`")
+    st.markdown("**Test Run**")
+    st.caption("Evaluate on AffectNet test dataset")
     if st.button("🧪 Start Test", use_container_width=True):
         _launch_ml_run("test")
 
