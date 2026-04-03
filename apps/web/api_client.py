@@ -711,7 +711,7 @@ def create_training_dataset(
         url,
         headers=_headers(),
         json=payload,
-        timeout=120,
+        timeout=None,
         verify=_request_verify(_base_url(), "API"),
     )
     resp.raise_for_status()
@@ -886,7 +886,7 @@ def create_validation_dataset(
         url,
         headers=_headers(),
         json=payload,
-        timeout=600,  # 10 minute timeout for dataset creation
+        timeout=None,
         verify=_request_verify(_base_url(), "MEDIA"),
     )
     resp.raise_for_status()
@@ -922,7 +922,7 @@ def create_test_dataset(
         url,
         headers=_headers(),
         json=payload,
-        timeout=600,  # 10 minute timeout for dataset creation
+        timeout=None,
         verify=_request_verify(_base_url(), "MEDIA"),
     )
     resp.raise_for_status()
