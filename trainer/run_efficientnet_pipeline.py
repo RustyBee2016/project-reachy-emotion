@@ -34,6 +34,14 @@ import requests
 # ---------------------------------------------------------------------------
 _VARIANT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
+# Maps internal canonical run_type names → filesystem directory slugs used in
+# both the external media storage and the project-repo dashboard directories.
+_RUN_TYPE_TO_DIR: Dict[str, str] = {
+    "training": "train",
+    "validation": "validate",
+    "test": "test",
+}
+
 
 # ===========================================================================
 # Gateway Contract Client
@@ -314,14 +322,16 @@ def _normalize_run_type(run_type: str) -> str:
 # ===========================================================================
 # Artifact Directory Resolution
 # ===========================================================================
-# Organize outputs by variant/run_type/run_id hierarchy:
-#   stats/results/variant_1/training/run_0042/
-#   stats/results/variant_2/validation/run_0043/
-# This enables A/B testing and clean separation of training vs validation runs.
+# Organize full run artifacts under:
+#   <output_dir>/<run_type_dir>/<run_id>/
+# where output_dir is the external media results root
+# (e.g. /media/rusty_admin/project_data/reachy_emotion/results)
+# and run_type_dir is the short slug (train / validate / test).
 # ===========================================================================
 
-def _resolve_artifact_dir(output_dir: str, variant: str, run_type: str, run_id: str) -> Path:
-    return Path(output_dir) / variant / run_type / run_id
+def _resolve_artifact_dir(output_dir: str, run_type: str, run_id: str) -> Path:
+    run_type_dir = _RUN_TYPE_TO_DIR.get(run_type, run_type)
+    return Path(output_dir) / run_type_dir / run_id
 
 
 # ===========================================================================
@@ -329,13 +339,14 @@ def _resolve_artifact_dir(output_dir: str, variant: str, run_type: str, run_id: 
 # ===========================================================================
 # Write a JSON payload file consumed by the Streamlit dashboard (06_Dashboard.py)
 # to display Gate A metrics, confusion matrices, and artifact paths.
-# Payloads are organized under:
-#   stats/results/dashboard_runs/<variant>/<run_type>/<run_id>.json
+# Payloads are written to the project-repo dashboard directory:
+#   <dashboard_dir>/<run_type_dir>/<run_id>.json
+# e.g.  stats/results/runs/train/run_0042.json
 # ===========================================================================
 
 def _write_dashboard_run_payload(
     *,
-    output_dir: str,
+    dashboard_dir: str,
     variant: str,
     run_type: str,
     run_id: str,
@@ -344,7 +355,8 @@ def _write_dashboard_run_payload(
     gate_path: Path,
     onnx_path: Optional[str],
 ) -> Path:
-    dashboard_root = Path(output_dir) / "dashboard_runs" / variant / run_type
+    run_type_dir = _RUN_TYPE_TO_DIR.get(run_type, run_type)
+    dashboard_root = Path(dashboard_dir) / run_type_dir
     dashboard_root.mkdir(parents=True, exist_ok=True)
     dashboard_payload_path = dashboard_root / f"{run_id}.json"
     dashboard_payload = {
@@ -390,7 +402,16 @@ def main() -> int:
     parser.add_argument("--run-id", default="efficientnet_pipeline_run")
     parser.add_argument("--skip-train", action="store_true", help="Skip training and use existing checkpoint")
     parser.add_argument("--checkpoint", help="Checkpoint path when --skip-train is used")
-    parser.add_argument("--output-dir", default="stats/results")
+    parser.add_argument(
+        "--output-dir",
+        default="/media/rusty_admin/project_data/reachy_emotion/results",
+        help="Root for full run artifacts on local media storage (external to repo)",
+    )
+    parser.add_argument(
+        "--dashboard-dir",
+        default="stats/results/runs",
+        help="Project-repo directory for dashboard JSON payloads (read by 06_Dashboard.py)",
+    )
     parser.add_argument(
         "--variant",
         default="variant_1",
@@ -538,7 +559,6 @@ def main() -> int:
 
         output_dir = _resolve_artifact_dir(
             output_dir=args.output_dir,
-            variant=args.variant,
             run_type=args.run_type,
             run_id=args.run_id,
         )
@@ -584,7 +604,7 @@ def main() -> int:
             print(json.dumps({"onnx_export": export_result}, indent=2))
 
         dashboard_payload_path = _write_dashboard_run_payload(
-            output_dir=args.output_dir,
+            dashboard_dir=args.dashboard_dir,
             variant=args.variant,
             run_type=args.run_type,
             run_id=args.run_id,

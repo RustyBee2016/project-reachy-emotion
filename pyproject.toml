@@ -90,8 +90,8 @@ profile = "black"
 pythonVersion = "3.12"
 reportMissingImports = true
 reportMissingTypeStubs = false
-venvPath = "/home/rusty_admin/venvs"
-venv = "tao"
+venvPath = "/home/rusty_admin/projects/reachy_08.4.2"
+venv = "venv"
 include = ["src", "apps", "shared", "tests"]
 extraPaths = ["/media/rusty_admin/project_data/reachy_emotion"]
 

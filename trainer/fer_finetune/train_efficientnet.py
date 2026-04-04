@@ -194,6 +194,8 @@ class EfficientNetTrainer:
             frame_sampling_val="middle",
             run_id=run_id,
             frames_per_video=max(1, int(self.config.data.frames_per_video)),
+            val_dir=getattr(self.config.data, 'val_dir', None),
+            val_dataset_type=getattr(self.config.data, 'val_dataset_type', 'emotion'),
         )
         
         logger.info(f"Data loaders created: {len(self.train_loader)} train batches, "

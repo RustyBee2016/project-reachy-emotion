@@ -1,8 +1,8 @@
 """
-Configuration module for ResNet-50 emotion classifier fine-tuning.
+Configuration module for EfficientNet-B0 emotion classifier fine-tuning.
 
 Supports:
-- AffectNet + RAF-DB pre-trained weights
+- HSEmotion (enet_b0_8_best_vgaf) pre-trained weights (VGGFace2 + AffectNet)
 - Multi-stage training (frozen backbone → selective unfreezing)
 - Quality gates aligned with requirements_08.4.2.md
 """
@@ -19,21 +19,21 @@ class ModelConfig:
     """Model architecture configuration."""
     
     # Architecture
-    backbone: str = "resnet50"
-    pretrained_weights: str = "resnet50-affectnet-raf-db"  # Placeholder for AffectNet+RAF-DB weights
+    backbone: str = "efficientnet_b0"
+    pretrained_weights: str = "enet_b0_8_best_vgaf"  # HSEmotion VGGFace2 + AffectNet
     num_classes: int = 3  # Ternary: happy, sad, neutral (expandable to 8)
     input_size: int = 224
-    
+
     # Classification head
     dropout_rate: float = 0.3
     use_multi_task: bool = False  # Optional: emotions + valence/arousal
-    
+
     # Transfer learning
     freeze_backbone_epochs: int = 5
-    unfreeze_layers: List[str] = field(default_factory=lambda: ["layer4", "fc"])
-    
+    unfreeze_layers: List[str] = field(default_factory=lambda: ["blocks.5", "blocks.6", "classifier"])
+
     # Model storage path on Ubuntu 1
-    model_storage_path: str = "/media/rusty_admin/project_data/ml_models/resnet50"
+    model_storage_path: str = "/media/rusty_admin/project_data/ml_models/efficientnet_b0"
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,7 +56,8 @@ class DataConfig:
     # Paths
     data_root: str = "/media/project_data/reachy_emotion/videos"
     train_dir: str = "train"
-    val_dir: str = "test"
+    val_dir: str = "/media/rusty_admin/project_data/reachy_emotion/affectnet/consolidated/AffectNet+/human_annotated/validation_set"
+    val_dataset_type: str = "affectnet"  # "emotion" for EmotionDataset, "affectnet" for AffectNetDataset
     
     # Class mapping (binary default, expandable)
     class_names: List[str] = field(default_factory=lambda: ["happy", "sad", "neutral"])
@@ -98,6 +99,7 @@ class DataConfig:
             "data_root": self.data_root,
             "train_dir": self.train_dir,
             "val_dir": self.val_dir,
+            "val_dataset_type": self.val_dataset_type,
             "class_names": self.class_names,
             "batch_size": self.batch_size,
             "num_workers": self.num_workers,
@@ -162,7 +164,7 @@ class TrainingConfig:
     
     # MLflow tracking
     mlflow_tracking_uri: str = "file:///media/rusty_admin/project_data/reachy_emotion/mlruns"
-    mlflow_experiment_name: str = "resnet50_emotion_finetune"
+    mlflow_experiment_name: str = "efficientnet_b0_emotion_finetune"
     
     # Reproducibility
     seed: int = 42

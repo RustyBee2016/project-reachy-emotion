@@ -43,7 +43,7 @@ AFFECTNET_TEST_DIR = (
 )
 DEFAULT_CHECKPOINT = (
     "/media/rusty_admin/project_data/reachy_emotion/checkpoints/"
-    "efficientnet_b0_3cls/best_model.pth"
+    "variant_1/var1_run_0102/best_model.pth"
 )
 EFFICIENTNET_BLOCKS = [
     "blocks.0", "blocks.1", "blocks.2", "blocks.3",

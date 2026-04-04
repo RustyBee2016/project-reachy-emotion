@@ -35,8 +35,15 @@ router = APIRouter(tags=["training-control"])
 # Defaults
 # ---------------------------------------------------------------------------
 _DEFAULT_CONFIG_YAML = "trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml"
-_DEFAULT_OUTPUT_DIR = "stats/results"
+_DEFAULT_OUTPUT_DIR = "/media/rusty_admin/project_data/reachy_emotion/results"
+_DEFAULT_DASHBOARD_DIR = "stats/results/runs"
 _TRAIN_FRACTION = 0.9
+
+_RUN_TYPE_TO_DIR: dict[str, str] = {
+    "training": "train",
+    "validation": "validate",
+    "test": "test",
+}
 _VAL_FRACTION = 0.1
 _VARIANT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
@@ -248,7 +255,8 @@ async def launch_training(
         "--run-id", run_id,
         "--variant", variant,
         "--run-type", run_type,
-        "--output-dir", str(project_root / _DEFAULT_OUTPUT_DIR),
+        "--output-dir", _DEFAULT_OUTPUT_DIR,
+        "--dashboard-dir", str(project_root / _DEFAULT_DASHBOARD_DIR),
     ]
 
     # Gateway base for contract status updates
@@ -289,7 +297,7 @@ async def launch_training(
                 "config_path": config_path,
                 "train_val_split": f"{_TRAIN_FRACTION}/{_VAL_FRACTION}",
                 "run_data_path": run_data_path,
-                "artifacts_root": str(project_root / _DEFAULT_OUTPUT_DIR / variant / run_type / run_id),
+                "artifacts_root": f"{_DEFAULT_OUTPUT_DIR}/{_RUN_TYPE_TO_DIR.get(run_type, run_type)}/{run_id}",
             },
         )
         session.add(row)
@@ -300,7 +308,7 @@ async def launch_training(
         merged["mode"] = mode
         merged["run_type"] = run_type
         merged["variant"] = variant
-        merged["artifacts_root"] = str(project_root / _DEFAULT_OUTPUT_DIR / variant / run_type / run_id)
+        merged["artifacts_root"] = f"{_DEFAULT_OUTPUT_DIR}/{_RUN_TYPE_TO_DIR.get(run_type, run_type)}/{run_id}"
         row.metrics = merged
     await session.commit()
 

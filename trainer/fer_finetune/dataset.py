@@ -9,7 +9,7 @@ Handles:
 """
 
 import torch
-from torch.utils.data import Dataset, DataLoader, Subset, random_split
+from torch.utils.data import Dataset, DataLoader, Subset
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Callable, Any
 import numpy as np
@@ -467,6 +467,108 @@ class EmotionDataset(Dataset):
         return results
 
 
+class AffectNetDataset(Dataset):
+    """
+    Dataset for AffectNet validation/test images with JSON annotations.
+
+    Each image has a corresponding JSON file containing ``human-label``
+    (0=Neutral, 1=Happy, 2=Sad, 3=Surprise, …). Only target classes
+    are loaded.
+
+    Directory layout::
+
+        data_dir/
+            images/{id}.jpg
+            annotations/{id}.json   → {"human-label": int, ...}
+    """
+
+    # AffectNet human-label codes → project class names
+    AFFECTNET_CODE_TO_CLASS = {0: "neutral", 1: "happy", 2: "sad"}
+
+    def __init__(
+        self,
+        data_dir: str,
+        transform: Optional[Callable] = None,
+        class_names: Optional[List[str]] = None,
+        target_codes: Optional[Dict[int, str]] = None,
+    ):
+        self.data_dir = Path(data_dir)
+        self.images_dir = self.data_dir / "images"
+        self.annotations_dir = self.data_dir / "annotations"
+        self.transform = transform
+
+        if class_names is None:
+            class_names = ["happy", "sad", "neutral"]
+        self.class_names = class_names
+        self.class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+
+        if target_codes is None:
+            target_codes = self.AFFECTNET_CODE_TO_CLASS
+        self.target_codes = target_codes
+
+        self.samples = self._collect_samples()
+
+        logger.info(f"AffectNetDataset: {len(self.samples)} samples from {self.data_dir}")
+        counts = {}
+        for s in self.samples:
+            counts[s["class_name"]] = counts.get(s["class_name"], 0) + 1
+        logger.info(f"  Class distribution: {counts}")
+
+    def _collect_samples(self) -> List[Dict]:
+        import json as _json
+
+        samples: List[Dict] = []
+        for ann_path in sorted(self.annotations_dir.glob("*.json")):
+            with open(ann_path) as f:
+                data = _json.load(f)
+            code = data.get("human-label")
+            if code not in self.target_codes:
+                continue
+            class_name = self.target_codes[code]
+            if class_name not in self.class_to_idx:
+                continue
+            img_path = self.images_dir / f"{ann_path.stem}.jpg"
+            if not img_path.exists():
+                continue
+            samples.append({
+                "path": img_path,
+                "label": self.class_to_idx[class_name],
+                "class_name": class_name,
+            })
+        return samples
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
+        sample = self.samples[idx]
+        image = cv2.imread(str(sample["path"]))
+        if image is None:
+            raise ValueError(f"Could not load image: {sample['path']}")
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        if self.transform is not None:
+            if USE_ALBUMENTATIONS:
+                image = self.transform(image=image)["image"]
+            else:
+                from PIL import Image as PILImage
+                image = PILImage.fromarray(image)
+                image = self.transform(image)
+        else:
+            image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+
+        return image, sample["label"]
+
+    def get_class_weights(self) -> torch.Tensor:
+        class_counts = torch.zeros(len(self.class_names))
+        for sample in self.samples:
+            class_counts[sample["label"]] += 1
+        total = class_counts.sum()
+        weights = total / (len(self.class_names) * class_counts)
+        weights = weights / weights.sum() * len(self.class_names)
+        return weights
+
+
 def validate_dataset(
     data_dir: str,
     split: str = "train",
@@ -617,10 +719,12 @@ def create_dataloaders(
     frame_sampling_val: str = "middle",
     run_id: Optional[str] = None,
     frames_per_video: int = 1,
+    val_dir: Optional[str] = None,
+    val_dataset_type: str = "emotion",
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation data loaders.
-    
+
     Args:
         data_dir: Root data directory
         batch_size: Batch size
@@ -631,10 +735,17 @@ def create_dataloaders(
         frame_sampling_val: Frame sampling for validation
         run_id: Optional run_xxxx to prefer run-scoped train/test roots
         frames_per_video: Number of frames sampled per source video when using multi mode
+        val_dir: Optional explicit validation directory (e.g. AffectNet path)
+        val_dataset_type: Type of validation dataset ("emotion" or "affectnet")
 
     Returns:
         Tuple of (train_loader, val_loader)
     """
+    # --- Use explicit AffectNet validation directory when provided ---
+    use_affectnet_val = (
+        val_dir is not None and val_dataset_type == "affectnet"
+    )
+
     roots = resolve_training_data_roots(data_dir, run_id=run_id)
     data_root = Path(data_dir)
     train_manifest_path = None
@@ -651,12 +762,27 @@ def create_dataloaders(
         ]
         for candidate in candidate_train_manifests:
             if candidate.exists() and candidate.stat().st_size > 0:
+                # Verify that the manifest's paths are still valid by spot-checking
+                # the first entry. Stale manifests (e.g. after directory restructuring)
+                # would send the dataset loader to non-existent files.
+                with open(candidate) as _f:
+                    _first = _f.readline().strip()
+                if _first:
+                    import json as _json_mod
+                    _entry = _json_mod.loads(_first)
+                    _p = Path(str(_entry.get("path", "")))
+                    if not _p.is_absolute():
+                        _p = data_root / _p
+                    if not _p.exists():
+                        logger.warning(f"Manifest {candidate.name} has stale paths, skipping")
+                        continue
                 train_manifest_path = str(candidate)
                 break
-        for candidate in candidate_val_manifests:
-            if candidate.exists() and candidate.stat().st_size > 0:
-                val_manifest_path = str(candidate)
-                break
+        if not use_affectnet_val:
+            for candidate in candidate_val_manifests:
+                if candidate.exists() and candidate.stat().st_size > 0:
+                    val_manifest_path = str(candidate)
+                    break
 
     # When run-scoped roots are resolved (e.g. train_ds_run_0101/), pass the
     # directory directly and use split="" so EmotionDataset reads from the
@@ -668,80 +794,66 @@ def create_dataloaders(
         train_data_dir = data_dir
         train_split = "train"
 
-    has_dedicated_val = roots.uses_run_scoped_val or bool(val_manifest_path)
+    train_dataset = EmotionDataset(
+        data_dir=train_data_dir,
+        split=train_split,
+        transform=get_train_transforms(input_size),
+        class_names=class_names,
+        frame_sampling=frame_sampling_train,
+        frames_per_video=frames_per_video,
+        manifest_path=train_manifest_path,
+    )
 
-    # Detect default val directory that contains class subdirectories
-    # (e.g. videos/test/happy/, videos/test/sad/).  This covers the common
-    # case where --skip-train evaluates on the default test split without a
-    # run-scoped directory or manifest.
-    if not has_dedicated_val and roots.val_root.exists():
-        _cls = class_names or list(EmotionDataset.DEFAULT_CLASSES.keys())
-        if any((roots.val_root / cn).is_dir() for cn in _cls):
-            has_dedicated_val = True
-
-    if roots.uses_run_scoped_val and not val_manifest_path:
-        val_data_dir = str(roots.val_root)
-        val_split = ""
-    elif val_manifest_path:
-        val_data_dir = data_dir
-        val_split = "test"
-    elif has_dedicated_val:
-        # Default test dir with class subdirectories
-        val_data_dir = str(roots.val_root)
-        val_split = ""
-    else:
-        val_data_dir = None
-        val_split = None
-
-    # -----------------------------------------------------------------
-    # When no dedicated validation directory exists (default fallback),
-    # perform a 90/10 random split on the training data itself so that
-    # we always have a validation set during training.
-    # -----------------------------------------------------------------
-    if has_dedicated_val:
-        train_dataset = EmotionDataset(
-            data_dir=train_data_dir,
-            split=train_split,
-            transform=get_train_transforms(input_size),
-            class_names=class_names,
-            frame_sampling=frame_sampling_train,
-            frames_per_video=frames_per_video,
-            manifest_path=train_manifest_path,
-        )
-
-        val_dataset = EmotionDataset(
-            data_dir=val_data_dir,  # type: ignore[arg-type]
-            split=val_split or "",
+    if use_affectnet_val:
+        val_dataset: Dataset = AffectNetDataset(
+            data_dir=val_dir,  # type: ignore[arg-type]
             transform=get_val_transforms(input_size),
             class_names=class_names,
-            frame_sampling=frame_sampling_val,
-            frames_per_video=frames_per_video,
-            manifest_path=val_manifest_path,
         )
     else:
-        # Build a single dataset from videos/train, then split 90/10
-        full_dataset = EmotionDataset(
-            data_dir=train_data_dir,
-            split=train_split,
-            transform=get_train_transforms(input_size),
-            class_names=class_names,
-            frame_sampling=frame_sampling_train,
-            frames_per_video=frames_per_video,
-            manifest_path=train_manifest_path,
-        )
-        n_total = len(full_dataset)
-        n_val = max(1, int(n_total * 0.1))
-        n_train = n_total - n_val
-        logger.info(
-            f"No dedicated val dir — splitting train data 90/10: "
-            f"{n_train} train, {n_val} val (from {n_total} total)"
-        )
-        generator = torch.Generator().manual_seed(42)
-        train_subset, val_subset = random_split(
-            full_dataset, [n_train, n_val], generator=generator,
-        )
-        train_dataset = train_subset  # type: ignore[assignment]
-        val_dataset = val_subset  # type: ignore[assignment]
+        has_dedicated_val = roots.uses_run_scoped_val or bool(val_manifest_path)
+
+        # Detect default val directory that contains class subdirectories
+        # (e.g. videos/test/happy/, videos/test/sad/).  This covers the common
+        # case where --skip-train evaluates on the default test split without a
+        # run-scoped directory or manifest.
+        if not has_dedicated_val and roots.val_root.exists():
+            _cls = class_names or list(EmotionDataset.DEFAULT_CLASSES.keys())
+            if any((roots.val_root / cn).is_dir() for cn in _cls):
+                has_dedicated_val = True
+
+        if roots.uses_run_scoped_val and not val_manifest_path:
+            val_data_dir = str(roots.val_root)
+            val_split = ""
+        elif val_manifest_path:
+            val_data_dir = data_dir
+            val_split = "test"
+        elif has_dedicated_val:
+            # Default test dir with class subdirectories
+            val_data_dir = str(roots.val_root)
+            val_split = ""
+        else:
+            val_data_dir = None
+            val_split = None
+
+        if has_dedicated_val:
+            val_dataset = EmotionDataset(
+                data_dir=val_data_dir,  # type: ignore[arg-type]
+                split=val_split or "",
+                transform=get_val_transforms(input_size),
+                class_names=class_names,
+                frame_sampling=frame_sampling_val,
+                frames_per_video=frames_per_video,
+                manifest_path=val_manifest_path,
+            )
+        else:
+            logger.warning("No dedicated validation directory found. Validation loader will be empty.")
+            val_dataset = EmotionDataset(
+                data_dir=train_data_dir,
+                split="__empty__",
+                transform=get_val_transforms(input_size),
+                class_names=class_names,
+            )
 
     train_loader = DataLoader(
         train_dataset,

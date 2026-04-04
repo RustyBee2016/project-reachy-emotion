@@ -130,7 +130,7 @@ VARIANT_2_TEST_RESULTS = {
 }
 
 INTERPRETATION_DIR = Path(__file__).resolve().parents[3] / "stats" / "interpretations"
-DASHBOARD_RESULTS_ROOT = Path(__file__).resolve().parents[3] / "stats" / "results" / "dashboard_runs"
+DASHBOARD_RESULTS_ROOT = Path(__file__).resolve().parents[3] / "stats" / "results" / "runs"
 INTERPRETATION_FILE_MAP = {
     "Accuracy": "accuracy.md",
     "Precision (Macro)": "precision.md",
@@ -378,109 +378,85 @@ def _render_run_dashboard(payload: dict, title: str) -> None:
     st.json(payload)
 
 
-RUN_TYPE_OPTIONS = {
-    "Variant 1 Training Run": {
-        "variant": "variant_1",
-        "run_type": "training",
-        "run_id": "run_0001",
-        "fallback_payload": VARIANT_1_TRAINING_RESULTS,
-    },
-    "Variant 1 Validation Run": {
-        "variant": "variant_1",
-        "run_type": "validation",
-        "run_id": "run_0002",
-        "fallback_payload": VARIANT_1_VALIDATION_RESULTS,
-    },
-    "Variant 1 Test Run": {
-        "variant": "variant_1",
-        "run_type": "test",
-        "run_id": "run_0003",
-        "fallback_payload": VARIANT_1_TEST_RESULTS,
-    },
-    "Variant 2 Training Run": {
-        "variant": "variant_2",
-        "run_type": "training",
-        "run_id": "run_1001",
-        "fallback_payload": VARIANT_2_TRAINING_RESULTS,
-    },
-    "Variant 2 Validation Run": {
-        "variant": "variant_2",
-        "run_type": "validation",
-        "run_id": "run_1002",
-        "fallback_payload": VARIANT_2_VALIDATION_RESULTS,
-    },
-    "Variant 2 Test Run": {
-        "variant": "variant_2",
-        "run_type": "test",
-        "run_id": "run_1003",
-        "fallback_payload": VARIANT_2_TEST_RESULTS,
-    },
+RUN_TYPE_MAP: dict[str, str] = {
+    "Training Run": "train",
+    "Validation Run": "validate",
+    "Test Run": "test",
+    "Base Model Test Run": "base_model_test",
+}
+
+_RUN_TYPE_FALLBACK: dict[str, dict] = {
+    "train": TRAINING_RESULTS_PLACEHOLDER,
+    "validate": VALIDATION_RESULTS_PLACEHOLDER,
+    "test": TEST_RESULTS_PLACEHOLDER,
+    "base_model_test": TEST_RESULTS_PLACEHOLDER,
 }
 
 
-def _run_result_path(variant: str, run_type: str, run_id: str) -> Path:
-    return DASHBOARD_RESULTS_ROOT / variant / run_type / f"{run_id}.json"
+def _run_result_path(run_type_dir: str, run_id: str) -> Path:
+    return DASHBOARD_RESULTS_ROOT / run_type_dir / f"{run_id}.json"
 
 
-def _latest_run_result_path(variant: str, run_type: str) -> Path | None:
-    run_dir = DASHBOARD_RESULTS_ROOT / variant / run_type
-    if not run_dir.exists():
-        return None
-    candidates = sorted(
-        run_dir.glob("*.json"),
-        key=lambda p: (p.stat().st_mtime, p.name),
-        reverse=True,
-    )
-    return candidates[0] if candidates else None
+def _load_dashboard_payload(run_type_label: str, run_id: str) -> tuple[dict, Path | None]:
+    run_type_dir = RUN_TYPE_MAP[run_type_label]
+    fallback_payload = dict(_RUN_TYPE_FALLBACK.get(run_type_dir, TRAINING_RESULTS_PLACEHOLDER))
+    fallback_payload.setdefault("model_variant", "unknown")
+    fallback_payload["run_type"] = run_type_dir
+    fallback_payload["run_id"] = run_id or "—"
 
+    if not run_id:
+        return fallback_payload, None
 
-def _load_dashboard_payload(option_label: str) -> tuple[dict, Path | None]:
-    option = RUN_TYPE_OPTIONS[option_label]
-    variant = str(option["variant"])
-    run_type = str(option["run_type"])
-    run_id = str(option["run_id"])
-    fallback_payload = dict(option["fallback_payload"])
-    fallback_payload["model_variant"] = variant
-    fallback_payload["run_type"] = run_type
-    fallback_payload["run_id"] = run_id
-
-    result_path = _run_result_path(variant=variant, run_type=run_type, run_id=run_id)
+    result_path = _run_result_path(run_type_dir, run_id)
     if not result_path.exists():
-        latest_path = _latest_run_result_path(variant=variant, run_type=run_type)
-        if latest_path is None:
-            return fallback_payload, None
-        result_path = latest_path
+        return fallback_payload, None
 
     try:
         loaded = json.loads(result_path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
-        st.warning(f"Failed to parse dashboard run file at `{result_path}`: {exc}. Using fallback payload.")
+        st.warning(f"Failed to parse result file at `{result_path}`: {exc}. Using fallback payload.")
         return fallback_payload, None
 
     if not isinstance(loaded, dict):
-        st.warning(f"Invalid dashboard run payload in `{result_path}` (expected JSON object). Using fallback payload.")
+        st.warning(f"Invalid payload in `{result_path}` (expected JSON object). Using fallback payload.")
         return fallback_payload, None
 
-    loaded.setdefault("model_variant", variant)
-    loaded.setdefault("run_type", run_type)
+    loaded.setdefault("model_variant", "unknown")
+    loaded.setdefault("run_type", run_type_dir)
     loaded.setdefault("run_id", result_path.stem)
     return loaded, result_path
 
 
-run_type = st.selectbox(
-    "Select Run Type",
-    options=list(RUN_TYPE_OPTIONS.keys()),
-    index=0,
-)
+sel_col, id_col = st.columns([2, 3])
+with sel_col:
+    run_type_label = st.selectbox(
+        "Run Type",
+        options=list(RUN_TYPE_MAP.keys()),
+        index=0,
+        key="dashboard_run_type",
+    )
+with id_col:
+    run_id_input = st.text_input(
+        "Run ID",
+        value="",
+        placeholder="e.g. run_0042",
+        key="dashboard_run_id",
+    )
 
-selected_payload, selected_path = _load_dashboard_payload(run_type)
-selected_title = f"{run_type} Results"
+selected_payload, selected_path = _load_dashboard_payload(run_type_label, run_id_input.strip())
+selected_title = f"{run_type_label} Results"
 if selected_path is not None:
-    st.caption(f"Loaded run results from `{selected_path}`")
-else:
+    st.caption(f"Loaded from `{selected_path}`")
+elif run_id_input.strip():
     st.warning(
-        "No matching run result file found for this selection. Showing fallback placeholder payload. "
-        "Add a JSON file under `stats/results/dashboard_runs/<variant>/<run_type>/<run_id>.json`."
+        f"No result file found for run ID `{run_id_input.strip()}` "
+        f"under `stats/results/runs/{RUN_TYPE_MAP[run_type_label]}/`. "
+        "Showing fallback placeholder data."
+    )
+else:
+    st.info(
+        f"Enter a Run ID above to load saved results. "
+        f"Files are stored as `stats/results/runs/{RUN_TYPE_MAP[run_type_label]}/<run_id>.json`."
     )
 
 _render_run_dashboard(selected_payload, selected_title)
