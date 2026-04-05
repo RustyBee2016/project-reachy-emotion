@@ -22,9 +22,11 @@ Usage:
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 from trainer.fer_finetune.config import TrainingConfig, ModelConfig, DataConfig
 from trainer.fer_finetune.train_efficientnet import EfficientNetTrainer
+from trainer.save_run_artifacts import save_training_artifacts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -111,6 +113,14 @@ def main() -> int:
 
     trainer = EfficientNetTrainer(config)
     results = trainer.train(run_id=args.run_id)
+
+    save_training_artifacts(
+        results=results,
+        save_name=save_name,
+        variant="variant_1",
+        class_names=["happy", "sad", "neutral"],
+        project_root=Path(__file__).resolve().parents[1],
+    )
 
     logger.info(f"Final status: {results['status']}")
     logger.info(f"Best val F1:  {results['best_metric']:.4f}")

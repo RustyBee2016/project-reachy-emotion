@@ -1,0 +1,33 @@
+{
+  "run_id": "var2_pipe_test_01",
+  "run_type": "train",
+  "model_variant": "variant_2",
+  "status": "completed_gate_failed",
+  "best_metric": 0.5294157894736843,
+  "timestamp": "2026-04-05T19:19:36.770870+00:00",
+  "artifacts_root": "/media/rusty_admin/project_data/reachy_emotion/results/train/var2_pipe_test_01",
+  "gate_a_metrics": {
+    "f1_macro": null,
+    "balanced_accuracy": null,
+    "ece": null,
+    "brier": null,
+    "accuracy": null,
+    "precision_macro": null,
+    "recall_macro": null,
+    "confusion_matrix": null,
+    "mce": null,
+    "f1_class_0": null,
+    "f1_happy": null,
+    "f1_class_1": null,
+    "f1_sad": null,
+    "f1_class_2": null,
+    "f1_neutral": null
+  },
+  "gate_a_gates": {
+    "macro_f1": false,
+    "balanced_accuracy": false,
+    "per_class_f1": false,
+    "ece": false,
+    "brier": false
+  }
+}
