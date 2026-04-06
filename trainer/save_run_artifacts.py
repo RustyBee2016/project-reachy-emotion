@@ -54,12 +54,15 @@ def _gate_gates(gate_results: dict[str, Any], class_names: list[str]) -> dict[st
 
 def _gate_metrics(gate_results: dict[str, Any], class_names: list[str]) -> dict[str, Any]:
     """Build the gate_a_metrics dict compatible with the dashboard payload format."""
-    per_class = gate_results.get("f1_per_class", [])
+    # Extract from nested gate_a_details structure returned by trainer.train()
+    details = gate_results.get("gate_a_details", {})
+    per_class = details.get("f1_per_class", [])
+    
     metrics: dict[str, Any] = {
-        "f1_macro": gate_results.get("f1_macro"),
-        "balanced_accuracy": gate_results.get("balanced_accuracy"),
-        "ece": gate_results.get("ece"),
-        "brier": gate_results.get("brier"),
+        "f1_macro": details.get("f1_macro"),
+        "balanced_accuracy": details.get("balanced_accuracy"),
+        "ece": details.get("ece"),
+        "brier": details.get("brier"),
         # Fields not available from train() — set to 0.0 for dashboard compatibility
         "accuracy": 0.0,
         "precision_macro": 0.0,
