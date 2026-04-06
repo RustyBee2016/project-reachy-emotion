@@ -113,7 +113,8 @@ def create_app() -> FastAPI:
         version="0.08.4.3",
         root_path=config.api_root_path,
         lifespan=lifespan,
-        dependencies=[Depends(require_api_key)],
+        # Auth removed: internal endpoints (training_control, dataset_control) don't need tokens
+        # External-facing endpoints can add auth via router-level dependencies if needed
     )
 
     # CORS is enabled for the UI/gateway origins if configured.

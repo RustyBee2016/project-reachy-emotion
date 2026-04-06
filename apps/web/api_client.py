@@ -616,6 +616,52 @@ def launch_finetune_run(
 
 
 @retry_on_failure()
+def launch_variant2_finetune(
+    *,
+    checkpoint_path: str,
+    run_id: Optional[str] = None,
+    epochs: int = 30,
+    freeze_epochs: int = 5,
+    unfreeze_layers: Optional[list[str]] = None,
+    learning_rate: float = 3e-4,
+) -> Dict[str, Any]:
+    """Launch Variant 2 fine-tuning job via dedicated /api/v1/training/finetune endpoint.
+
+    Args:
+        checkpoint_path: Path to Variant 1 checkpoint to load weights from
+        run_id: Optional run identifier (auto-generated if omitted)
+        epochs: Total number of training epochs (default: 30)
+        freeze_epochs: Number of epochs to keep backbone frozen (default: 5)
+        unfreeze_layers: Backbone layers to unfreeze (default: ["blocks.5", "blocks.6", "conv_head"])
+        learning_rate: Peak learning rate for head (default: 3e-4)
+
+    Returns:
+        Response dict with run_id, status, variant, pid, and message
+    """
+    url = f"{_base_url()}/api/v1/training/finetune"
+    payload: Dict[str, Any] = {
+        "checkpoint_path": checkpoint_path,
+        "epochs": epochs,
+        "freeze_epochs": freeze_epochs,
+        "learning_rate": learning_rate,
+    }
+    if run_id:
+        payload["run_id"] = run_id
+    if unfreeze_layers:
+        payload["unfreeze_layers"] = unfreeze_layers
+
+    resp = requests.post(
+        url,
+        headers=_headers(),
+        json=payload,
+        timeout=30,
+        verify=_request_verify(_base_url(), "API"),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@retry_on_failure()
 def get_training_log(run_id: str, mode: str = "train", tail: int = 100, variant: str = "variant_1") -> str:
     """Read the tail of a training run's log file.
 

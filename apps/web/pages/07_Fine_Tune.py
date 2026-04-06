@@ -638,18 +638,26 @@ st.caption(
 def _launch_ft_run(mode: str) -> None:
     """Launch a fine-tuning, validation, or test run via the backend."""
     try:
-        overrides = _build_config_overrides()
-        # Include smoothing window in metadata (not a training param)
-        overrides.setdefault("_meta", {})["smoothing_window_k"] = int(smoothing_window)
-
-        resp = api_client.launch_finetune_run(
-            mode=mode,
-            run_id=ft_run_id or None,
-            variant="variant_2",
-            checkpoint=ft_checkpoint or None,
-            test_data_dir=AFFECTNET_TEST_DIR if mode == "test" else None,
-            config_overrides=overrides if mode == "train" else None,
-        )
+        if mode == "train":
+            # Use dedicated /api/v1/training/finetune endpoint for Variant 2 training
+            overrides = _build_config_overrides()
+            resp = api_client.launch_variant2_finetune(
+                checkpoint_path=ft_checkpoint,
+                run_id=ft_run_id or None,
+                epochs=overrides.get("num_epochs", 30),
+                freeze_epochs=overrides.get("freeze_epochs", 5),
+                unfreeze_layers=overrides.get("unfreeze_layers", ["blocks.5", "blocks.6", "conv_head"]),
+                learning_rate=overrides.get("learning_rate", 3e-4),
+            )
+        else:
+            # Use generic /api/v1/training/launch for validate/test modes
+            resp = api_client.launch_finetune_run(
+                mode=mode,
+                run_id=ft_run_id or None,
+                variant="variant_2",
+                checkpoint=ft_checkpoint or None,
+                test_data_dir=AFFECTNET_TEST_DIR if mode == "test" else None,
+            )
         st.success(f"{mode.capitalize()} run launched: {resp.get('run_id', 'unknown')}")
         st.json(resp)
     except Exception as exc:  # noqa: BLE001

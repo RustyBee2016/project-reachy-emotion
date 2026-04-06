@@ -179,6 +179,47 @@ class TrainingLaunchResponse(BaseModel):
     pid: Optional[int] = None
 
 
+class FineTuneRequest(BaseModel):
+    """Request model for Variant 2 fine-tuning endpoint."""
+    checkpoint_path: str = Field(
+        ...,
+        description="Path to Variant 1 checkpoint to load weights from.",
+    )
+    run_id: Optional[str] = Field(
+        None,
+        description="Run identifier. Auto-generated if omitted.",
+    )
+    epochs: int = Field(
+        30,
+        ge=1,
+        le=200,
+        description="Total number of training epochs.",
+    )
+    freeze_epochs: int = Field(
+        5,
+        ge=0,
+        description="Number of epochs to keep backbone frozen before unfreezing.",
+    )
+    unfreeze_layers: list[str] = Field(
+        ["blocks.5", "blocks.6", "conv_head"],
+        description="Backbone layers to unfreeze after freeze_epochs.",
+    )
+    learning_rate: float = Field(
+        3e-4,
+        gt=0,
+        description="Peak learning rate for head (backbone gets lr/10).",
+    )
+
+
+class FineTuneResponse(BaseModel):
+    """Response model for fine-tuning endpoint."""
+    status: str
+    run_id: str
+    variant: str = "variant_2"
+    message: str
+    pid: Optional[int] = None
+
+
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
@@ -350,4 +391,107 @@ async def launch_training(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "launch_failed", "message": str(exc)},
+        )
+
+
+@router.post(
+    "/api/v1/training/finetune",
+    response_model=FineTuneResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def launch_finetune(
+    body: FineTuneRequest,
+    session: AsyncSession = Depends(get_db),
+    config: AppConfig = Depends(get_config),
+) -> FineTuneResponse:
+    """Launch Variant 2 fine-tuning job with selective backbone unfreezing.
+
+    This endpoint is specifically designed for Variant 2 training, which:
+    1. Loads Variant 1 weights (model state only, no training state)
+    2. Trains with backbone frozen for `freeze_epochs`
+    3. Unfreezes specified backbone layers and continues training
+
+    The job runs as a background subprocess via `trainer/train_variant2.py`.
+    """
+    checkpoint_path = Path(body.checkpoint_path)
+    if not checkpoint_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "checkpoint_not_found", "message": f"Checkpoint not found: {checkpoint_path}"},
+        )
+
+    run_id = (body.run_id or "").strip() or _next_run_id(config)
+    project_root = _project_root()
+    python_exe = project_root / "venv" / "bin" / "python"
+    if not python_exe.exists():
+        python_exe = Path(sys.executable)
+
+    # Build command for train_variant2.py
+    cmd = [
+        str(python_exe),
+        "-m",
+        "trainer.train_variant2",
+        "--checkpoint",
+        str(checkpoint_path),
+        "--run-id",
+        run_id,
+        "--epochs",
+        str(body.epochs),
+        "--freeze-epochs",
+        str(body.freeze_epochs),
+        "--unfreeze-layers",
+        ",".join(body.unfreeze_layers),
+        "--lr",
+        str(body.learning_rate),
+    ]
+
+    # Create training_run DB record
+    now = datetime.now(timezone.utc)
+    row = models.TrainingRun(
+        run_id=run_id,
+        strategy="finetune_v2",
+        train_fraction=_TRAIN_FRACTION,
+        test_fraction=_VAL_FRACTION,
+        status="training",
+        started_at=now,
+        metrics={
+            "variant": "variant_2",
+            "checkpoint": str(checkpoint_path),
+            "epochs": body.epochs,
+            "freeze_epochs": body.freeze_epochs,
+            "unfreeze_layers": body.unfreeze_layers,
+            "learning_rate": body.learning_rate,
+        },
+        config={"checkpoint": str(checkpoint_path), "epochs": body.epochs, "freeze_epochs": body.freeze_epochs},
+    )
+    session.add(row)
+    await session.commit()
+
+    try:
+        logger.info("Launching Variant 2 fine-tuning: %s", " ".join(cmd))
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(project_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        logger.info("Fine-tuning job started: run_id=%s, pid=%d", run_id, proc.pid)
+
+        return FineTuneResponse(
+            status="started",
+            run_id=run_id,
+            variant="variant_2",
+            message=f"Fine-tuning job launched (pid={proc.pid}). Checkpoints will be saved to /checkpoints/variant_2/{run_id}/",
+            pid=proc.pid,
+        )
+
+    except Exception as exc:
+        logger.error("Failed to launch fine-tuning run %s: %s", run_id, exc, exc_info=True)
+        row.status = "failed"
+        row.error_message = str(exc)
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "finetune_launch_failed", "message": str(exc)},
         )
