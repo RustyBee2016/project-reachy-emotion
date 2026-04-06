@@ -60,15 +60,15 @@ def _gate_metrics(gate_results: dict[str, Any], class_names: list[str]) -> dict[
         "balanced_accuracy": gate_results.get("balanced_accuracy"),
         "ece": gate_results.get("ece"),
         "brier": gate_results.get("brier"),
-        # Fields not available from train() — included as None for dashboard compatibility
-        "accuracy": None,
-        "precision_macro": None,
-        "recall_macro": None,
-        "confusion_matrix": None,
-        "mce": None,
+        # Fields not available from train() — set to 0.0 for dashboard compatibility
+        "accuracy": 0.0,
+        "precision_macro": 0.0,
+        "recall_macro": 0.0,
+        "confusion_matrix": [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+        "mce": 0.0,
     }
     for i, cls in enumerate(class_names):
-        val = per_class[i] if i < len(per_class) else None
+        val = per_class[i] if i < len(per_class) else 0.0
         metrics[f"f1_class_{i}"] = val
         metrics[f"f1_{cls}"] = val
     return metrics
