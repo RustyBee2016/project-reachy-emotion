@@ -573,110 +573,72 @@ class AffectNetIngester:
             "timestamp": timestamp,
         }
 
-    def _copy_images_to_validation(
+    def _copy_images_from_pool(
         self,
-        sampled: Dict[str, List[AffectNetAnnotation]],
-        images_dir: Path,
+        sampled_paths: Dict[str, List[Path]],
         run_id: str,
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
-        Copy sampled images to validation/run/<run_id>/ with unlabeled filenames.
+        Copy sampled images from pool into validation/run/<run_id>/{class}/.
+
+        Images are copied (not moved) so the pool remains intact for future runs.
 
         Args:
-            sampled: Sampled annotations by emotion label
-            images_dir: Source directory containing AffectNet images
+            sampled_paths: Image paths by class, sampled from the pool
             run_id: Run identifier for validation dataset
 
         Returns:
-            Tuple of (db_records, ground_truth_records)
+            List of records for the manifest
         """
-        validation_dir = self.videos_root / "validation" / "run" / run_id
-        validation_dir.mkdir(parents=True, exist_ok=True)
+        records: List[Dict[str, Any]] = []
 
-        db_records: List[Dict[str, Any]] = []
-        ground_truth: List[Dict[str, Any]] = []
+        for class_name, paths in sampled_paths.items():
+            class_dir = self.videos_root / "validation" / "run" / run_id / class_name
+            class_dir.mkdir(parents=True, exist_ok=True)
 
-        # Flatten all samples and shuffle for unlabeled ordering
-        all_samples: List[Tuple[str, AffectNetAnnotation]] = []
-        for label, anns in sampled.items():
-            for ann in anns:
-                all_samples.append((label, ann))
+            for src_path in paths:
+                dst_path = class_dir / src_path.name
+                if not dst_path.exists():
+                    shutil.copy2(src_path, dst_path)
 
-        rng = random.Random(42)  # Fixed seed for consistent ordering
-        rng.shuffle(all_samples)
+                file_size = dst_path.stat().st_size
+                sha256 = hashlib.sha256(dst_path.read_bytes()).hexdigest()
+                rel_path = f"validation/run/{run_id}/{class_name}/{src_path.name}"
 
-        logger.info(f"Copying {len(all_samples)} images to validation/run/{run_id}/...")
+                records.append({
+                    "file_path": rel_path,
+                    "label": class_name,
+                    "sha256": sha256,
+                    "size_bytes": file_size,
+                    "source": "affectnet_pool",
+                })
 
-        for idx, (label, ann) in enumerate(all_samples):
-            src_path = images_dir / f"{ann.image_id}.jpg"
-            if not src_path.exists():
-                logger.warning(f"Image not found: {src_path}")
-                continue
+            logger.info(f"  {class_name}: {len(paths)} images copied")
 
-            # Unlabeled filename (no emotion prefix)
-            dst_name = f"affectnet_{idx:05d}.jpg"
-            dst_path = validation_dir / dst_name
-            rel_path = f"validation/run/{run_id}/{dst_name}"
-
-            # Copy image (not move - source files remain in AffectNet directory)
-            shutil.copy2(src_path, dst_path)
-
-            # Read image for metadata
-            img = cv2.imread(str(dst_path))
-            if img is None:
-                logger.warning(f"Failed to read copied image: {dst_path}")
-                continue
-
-            height, width = img.shape[:2]
-            file_size = dst_path.stat().st_size
-            sha256 = hashlib.sha256(dst_path.read_bytes()).hexdigest()
-
-            # DB record (split='validation', label=NULL for unlabeled validation)
-            db_records.append({
-                "file_path": rel_path,
-                "label": None,  # NULL for unlabeled validation split
-                "sha256": sha256,
-                "size_bytes": file_size,
-                "width": width,
-                "height": height,
-                "metadata": ann.to_metadata_dict(),
-            })
-
-            # Ground truth record (separate manifest)
-            ground_truth.append({
-                "file_path": rel_path,
-                "label": label,
-                "affectnet_id": ann.image_id,
-                "soft_label": ann.soft_label,
-                "confidence": ann.confidence,
-                "subset": ann.subset,
-                "valence": ann.valence,
-                "arousal": ann.arousal,
-                "age": ann.age,
-                "gender": ann.gender,
-            })
-
-        logger.info(f"Copied {len(db_records)} validation images")
-        return db_records, ground_truth
+        return records
 
     def create_validation_dataset(
         self,
         *,
         run_id: str,
-        samples_per_class: int = 500,
-        min_confidence: float = 0.6,
-        max_subset: int = 1,
+        samples_per_class: int = 200,
         seed: Optional[int] = None,
+        pool_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Create run-scoped validation dataset from AffectNet validation_set.
+        Create run-scoped validation dataset by sampling from the pool.
+
+        Copies a random sample of images from the pre-built pool
+        (validation/affectnet_pool/{happy,sad,neutral}/) into a run-scoped
+        directory (validation/run/<run_id>/{happy,sad,neutral}/).
+
+        The pool must be created first by running setup_affectnet_pool.py.
 
         Args:
-            run_id: Run identifier (e.g., 'run_0001')
+            run_id: Run identifier (e.g., 'run_0103')
             samples_per_class: Target samples per emotion class
-            min_confidence: Minimum soft-label confidence
-            max_subset: Maximum subset difficulty
-            seed: Random seed (defaults to 142 + run_number for non-overlap with test)
+            seed: Random seed (auto-generated from run_id if omitted)
+            pool_dir: Override path to pool directory
 
         Returns:
             Summary statistics
@@ -684,60 +646,60 @@ class AffectNetIngester:
         logger.info(f"=== Creating Validation Dataset for {run_id} ===")
         logger.info(f"Samples per class: {samples_per_class}")
 
-        # Auto-generate seed from run_id if not provided (offset from test seed)
+        # Auto-generate seed from run_id if not provided
         if seed is None:
             try:
                 run_num = int(run_id.split('_')[1])
-                seed = 142 + run_num  # Different offset than test (42 + run_num)
+                seed = 142 + run_num
             except (IndexError, ValueError):
                 seed = 142
 
         logger.info(f"Random seed: {seed}")
 
-        # Always use human-annotated validation_set for validation datasets
-        annotations_dir = self.affectnet_root / "human_annotated" / "validation_set" / "annotations"
-        images_dir = self.affectnet_root / "human_annotated" / "validation_set" / "images"
+        # Resolve pool directory
+        pool_root = Path(pool_dir) if pool_dir else self.videos_root / "validation" / "affectnet_pool"
+        class_names = ["happy", "sad", "neutral"]
 
-        if not annotations_dir.exists():
-            raise ValueError(f"Annotations directory not found: {annotations_dir}")
-        if not images_dir.exists():
-            raise ValueError(f"Images directory not found: {images_dir}")
+        # Collect available images from pool
+        available: Dict[str, List[Path]] = {}
+        for class_name in class_names:
+            class_pool = pool_root / class_name
+            if not class_pool.exists():
+                raise ValueError(
+                    f"Pool directory not found: {class_pool}. "
+                    "Run 'python -m trainer.setup_affectnet_pool' first."
+                )
+            available[class_name] = sorted(class_pool.glob("*.jpg"))
+            logger.info(f"  Pool {class_name}: {len(available[class_name])} images available")
 
-        filtered = self._filter_annotations(
-            annotations_dir,
-            min_confidence=min_confidence,
-            max_subset=max_subset,
-        )
+        # Balanced random sample from pool
+        rng = random.Random(seed)
+        sampled_paths: Dict[str, List[Path]] = {}
+        for class_name in class_names:
+            pool_images = available[class_name]
+            n = min(samples_per_class, len(pool_images))
+            if n < samples_per_class:
+                logger.warning(
+                    f"Only {len(pool_images)} images available for {class_name} "
+                    f"(requested {samples_per_class})"
+                )
+            sampled_paths[class_name] = rng.sample(pool_images, n)
 
-        sampled = self._balanced_sample(
-            filtered,
-            samples_per_class=samples_per_class,
-            seed=seed,
-        )
+        # Copy into run-scoped class subdirectories
+        logger.info(f"Copying to validation/run/{run_id}/...")
+        records = self._copy_images_from_pool(sampled_paths, run_id)
 
-        # Copy to validation/<run_id>/ with unlabeled filenames
-        db_records, ground_truth = self._copy_images_to_validation(
-            sampled,
-            images_dir,
-            run_id,
-        )
-
-        # Write DB ingestion manifest
-        db_manifest_path = self.manifests_root / f"{run_id}_validation_ingestion.jsonl"
-        self._write_manifest(db_records, db_manifest_path)
-
-        # Write ground truth manifest (separate from DB)
-        gt_manifest_path = self.manifests_root / f"{run_id}_validation_labels.jsonl"
-        self._write_manifest(ground_truth, gt_manifest_path)
+        # Write manifest for audit/reproducibility
+        manifest_path = self.manifests_root / f"{run_id}_validation.jsonl"
+        self._write_manifest(records, manifest_path)
 
         return {
             "run_id": run_id,
             "split": "validation",
-            "source": "human_annotated_validation_set",
-            "total_samples": len(db_records),
-            "samples_per_class": {label: len(anns) for label, anns in sampled.items()},
-            "db_manifest_path": str(db_manifest_path),
-            "ground_truth_path": str(gt_manifest_path),
+            "source": "affectnet_pool",
+            "total_samples": len(records),
+            "samples_per_class": {name: len(sampled_paths[name]) for name in class_names},
+            "manifest_path": str(manifest_path),
             "seed": seed,
         }
 

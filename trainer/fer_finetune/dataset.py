@@ -810,6 +810,17 @@ def create_dataloaders(
             transform=get_val_transforms(input_size),
             class_names=class_names,
         )
+    elif val_dir is not None and val_dataset_type == "emotion":
+        # Explicit validation directory with class subdirectories
+        # (e.g. validation/run/run_0103/{happy,sad,neutral}/)
+        val_dataset = EmotionDataset(
+            data_dir=val_dir,
+            split="",
+            transform=get_val_transforms(input_size),
+            class_names=class_names,
+            frame_sampling=frame_sampling_val,
+            frames_per_video=frames_per_video,
+        )
     else:
         has_dedicated_val = roots.uses_run_scoped_val or bool(val_manifest_path)
 

@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
 Variant 1 training: HSEmotion EfficientNet-B0 with backbone frozen,
-training only a new 3-class head on run_0100 synthetic data.
-Validated against AffectNet validation set (3-class: happy, sad, neutral).
+training only a new 3-class head on run_XXXX synthetic data.
+Validated against a run-scoped AffectNet validation dataset
+(randomly sampled from the pool per run).
 
 The backbone weights are never modified — only the classification head
 (1280 → 3) learns from the synthetic data.  Backbone unfreezing is
 reserved for Variant 2 fine-tuning via apps/web/pages/07_Fine_Tune.py.
+
+Prerequisites:
+    1. Run setup_affectnet_pool.py once to create the pool + test split
+    2. Run ingest_affectnet validation-run --run-id <run_id> to create
+       the run-scoped validation dataset
 
 Usage:
     # 5-epoch smoke test (default)
@@ -37,14 +43,16 @@ logger = logging.getLogger(__name__)
 
 # ---------- paths ----------------------------------------------------------
 TRAIN_DATA_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos"
-AFFECTNET_VAL_DIR = (
-    "/media/rusty_admin/project_data/reachy_emotion/affectnet/"
-    "consolidated/AffectNet+/human_annotated/validation_set"
-)
+VALIDATION_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos/validation/run"
 BASE_CHECKPOINT_DIR = "/media/rusty_admin/project_data/reachy_emotion/checkpoints"
 
 
-def build_config(epochs: int, lr: float, checkpoint_dir: str) -> TrainingConfig:
+def _resolve_val_dir(run_id: str) -> str:
+    """Build the run-scoped validation directory path."""
+    return f"{VALIDATION_ROOT}/{run_id}"
+
+
+def build_config(epochs: int, lr: float, checkpoint_dir: str, val_dir: str) -> TrainingConfig:
     return TrainingConfig(
         model=ModelConfig(
             backbone="efficientnet_b0",
@@ -57,8 +65,8 @@ def build_config(epochs: int, lr: float, checkpoint_dir: str) -> TrainingConfig:
         ),
         data=DataConfig(
             data_root=TRAIN_DATA_ROOT,
-            val_dir=AFFECTNET_VAL_DIR,
-            val_dataset_type="affectnet",
+            val_dir=val_dir,
+            val_dataset_type="emotion",
             class_names=["happy", "sad", "neutral"],
             batch_size=32,
             num_workers=4,
@@ -99,15 +107,16 @@ def main() -> int:
 
     save_name = f"var1_{args.run_id}"
     checkpoint_dir = f"{BASE_CHECKPOINT_DIR}/variant_1/{save_name}"
+    val_dir = _resolve_val_dir(args.run_id)
 
-    config = build_config(epochs=args.epochs, lr=args.lr, checkpoint_dir=checkpoint_dir)
+    config = build_config(epochs=args.epochs, lr=args.lr, checkpoint_dir=checkpoint_dir, val_dir=val_dir)
 
     logger.info("=" * 60)
-    logger.info("Variant 1 Training — frozen backbone + AffectNet validation")
+    logger.info("Variant 1 Training — frozen backbone + run-scoped validation")
     logger.info(f"  Run ID:      {args.run_id}  →  saves as {save_name}")
     logger.info(f"  Epochs: {args.epochs}  LR: {args.lr}")
     logger.info(f"  Train data:  {TRAIN_DATA_ROOT}/train/run/{args.run_id}")
-    logger.info(f"  Val data:    {AFFECTNET_VAL_DIR}")
+    logger.info(f"  Val data:    {val_dir}")
     logger.info(f"  Checkpoint:  {checkpoint_dir}")
     logger.info("=" * 60)
 

@@ -36,11 +36,12 @@ _EXTERNAL_RESULTS_ROOT = "/media/rusty_admin/project_data/reachy_emotion/results
 
 def _gate_gates(gate_results: dict[str, Any], class_names: list[str]) -> dict[str, bool]:
     """Derive per-threshold pass/fail flags from gate_results."""
-    f1_macro = gate_results.get("f1_macro", 0.0)
-    bal_acc = gate_results.get("balanced_accuracy", 0.0)
-    per_class = gate_results.get("f1_per_class", [])
-    ece = gate_results.get("ece", 1.0)
-    brier = gate_results.get("brier", 1.0)
+    details = gate_results.get("gate_a_details", {})
+    f1_macro = details.get("f1_macro", 0.0)
+    bal_acc = details.get("balanced_accuracy", 0.0)
+    per_class = details.get("f1_per_class", [])
+    ece = details.get("ece", 1.0)
+    brier = details.get("brier", 1.0)
 
     per_class_pass = all(f >= _GATE_THRESHOLDS["per_class_f1"] for f in per_class) if per_class else False
     return {

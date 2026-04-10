@@ -48,12 +48,14 @@ logger = logging.getLogger(__name__)
 
 # ---------- paths ----------------------------------------------------------
 TRAIN_DATA_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos"
-AFFECTNET_VAL_DIR = (
-    "/media/rusty_admin/project_data/reachy_emotion/affectnet/"
-    "consolidated/AffectNet+/human_annotated/validation_set"
-)
+VALIDATION_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos/validation/run"
 BASE_CHECKPOINT_DIR = "/media/rusty_admin/project_data/reachy_emotion/checkpoints"
 DEFAULT_UNFREEZE_LAYERS = ["blocks.5", "blocks.6", "conv_head"]
+
+
+def _resolve_val_dir(run_id: str) -> str:
+    """Build the run-scoped validation directory path."""
+    return f"{VALIDATION_ROOT}/{run_id}"
 
 
 def build_config(
@@ -62,6 +64,7 @@ def build_config(
     freeze_epochs: int,
     unfreeze_layers: list[str],
     checkpoint_dir: str,
+    val_dir: str,
 ) -> TrainingConfig:
     return TrainingConfig(
         model=ModelConfig(
@@ -75,8 +78,8 @@ def build_config(
         ),
         data=DataConfig(
             data_root=TRAIN_DATA_ROOT,
-            val_dir=AFFECTNET_VAL_DIR,
-            val_dataset_type="affectnet",
+            val_dir=val_dir,
+            val_dataset_type="emotion",
             class_names=["happy", "sad", "neutral"],
             batch_size=32,
             num_workers=4,
@@ -173,6 +176,15 @@ def main() -> int:
             "Add blocks.3,blocks.4 for deeper adaptation (risk: catastrophic forgetting)."
         ),
     )
+    parser.add_argument(
+        "--val-run-id",
+        default=None,
+        dest="val_run_id",
+        help=(
+            "Run ID for the validation dataset (e.g. run_0103). "
+            "Defaults to --run-id if not specified."
+        ),
+    )
     args = parser.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -182,6 +194,8 @@ def main() -> int:
 
     unfreeze_layers = [lyr.strip() for lyr in args.unfreeze_layers.split(",") if lyr.strip()]
     save_dir = f"{BASE_CHECKPOINT_DIR}/variant_2/{args.run_id}"
+    val_run_id = args.val_run_id or args.run_id
+    val_dir = _resolve_val_dir(val_run_id)
 
     config = build_config(
         epochs=args.epochs,
@@ -189,6 +203,7 @@ def main() -> int:
         freeze_epochs=args.freeze_epochs,
         unfreeze_layers=unfreeze_layers,
         checkpoint_dir=save_dir,
+        val_dir=val_dir,
     )
 
     logger.info("=" * 60)
@@ -197,7 +212,7 @@ def main() -> int:
     logger.info(f"  Run ID:             {args.run_id}")
     logger.info(f"  Epochs: {args.epochs}  LR: {args.lr}")
     logger.info(f"  Freeze epochs: {args.freeze_epochs}  →  Unfreeze: {unfreeze_layers}")
-    logger.info(f"  Val data:    {AFFECTNET_VAL_DIR}")
+    logger.info(f"  Val data:    {val_dir}")
     logger.info(f"  Checkpoint:  {save_dir}")
     logger.info("=" * 60)
 

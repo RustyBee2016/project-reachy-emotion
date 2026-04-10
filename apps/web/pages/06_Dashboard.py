@@ -355,17 +355,23 @@ def _render_run_dashboard(payload: dict, title: str) -> None:
     variant_label = payload.get("model_variant", "unknown")
     st.write(f"Run ID: `{payload.get('run_id', 'unknown')}` — Model Variant: `{variant_label}`")
 
+    def _safe_float(val: object) -> float:
+        try:
+            return float(val)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0.0
+
     top_cols = st.columns(5)
-    top_cols[0].metric("Accuracy", f"{float(metrics.get('accuracy', 0.0)):.4f}")
-    top_cols[1].metric("Precision (Macro)", f"{float(metrics.get('precision_macro', 0.0)):.4f}")
-    top_cols[2].metric("Recall (Macro)", f"{float(metrics.get('recall_macro', 0.0)):.4f}")
-    top_cols[3].metric("F1 (Macro)", f"{float(metrics.get('f1_macro', 0.0)):.4f}")
-    top_cols[4].metric("Balanced Accuracy", f"{float(metrics.get('balanced_accuracy', 0.0)):.4f}")
+    top_cols[0].metric("Accuracy", f"{_safe_float(metrics.get('accuracy')):.4f}")
+    top_cols[1].metric("Precision (Macro)", f"{_safe_float(metrics.get('precision_macro')):.4f}")
+    top_cols[2].metric("Recall (Macro)", f"{_safe_float(metrics.get('recall_macro')):.4f}")
+    top_cols[3].metric("F1 (Macro)", f"{_safe_float(metrics.get('f1_macro')):.4f}")
+    top_cols[4].metric("Balanced Accuracy", f"{_safe_float(metrics.get('balanced_accuracy')):.4f}")
 
     cal_cols = st.columns(3)
-    cal_cols[0].metric("ECE", f"{float(metrics.get('ece', 0.0)):.6f}")
-    cal_cols[1].metric("Brier", f"{float(metrics.get('brier', 0.0)):.6f}")
-    cal_cols[2].metric("MCE", f"{float(metrics.get('mce', 0.0)):.6f}")
+    cal_cols[0].metric("ECE", f"{_safe_float(metrics.get('ece')):.6f}")
+    cal_cols[1].metric("Brier", f"{_safe_float(metrics.get('brier')):.6f}")
+    cal_cols[2].metric("MCE", f"{_safe_float(metrics.get('mce')):.6f}")
 
     detail_cols = st.columns(2)
     with detail_cols[0]:
