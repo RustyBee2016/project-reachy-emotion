@@ -841,8 +841,6 @@ def main():
         help="Run identifier (e.g., run_0001)"
     )
     val_run_parser.add_argument("--samples-per-class", type=int, default=500)
-    val_run_parser.add_argument("--min-confidence", type=float, default=0.6)
-    val_run_parser.add_argument("--max-subset", type=int, default=1, choices=[0, 1, 2])
     val_run_parser.add_argument("--seed", type=int, help="Random seed (auto-generated if omitted)")
     
     # Test set creation
@@ -918,8 +916,6 @@ def main():
             result = ingester.create_validation_dataset(
                 run_id=args.run_id,
                 samples_per_class=args.samples_per_class,
-                min_confidence=args.min_confidence,
-                max_subset=args.max_subset,
                 seed=args.seed,
             )
         elif args.command == "test":
