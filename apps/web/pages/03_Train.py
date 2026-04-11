@@ -166,33 +166,33 @@ def _trigger_prepare_run(*, mode: str = "inherit") -> None:
         st.error(f"Frame extraction failed: {exc}")
 
 
-action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
-with action_col1:
-    if st.button("Rebuild Manifests", use_container_width=True):
-        try:
-            resp = api_client.rebuild_manifest()
-            st.success("Manifest rebuild requested.")
-            st.json(resp)
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Manifest rebuild failed: {exc}")
-
-with action_col2:
-    if st.button("Prepare 10-Frame Run", use_container_width=True):
-        _trigger_prepare_run(mode="inherit")
-
-with action_col3:
-    if st.button("Manual Validate Plan", use_container_width=True):
-        _trigger_prepare_run(mode="dry_run")
-
-with action_col4:
-    if st.button("Manual Execute Live", use_container_width=True):
-        _trigger_prepare_run(mode="live")
-
-with action_col5:
-    if st.button("Generate New Run ID", use_container_width=True):
-        st.session_state["pending_generated_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
-        st.session_state["generated_run_id_notice"] = True
-        st.rerun()
+# action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
+# with action_col1:
+#     if st.button("Rebuild Manifests", use_container_width=True):
+#         try:
+#             resp = api_client.rebuild_manifest()
+#             st.success("Manifest rebuild requested.")
+#             st.json(resp)
+#         except Exception as exc:  # noqa: BLE001
+#             st.error(f"Manifest rebuild failed: {exc}")
+#
+# with action_col2:
+#     if st.button("Prepare 10-Frame Run", use_container_width=True):
+#         _trigger_prepare_run(mode="inherit")
+#
+# with action_col3:
+#     if st.button("Manual Validate Plan", use_container_width=True):
+#         _trigger_prepare_run(mode="dry_run")
+#
+# with action_col4:
+#     if st.button("Manual Execute Live", use_container_width=True):
+#         _trigger_prepare_run(mode="live")
+#
+# with action_col5:
+#     if st.button("Generate New Run ID", use_container_width=True):
+#         st.session_state["pending_generated_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
+#         st.session_state["generated_run_id_notice"] = True
+#         st.rerun()
 
 st.divider()
 st.subheader("📦 Dataset Preparation")
@@ -289,9 +289,9 @@ def _create_training_dataset() -> None:
         with st.spinner(f"Extracting training frames for {dataset_run_id}..."):
             resp = api_client.prepare_run_frames(
                 run_id=dataset_run_id,
-                train_fraction=1.0,  # Use all videos
                 dry_run=False,
-                face_crop=False,
+                face_crop=True,
+                face_confidence=float(face_confidence),
                 correlation_id=None,
                 idempotency_key=None,
             )
