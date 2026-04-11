@@ -361,7 +361,6 @@ def rebuild_manifest(
 def prepare_run_frames(
     *,
     run_id: Optional[str] = None,
-    train_fraction: float = 0.7,
     seed: Optional[int] = None,
     dry_run: bool = False,
     face_crop: bool = False,
@@ -373,7 +372,6 @@ def prepare_run_frames(
     """Trigger run-scoped frame extraction (10 random frames per train video)."""
     url = f"{_base_url()}/api/v1/ingest/prepare-run-frames"
     payload: Dict[str, Any] = {
-        "train_fraction": train_fraction,
         "dry_run": bool(dry_run),
         "face_crop": bool(face_crop),
         "face_target_size": int(face_target_size),

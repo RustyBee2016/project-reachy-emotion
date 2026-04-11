@@ -15,6 +15,8 @@ st.title("03 - Training")
 
 
 _SPLIT_COUNT_LIMIT = 500  # enough for label distribution; avoids fetching 40K+ items
+_FACE_CONFIDENCE_OPTIONS = [0.45, 0.55, 0.65]
+_DEFAULT_FACE_CONFIDENCE = 0.55
 
 
 def _items_for_split(split: str, limit: int = _SPLIT_COUNT_LIMIT) -> list[dict]:
@@ -99,10 +101,6 @@ st.subheader("Manifest + Frame Extraction")
 
 if "train_run_id" not in st.session_state:
     st.session_state["train_run_id"] = ""
-if "prepare_face_crop" not in st.session_state:
-    st.session_state["prepare_face_crop"] = False
-if "prepare_face_confidence" not in st.session_state:
-    st.session_state["prepare_face_confidence"] = 0.6
 if "pending_generated_run_id" in st.session_state:
     # Apply pending run-id updates before the text_input widget is created.
     st.session_state["train_run_id"] = st.session_state.pop("pending_generated_run_id")
@@ -110,32 +108,20 @@ if st.session_state.pop("generated_run_id_notice", False):
     st.info("Generated run ID. Leave empty to auto-generate the next run_xxxx on the backend.")
 
 run_id = st.text_input("Run ID (run_xxxx, optional)", key="train_run_id")
-sample_fraction = st.slider(
-    "Train fraction (compat metadata)",
-    min_value=0.1,
-    max_value=1.0,
-    value=0.8,
-    step=0.1,
-)
 dry_run = st.toggle("Dry run", value=True)
-face_crop = st.toggle(
-    "Enable face-crop extraction (OpenCV DNN)",
-    key="prepare_face_crop",
-    help="Detect faces with OpenCV DNN, crop to face ROI, resize to 224x224, and skip frames without faces.",
-)
-face_confidence = st.slider(
+face_confidence = st.selectbox(
     "Face detection confidence",
-    min_value=0.3,
-    max_value=0.95,
-    value=float(st.session_state["prepare_face_confidence"]),
-    step=0.05,
-    key="prepare_face_confidence",
-    disabled=not face_crop,
+    options=_FACE_CONFIDENCE_OPTIONS,
+    index=_FACE_CONFIDENCE_OPTIONS.index(_DEFAULT_FACE_CONFIDENCE),
+    format_func=lambda v: f"{v:.2f}",
 )
 
 st.caption(
     "Source videos are read from local folders: "
     "`videos/train/happy`, `videos/train/sad`, `videos/train/neutral`."
+)
+st.caption(
+    "Face-cropping is always enabled with selectable confidence."
 )
 
 
@@ -155,11 +141,10 @@ def _trigger_prepare_run(*, mode: str = "inherit") -> None:
         corr_id = str(uuid.uuid4())
         resp = api_client.prepare_run_frames(
             run_id=run_id or None,
-            train_fraction=sample_fraction,
             dry_run=effective_dry_run,
-            face_crop=face_crop,
+            face_crop=True,
             face_target_size=224,
-            face_confidence=face_confidence,
+            face_confidence=float(face_confidence),
             correlation_id=corr_id,
             idempotency_key=corr_id,
         )
@@ -181,33 +166,33 @@ def _trigger_prepare_run(*, mode: str = "inherit") -> None:
         st.error(f"Frame extraction failed: {exc}")
 
 
-action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
-with action_col1:
-    if st.button("Rebuild Manifests", use_container_width=True):
-        try:
-            resp = api_client.rebuild_manifest()
-            st.success("Manifest rebuild requested.")
-            st.json(resp)
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Manifest rebuild failed: {exc}")
-
-with action_col2:
-    if st.button("Prepare 10-Frame Run", use_container_width=True):
-        _trigger_prepare_run(mode="inherit")
-
-with action_col3:
-    if st.button("Manual Validate Plan", use_container_width=True):
-        _trigger_prepare_run(mode="dry_run")
-
-with action_col4:
-    if st.button("Manual Execute Live", use_container_width=True):
-        _trigger_prepare_run(mode="live")
-
-with action_col5:
-    if st.button("Generate New Run ID", use_container_width=True):
-        st.session_state["pending_generated_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
-        st.session_state["generated_run_id_notice"] = True
-        st.rerun()
+# action_col1, action_col2, action_col3, action_col4, action_col5 = st.columns(5)
+# with action_col1:
+#     if st.button("Rebuild Manifests", use_container_width=True):
+#         try:
+#             resp = api_client.rebuild_manifest()
+#             st.success("Manifest rebuild requested.")
+#             st.json(resp)
+#         except Exception as exc:  # noqa: BLE001
+#             st.error(f"Manifest rebuild failed: {exc}")
+#
+# with action_col2:
+#     if st.button("Prepare 10-Frame Run", use_container_width=True):
+#         _trigger_prepare_run(mode="inherit")
+#
+# with action_col3:
+#     if st.button("Manual Validate Plan", use_container_width=True):
+#         _trigger_prepare_run(mode="dry_run")
+#
+# with action_col4:
+#     if st.button("Manual Execute Live", use_container_width=True):
+#         _trigger_prepare_run(mode="live")
+#
+# with action_col5:
+#     if st.button("Generate New Run ID", use_container_width=True):
+#         st.session_state["pending_generated_run_id"] = f"run_{(uuid.uuid4().int % 10000):04d}"
+#         st.session_state["generated_run_id_notice"] = True
+#         st.rerun()
 
 st.divider()
 st.subheader("📦 Dataset Preparation")
@@ -304,9 +289,9 @@ def _create_training_dataset() -> None:
         with st.spinner(f"Extracting training frames for {dataset_run_id}..."):
             resp = api_client.prepare_run_frames(
                 run_id=dataset_run_id,
-                train_fraction=1.0,  # Use all videos
                 dry_run=False,
-                face_crop=False,
+                face_crop=True,
+                face_confidence=float(face_confidence),
                 correlation_id=None,
                 idempotency_key=None,
             )
