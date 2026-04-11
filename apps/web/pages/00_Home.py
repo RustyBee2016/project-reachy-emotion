@@ -4,6 +4,7 @@ import sys
 import uuid
 from collections import Counter
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -98,13 +99,43 @@ def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[s
 
 
 def _render_train_balance_counters() -> None:
-    try:
-        listing = api_client.list_videos(split="train", limit=10, offset=0)
-        total = listing.get("total", 0)
-        label_counts = listing.get("label_counts") or {}
-    except Exception as exc:  # noqa: BLE001
-        st.warning(f"Unable to load train label counters: {exc}")
+    videos_root_candidates = []
+    env_videos_root = os.getenv("REACHY_VIDEOS_ROOT")
+    if env_videos_root:
+        videos_root_candidates.append(Path(env_videos_root))
+    videos_root_candidates.extend(
+        [
+            Path("/media/rusty_admin/project_data/reachy_emotion/videos"),
+            Path("/media/project_data/reachy_emotion/videos"),
+            Path("/mnt/videos"),
+        ]
+    )
+
+    videos_root: Optional[Path] = None
+    for candidate in videos_root_candidates:
+        if candidate.exists():
+            videos_root = candidate
+            break
+
+    if videos_root is None:
+        st.warning("Unable to load train label counters: videos root not found.")
         return
+
+    train_root = videos_root / "train"
+    label_counts: Dict[str, int] = {"happy": 0, "sad": 0, "neutral": 0}
+    video_exts = {".mp4", ".avi", ".mov", ".mkv", ".mpeg", ".mpg", ".mpeg4", ".webm"}
+
+    for label in label_counts:
+        class_dir = train_root / label
+        if not class_dir.exists():
+            continue
+        label_counts[label] = sum(
+            1
+            for path in class_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in video_exts
+        )
+
+    total = sum(label_counts.values())
 
     col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("Happy", label_counts.get("happy", 0))

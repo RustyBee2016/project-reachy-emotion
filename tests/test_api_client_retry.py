@@ -199,7 +199,7 @@ class TestV1EndpointUsage:
     @patch("requests.post")
     def test_prepare_run_frames_uses_v1_ingest_endpoint(self, mock_post):
         mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok", "run_id": "run_0001"})
-        api_client.prepare_run_frames(run_id="run_0001", train_fraction=0.8, seed=42, dry_run=True)
+        api_client.prepare_run_frames(run_id="run_0001", seed=42, dry_run=True)
         call_args = mock_post.call_args
         assert "/api/v1/ingest/prepare-run-frames" in call_args[0][0]
         assert call_args[1]["json"]["run_id"] == "run_0001"
@@ -224,7 +224,7 @@ class TestV1EndpointUsage:
     @patch("requests.post")
     def test_prepare_run_frames_uses_v1_ingest_endpoint(self, mock_post):
         mock_post.return_value = Mock(status_code=200, json=lambda: {"status": "ok", "run_id": "run_0001"})
-        api_client.prepare_run_frames(run_id="run_0001", train_fraction=0.8, seed=42)
+        api_client.prepare_run_frames(run_id="run_0001", seed=42)
         call_args = mock_post.call_args
         assert "/api/v1/ingest/prepare-run-frames" in call_args[0][0]
         assert call_args[1]["json"]["run_id"] == "run_0001"

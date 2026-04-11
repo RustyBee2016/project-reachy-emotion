@@ -197,26 +197,47 @@ def _normalize_emotion_label(raw_label: object, file_path: object) -> Optional[s
 
 
 def _render_train_balance_counters() -> None:
-    try:
-        listing = list_videos_api(split="train", limit=10, offset=0)
-        total = listing.get("total", 0)
-        sample = [it for it in listing.get("items", []) if isinstance(it, dict)]
-    except Exception as exc:  # noqa: BLE001
-        st.warning(f"Unable to load train label counters: {exc}")
+    videos_root_candidates = []
+    env_videos_root = os.getenv("REACHY_VIDEOS_ROOT")
+    if env_videos_root:
+        videos_root_candidates.append(Path(env_videos_root))
+    videos_root_candidates.extend(
+        [
+            Path("/media/rusty_admin/project_data/reachy_emotion/videos"),
+            Path("/media/project_data/reachy_emotion/videos"),
+            Path("/mnt/videos"),
+        ]
+    )
+
+    videos_root: Optional[Path] = None
+    for candidate in videos_root_candidates:
+        if candidate.exists():
+            videos_root = candidate
+            break
+
+    if videos_root is None:
+        st.warning("Unable to load train label counters: videos root not found.")
         return
 
+    train_root = videos_root / "train"
     counts = Counter({"happy": 0, "sad": 0, "neutral": 0})
-    for item in sample:
-        label = _normalize_emotion_label(item.get("label"), item.get("file_path"))
-        if label in counts:
-            counts[label] += 1
+    video_exts = {".mp4", ".avi", ".mov", ".mkv", ".mpeg", ".mpg", ".mpeg4", ".webm"}
+
+    for label in counts:
+        class_dir = train_root / label
+        if not class_dir.exists():
+            continue
+        counts[label] = sum(
+            1
+            for path in class_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in video_exts
+        )
 
     col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("Happy", counts["happy"])
     col_b.metric("Sad", counts["sad"])
     col_c.metric("Neutral", counts["neutral"])
-    col_d.metric("Total", total)
-    st.caption("Label counts from first 10 videos. Total reflects full train split.")
+    col_d.metric("Total", counts["happy"] + counts["sad"] + counts["neutral"])
 
 # Load environment variables from the Streamlit app directory before access
 WEB_ENV_PATH = Path(__file__).resolve().parent / ".env"
