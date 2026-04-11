@@ -57,36 +57,38 @@ class TestDatasetPreparer:
         
         result = preparer.prepare_training_dataset(
             run_id='run_0001',
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=42
         )
         
         # Check result structure
         assert 'run_id' in result
         assert 'train_count' in result
+        assert 'val_count' in result
         assert 'test_count' in result
         assert 'seed' in result
         assert 'dataset_hash' in result
         
-        # 30 source videos x 10 frames each
-        assert result['train_count'] == 300
+        # 30 source videos x 10 frames each = 300, split 75/25
+        assert result['train_count'] + result['val_count'] == 300
+        assert result['val_count'] > 0
         assert result['test_count'] == 0
         assert result['frames_per_video'] == 10
         assert result['seed'] == 42
     
-    def test_train_test_split_ratio(self, temp_dataset_dir):
-        """Test train/test split maintains correct ratio."""
+    def test_train_val_split_ratio(self, temp_dataset_dir):
+        """Test train/val split preserves total frame count."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
-        # train_fraction is compatibility-only in frame extraction mode
-        for fraction in [0.6, 0.7, 0.8]:
+        for idx, vf in enumerate([0.1, 0.25, 0.4]):
             result = preparer.prepare_training_dataset(
-                run_id=f'run_{int(fraction * 10):04d}',
-                train_fraction=fraction,
+                run_id=f'run_{idx + 1:04d}',
+                val_fraction=vf,
                 seed=42
             )
 
-            assert result['train_count'] == 300
+            assert result['train_count'] + result['val_count'] == 300
+            assert result['val_count'] > 0
             assert result['test_count'] == 0
     
     def test_reproducibility_with_seed(self, temp_dataset_dir):
@@ -95,19 +97,19 @@ class TestDatasetPreparer:
         
         result1 = preparer.prepare_training_dataset(
             run_id='run_0001',
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=42
         )
         
         result2 = preparer.prepare_training_dataset(
             run_id='run_0002',
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=42
         )
         
         # Should have same frame counts
         assert result1['train_count'] == result2['train_count']
-        assert result1['test_count'] == result2['test_count']
+        assert result1['val_count'] == result2['val_count']
     
     def test_different_seeds_produce_different_splits(self, temp_dataset_dir):
         """Test different seeds produce different splits."""
@@ -115,43 +117,45 @@ class TestDatasetPreparer:
         
         result1 = preparer.prepare_training_dataset(
             run_id='run_0001',
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=42
         )
         
         result2 = preparer.prepare_training_dataset(
             run_id='run_0002',
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=99
         )
         
         # Counts should be same across seeds in fixed-size extraction
         assert result1['train_count'] == result2['train_count']
-        assert result1['test_count'] == result2['test_count']
+        assert result1['val_count'] == result2['val_count']
     
     def test_manifest_generation(self, temp_dataset_dir):
         """Test JSONL manifest files are generated correctly."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         run_id = 'run_0001'
-        preparer.prepare_training_dataset(
+        result = preparer.prepare_training_dataset(
             run_id=run_id,
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=42
         )
         
         # Check manifest files exist
         train_manifest = preparer.manifests_path / f'{run_id}_train.jsonl'
         test_manifest = preparer.manifests_path / f'{run_id}_test.jsonl'
+        val_manifest = preparer.manifests_path / f'{run_id}_val.jsonl'
         
         assert train_manifest.exists()
         assert test_manifest.exists()
+        assert val_manifest.exists()
         
-        # Check manifest content
+        # Check manifest content — train manifest has only training entries
         with open(train_manifest) as f:
             train_lines = f.readlines()
         
-        assert len(train_lines) == 300
+        assert len(train_lines) == result['train_count']
         
         # Check each line is valid JSON
         for line in train_lines:
@@ -192,12 +196,12 @@ class TestDatasetPreparer:
         assert hash1 != hash2
     
     def test_frames_extracted_to_run_dirs(self, temp_dataset_dir):
-        """Test frames are extracted only to consolidated run directories."""
+        """Test frames are extracted and split into train + validation dirs."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         run_id = 'run_0001'
-        preparer.prepare_training_dataset(
+        result = preparer.prepare_training_dataset(
             run_id=run_id,
-            train_fraction=0.7,
+            val_fraction=0.25,
             seed=42
         )
 
@@ -206,17 +210,31 @@ class TestDatasetPreparer:
             label_run_dir = preparer.train_path / label / run_id
             assert not label_run_dir.exists()
 
-        # Single consolidated run directory: /train/run/<run_id>
-        consolidated_dir = preparer.train_runs_path / run_id
-        assert consolidated_dir.exists()
-        assert len(list(consolidated_dir.glob('*.jpg'))) == 300
-        assert not any(path.is_dir() for path in consolidated_dir.iterdir())
+        # Training directory: /train/run/<run_id>/{happy,sad,neutral}
+        train_dir = preparer.train_runs_path / run_id
+        assert train_dir.exists()
+        for label in ['happy', 'sad', 'neutral']:
+            assert (train_dir / label).is_dir()
+        train_count = len(list(train_dir.rglob('*.jpg')))
+
+        # Validation directory: /validation/run/<run_id>/{happy,sad,neutral}
+        val_dir = preparer.validation_runs_path / run_id
+        assert val_dir.exists()
+        for label in ['happy', 'sad', 'neutral']:
+            assert (val_dir / label).is_dir()
+        val_count = len(list(val_dir.rglob('*.jpg')))
+
+        # Total frames preserved, split matches result dict
+        assert train_count + val_count == 300
+        assert train_count == result['train_count']
+        assert val_count == result['val_count']
+        assert val_count > 0
 
     def test_split_run_dataset_moves_and_writes_manifests(self, temp_dataset_dir):
         """Test run split moves files into train/valid subfolders and emits manifests."""
         preparer = DatasetPreparer(str(temp_dataset_dir))
         run_id = "run_0001"
-        preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
+        preparer.prepare_training_dataset(run_id=run_id, seed=42)
 
         result = preparer.split_run_dataset(run_id, train_ratio=0.9, seed=42)
 
@@ -252,7 +270,6 @@ class TestDatasetPreparer:
         with pytest.raises(ValueError, match='missing source videos'):
             preparer.prepare_training_dataset(
                 run_id='run_0001',
-                train_fraction=0.7,
                 seed=42
             )
         
@@ -279,7 +296,6 @@ class TestDatasetPreparer:
         with pytest.raises(ValueError, match='missing source videos'):
             preparer.prepare_training_dataset(
                 run_id='run_0001',
-                train_fraction=0.7,
                 seed=42
             )
         
@@ -294,7 +310,7 @@ class TestManifestFormat:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         run_id = 'run_0001'
-        preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
+        preparer.prepare_training_dataset(run_id=run_id, seed=42)
         
         manifest_file = preparer.manifests_path / f'{run_id}_train.jsonl'
         
@@ -311,7 +327,7 @@ class TestManifestFormat:
         preparer = DatasetPreparer(str(temp_dataset_dir))
         
         run_id = 'run_0001'
-        preparer.prepare_training_dataset(run_id=run_id, train_fraction=0.7, seed=42)
+        preparer.prepare_training_dataset(run_id=run_id, seed=42)
         
         manifest_file = preparer.manifests_path / f'{run_id}_train.jsonl'
         

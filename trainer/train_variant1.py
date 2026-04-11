@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""
-Variant 1 training: HSEmotion EfficientNet-B0 with backbone frozen,
+"""Variant 1 training: HSEmotion EfficientNet-B0 with backbone frozen,
 training only a new 3-class head on run_XXXX synthetic data.
-Validated against a run-scoped AffectNet validation dataset
-(randomly sampled from the pool per run).
+Validated against a held-out split (25 %) of the same synthetic frames.
 
 The backbone weights are never modified — only the classification head
 (1280 → 3) learns from the synthetic data.  Backbone unfreezing is
 reserved for Variant 2 fine-tuning via apps/web/pages/07_Fine_Tune.py.
 
+Dataset creation (handled automatically by DatasetPreparer):
+    1. Extracts frames from videos/train/{happy,sad,neutral}/*.mp4
+    2. Splits extracted frames 75 % train / 25 % validation
+    3. Training frames  → videos/train/run/<run_id>/{happy,sad,neutral}/
+    4. Validation frames → videos/validation/run/<run_id>/{happy,sad,neutral}/
+    Both V1 and V2 share the same validation dataset for a given run_id.
+
 Prerequisites:
-    1. Run setup_affectnet_pool.py once to create the pool + test split
-    2. Run ingest_affectnet validation-run --run-id <run_id> to create
-       the run-scoped validation dataset
+    Source videos must exist in videos/train/{happy,sad,neutral}/.
 
 Usage:
     # 5-epoch smoke test (default)
@@ -32,6 +35,7 @@ from pathlib import Path
 
 from trainer.fer_finetune.config import TrainingConfig, ModelConfig, DataConfig
 from trainer.fer_finetune.train_efficientnet import EfficientNetTrainer
+from trainer.prepare_dataset import DatasetPreparer
 from trainer.save_run_artifacts import save_training_artifacts
 
 logging.basicConfig(
@@ -103,11 +107,44 @@ def main() -> int:
         default="run_0102",
         help="Training run ID whose synthetic data is used (default: run_0102)",
     )
+    parser.add_argument(
+        "--skip-prepare",
+        action="store_true",
+        help="Skip dataset preparation (use existing extracted frames + manifest)",
+    )
     args = parser.parse_args()
 
     save_name = f"var1_{args.run_id}"
     checkpoint_dir = f"{BASE_CHECKPOINT_DIR}/variant_1/{save_name}"
     val_dir = _resolve_val_dir(args.run_id)
+
+    # ------------------------------------------------------------------
+    # Dataset preparation: extract per-run frames from source videos
+    # ------------------------------------------------------------------
+    # Creates train/run/<run_id>/{happy,sad,neutral}/ with extracted
+    # JPEG frames (10 per video) and a JSONL manifest under manifests/.
+    # Without this step, training falls back to raw source videos which
+    # is non-reproducible and cannot be inspected.
+    # ------------------------------------------------------------------
+    run_train_dir = Path(TRAIN_DATA_ROOT) / "train" / "run" / args.run_id
+    if not args.skip_prepare:
+        logger.info("Preparing per-run training dataset …")
+        preparer = DatasetPreparer(base_path=TRAIN_DATA_ROOT)
+        prep_result = preparer.prepare_training_dataset(run_id=args.run_id)
+        logger.info(
+            f"  Extracted {prep_result['train_count']} train + "
+            f"{prep_result['val_count']} val frames from "
+            f"{prep_result['videos_processed']} videos  "
+            f"(hash: {prep_result['dataset_hash'][:12]}…)"
+        )
+    else:
+        if not run_train_dir.exists():
+            logger.error(
+                f"--skip-prepare used but {run_train_dir} does not exist. "
+                f"Run without --skip-prepare first."
+            )
+            return 1
+        logger.info(f"Skipping dataset preparation — using existing {run_train_dir}")
 
     config = build_config(epochs=args.epochs, lr=args.lr, checkpoint_dir=checkpoint_dir, val_dir=val_dir)
 
@@ -115,7 +152,7 @@ def main() -> int:
     logger.info("Variant 1 Training — frozen backbone + run-scoped validation")
     logger.info(f"  Run ID:      {args.run_id}  →  saves as {save_name}")
     logger.info(f"  Epochs: {args.epochs}  LR: {args.lr}")
-    logger.info(f"  Train data:  {TRAIN_DATA_ROOT}/train/run/{args.run_id}")
+    logger.info(f"  Train data:  {run_train_dir}")
     logger.info(f"  Val data:    {val_dir}")
     logger.info(f"  Checkpoint:  {checkpoint_dir}")
     logger.info("=" * 60)

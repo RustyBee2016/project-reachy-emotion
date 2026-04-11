@@ -433,6 +433,11 @@ class EfficientNetTrainer:
             'balanced_accuracy': balanced_acc,
             'ece': ece,
             'brier': brier,
+            'accuracy': metrics.get('accuracy', 0.0),
+            'precision_macro': metrics.get('precision_macro', 0.0),
+            'recall_macro': metrics.get('recall_macro', 0.0),
+            'confusion_matrix': metrics.get('confusion_matrix', []),
+            'mce': metrics.get('mce', 0.0),
         }
         
         logger.info(f"Gate A: {'PASSED' if gate_a_passed else 'FAILED'}")

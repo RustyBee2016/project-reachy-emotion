@@ -60,6 +60,7 @@ class DatasetPreparer:
         self.manifests_path = self.base_path / 'manifests'
         self.train_path = self.base_path / 'train'
         self.train_runs_path = self.train_path / 'run'
+        self.validation_runs_path = self.base_path / 'validation' / 'run'
         self.test_path = self.base_path / 'test'
         self._face_net = None
         
@@ -67,6 +68,7 @@ class DatasetPreparer:
         self.manifests_path.mkdir(exist_ok=True)
         self.train_path.mkdir(exist_ok=True)
         self.train_runs_path.mkdir(parents=True, exist_ok=True)
+        self.validation_runs_path.mkdir(parents=True, exist_ok=True)
         self.test_path.mkdir(exist_ok=True)
 
     # -----------------------------------------------------------------------
@@ -212,23 +214,34 @@ class DatasetPreparer:
     def prepare_training_dataset(
         self,
         run_id: Optional[str] = None,
-        train_fraction: float = 0.7,
+        val_fraction: float = 0.25,
         seed: Optional[int] = None,
         face_crop: bool = False,
         target_size: int = 224,
         face_confidence: float = 0.6,
+        train_fraction: Optional[float] = None,  # deprecated — ignored, kept for backward compat
     ) -> Dict[str, Any]:
         """
-        Prepare frame-based training dataset for a run.
-        
+        Prepare frame-based training AND validation datasets for a run.
+
+        Extracts frames from source videos in train/{happy,sad,neutral}/,
+        then splits them into training (1 - val_fraction) and validation
+        (val_fraction) sets.  Training frames are stored under
+        train/run/<run_id>/{happy,sad,neutral}/ and validation frames under
+        validation/run/<run_id>/{happy,sad,neutral}/.
+
+        Both Variant 1 and Variant 2 share the same validation dataset
+        for a given run_id.
+
         Args:
             run_id: Run identifier (run_xxxx). Auto-generated if omitted.
-            train_fraction: Deprecated compatibility argument (ignored)
+            val_fraction: Fraction of extracted frames reserved for validation
+                          (default 0.25 = 25 %)
             seed: Random seed for reproducibility
             face_crop: Enable DNN face detection/cropping before saving frames
             target_size: Output frame size (square)
             face_confidence: Minimum face detection confidence
-        
+
         Returns:
             Dictionary with run metadata
         """
@@ -241,7 +254,7 @@ class DatasetPreparer:
         source_videos = self._collect_source_videos()
         self._validate_source_videos(source_videos)
 
-        consolidated_frames = self._extract_run_frames(
+        all_frames = self._extract_run_frames(
             run_id=normalized_run_id,
             rng=rng,
             source_videos=source_videos,
@@ -250,20 +263,30 @@ class DatasetPreparer:
             face_confidence=face_confidence,
         )
 
-        # Test preparation is intentionally empty for this frame-first train run workflow.
+        # Split extracted frames into train (75 %) and validation (25 %)
+        train_frames, val_frames = self._split_train_val(
+            run_id=normalized_run_id,
+            rng=rng,
+            val_fraction=val_fraction,
+            all_entries=all_frames,
+        )
+
+        # Generate manifests for both splits
         test_entries: List[Dict[str, str]] = []
-        self._generate_manifests(normalized_run_id, consolidated_frames, test_entries)
+        self._generate_manifests(normalized_run_id, train_frames, test_entries)
+        self._generate_val_manifest(normalized_run_id, val_frames)
 
         dataset_hash = self.calculate_dataset_hash(run_id=normalized_run_id)
-        
+
         return {
             'run_id': normalized_run_id,
-            'train_count': len(consolidated_frames),
+            'train_count': len(train_frames),
+            'val_count': len(val_frames),
             'test_count': len(test_entries),
             'videos_processed': sum(len(videos) for videos in source_videos.values()),
             'frames_per_video': self.FRAMES_PER_VIDEO,
             'seed': seed,
-            'train_fraction': train_fraction,
+            'val_fraction': val_fraction,
             'dataset_hash': dataset_hash,
             'face_crop': bool(face_crop),
             'target_size': int(target_size),
@@ -273,11 +296,12 @@ class DatasetPreparer:
     def plan_training_dataset(
         self,
         run_id: Optional[str] = None,
-        train_fraction: float = 0.7,
+        val_fraction: float = 0.25,
         seed: Optional[int] = None,
         face_crop: bool = False,
         target_size: int = 224,
         face_confidence: float = 0.6,
+        train_fraction: Optional[float] = None,  # deprecated — ignored, kept for backward compat
     ) -> Dict[str, Any]:
         """Validate and estimate run outputs without writing frames/manifests."""
         normalized_run_id = self.resolve_run_id(run_id)
@@ -288,14 +312,17 @@ class DatasetPreparer:
         self._validate_source_videos(source_videos)
 
         videos_processed = sum(len(videos) for videos in source_videos.values())
+        total_frames = videos_processed * self.FRAMES_PER_VIDEO
+        est_val = max(1, round(total_frames * val_fraction / len(self.EMOTIONS))) * len(self.EMOTIONS)
         return {
             "run_id": normalized_run_id,
-            "train_count": videos_processed * self.FRAMES_PER_VIDEO,
+            "train_count": total_frames - est_val,
+            "val_count": est_val,
             "test_count": 0,
             "videos_processed": videos_processed,
             "frames_per_video": self.FRAMES_PER_VIDEO,
             "seed": seed,
-            "train_fraction": train_fraction,
+            "val_fraction": val_fraction,
             "dataset_hash": "",
             "dry_run": True,
             "face_crop": bool(face_crop),
@@ -408,11 +435,13 @@ class DatasetPreparer:
 
         for label in self.EMOTIONS:
             videos = source_videos.get(label, [])
+            label_dir = run_root / label
+            label_dir.mkdir(parents=True, exist_ok=True)
             for video_path in videos:
                 frame_entries = self._extract_random_frames_from_video(
                     video_path=video_path,
                     num_frames=self.FRAMES_PER_VIDEO,
-                    output_dir=run_root,
+                    output_dir=label_dir,
                     label=label,
                     rng=rng,
                     face_crop=face_crop,
@@ -422,6 +451,70 @@ class DatasetPreparer:
                 extracted.extend(frame_entries)
 
         return extracted
+
+    # -----------------------------------------------------------------------
+    # Train / Validation Split
+    # -----------------------------------------------------------------------
+    # After all frames are extracted into train/run/<run_id>/<label>/,
+    # this method moves val_fraction of them to
+    # validation/run/<run_id>/<label>/.  The split is per-class so that
+    # each emotion retains its proportional representation in both sets.
+    # -----------------------------------------------------------------------
+    def _split_train_val(
+        self,
+        *,
+        run_id: str,
+        rng: random.Random,
+        val_fraction: float,
+        all_entries: List[Dict[str, Any]],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Split extracted frames into train and validation sets.
+
+        Moves ``val_fraction`` of frames from
+        ``train/run/<run_id>/<label>/`` to
+        ``validation/run/<run_id>/<label>/``.
+
+        Returns:
+            (train_entries, val_entries)
+        """
+        val_run_dir = self.validation_runs_path / run_id
+        if val_run_dir.exists():
+            shutil.rmtree(val_run_dir)
+
+        train_entries: List[Dict[str, Any]] = []
+        val_entries: List[Dict[str, Any]] = []
+
+        # Group entries by label
+        by_label: Dict[str, List[Dict[str, Any]]] = {}
+        for entry in all_entries:
+            label = entry["label"]
+            by_label.setdefault(label, []).append(entry)
+
+        for label in self.EMOTIONS:
+            entries = by_label.get(label, [])
+            rng.shuffle(entries)
+            n_val = max(1, round(len(entries) * val_fraction)) if entries else 0
+            val_batch = entries[:n_val]
+            train_batch = entries[n_val:]
+
+            # Create validation class directory and move frames
+            val_label_dir = val_run_dir / label
+            val_label_dir.mkdir(parents=True, exist_ok=True)
+            for entry in val_batch:
+                src = Path(entry["path"])
+                dst = val_label_dir / src.name
+                shutil.move(str(src), str(dst))
+                entry["path"] = str(dst)
+                val_entries.append(entry)
+
+            train_entries.extend(train_batch)
+
+        logger.info(
+            "Split %d frames → %d train + %d val (%.0f%% val) for %s",
+            len(all_entries), len(train_entries), len(val_entries),
+            val_fraction * 100, run_id,
+        )
+        return train_entries, val_entries
 
     def _extract_random_frames_from_video(
         self,
@@ -557,6 +650,33 @@ class DatasetPreparer:
                 ):
                     if optional_key in video:
                         entry[optional_key] = video[optional_key]
+                f.write(json.dumps(entry) + '\n')
+
+    def _generate_val_manifest(
+        self,
+        run_id: str,
+        val_entries: List[Dict[str, Any]],
+    ) -> None:
+        """Generate JSONL manifest for the validation split."""
+        val_manifest_path = self.manifests_path / f'{run_id}_val.jsonl'
+        with open(val_manifest_path, 'w') as f:
+            for frame in val_entries:
+                entry = {
+                    'video_id': frame['video_id'],
+                    'path': frame['path'],
+                    'label': frame['label'],
+                    'source_video': frame.get('source_video'),
+                }
+                for optional_key in (
+                    "face_bbox",
+                    "face_confidence",
+                    "face_detector",
+                    "face_crop",
+                    "target_size",
+                    "source_frame_shape",
+                ):
+                    if optional_key in frame:
+                        entry[optional_key] = frame[optional_key]
                 f.write(json.dumps(entry) + '\n')
 
     def _load_run_train_entry_map(self, run_id: str) -> Dict[str, Dict[str, Any]]:

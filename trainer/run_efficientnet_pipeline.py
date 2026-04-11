@@ -254,6 +254,8 @@ def _collect_predictions(
     num_workers: int,
     run_id: Optional[str] = None,
     frames_per_video: int = 1,
+    val_dir: Optional[str] = None,
+    val_dataset_type: str = "emotion",
 ) -> Dict[str, Any]:
     import numpy as np
     import torch
@@ -273,6 +275,8 @@ def _collect_predictions(
         frame_sampling_val="middle",
         run_id=run_id,
         frames_per_video=frames_per_video,
+        val_dir=val_dir,
+        val_dataset_type=val_dataset_type,
     )
 
     y_true: List[int] = []
@@ -437,6 +441,11 @@ def main() -> int:
         action="store_true",
         help="Fail pipeline when contract update calls fail",
     )
+    parser.add_argument(
+        "--skip-prepare",
+        action="store_true",
+        help="Skip per-run dataset preparation (use existing extracted frames)",
+    )
     args = parser.parse_args()
     args.variant = _normalize_variant(args.variant)
     args.run_type = _normalize_run_type(args.run_type)
@@ -449,10 +458,14 @@ def main() -> int:
 
     config = TrainingConfig.from_yaml(args.config)
 
-    # Allow env-var override of the evaluation data root (used by test mode)
+    # Allow env-var override of the evaluation data directory (used by test mode).
+    # Set val_dir directly so create_dataloaders uses the explicit EmotionDataset
+    # branch, rather than overriding data_root which would break
+    # resolve_training_data_roots() (it expects train/ and test/ subdirs).
     test_data_dir = os.getenv("REACHY_TEST_DATA_DIR")
     if test_data_dir and args.skip_train:
-        config.data.data_root = test_data_dir
+        config.data.val_dir = test_data_dir
+        config.data.val_dataset_type = "emotion"
 
     # -------------------------------------------------------------------
     # Gateway Contract Client Initialization
@@ -492,6 +505,21 @@ def main() -> int:
             strict=args.strict_contract_updates,
         )
     else:
+        # Prepare per-run dataset (frame extraction + 75/25 train/val split)
+        if not args.skip_prepare:
+            import logging as _logging
+            _prep_logger = _logging.getLogger("run_efficientnet_pipeline.prepare")
+            _prep_logger.info("Preparing per-run dataset for %s …", args.run_id)
+            from trainer.prepare_dataset import DatasetPreparer
+            _preparer = DatasetPreparer(base_path=config.data.data_root)
+            _prep_result = _preparer.prepare_training_dataset(run_id=args.run_id)
+            _prep_logger.info(
+                "  %d train + %d val frames from %d videos",
+                _prep_result["train_count"],
+                _prep_result["val_count"],
+                _prep_result["videos_processed"],
+            )
+
         _emit_training_started(
             contract_client,
             run_id=args.run_id,
@@ -537,7 +565,7 @@ def main() -> int:
     # Evaluation Phase
     # -------------------------------------------------------------------
     # Wrapped in try/except to emit training.failed events on crashes.
-    # Steps:
+    # Steps:  
     #   1. Collect predictions (y_true, y_pred, y_prob) from validation set
     #   2. Save predictions.npz for reproducibility
     #   3. Run Gate A validation (F1, balanced accuracy, ECE, Brier)
@@ -555,6 +583,8 @@ def main() -> int:
             num_workers=0,  # avoid multiprocessing deadlocks on small datasets
             run_id=args.run_id,
             frames_per_video=max(1, int(config.data.frames_per_video)),
+            val_dir=getattr(config.data, 'val_dir', None),
+            val_dataset_type=getattr(config.data, 'val_dataset_type', 'emotion'),
         )
 
         output_dir = _resolve_artifact_dir(

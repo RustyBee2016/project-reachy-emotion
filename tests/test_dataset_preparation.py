@@ -58,7 +58,9 @@ class TestDatasetPreparation:
         )
         
         assert result['run_id'] == 'run_0001'
-        assert result['train_count'] == 300  # 30 videos * 10 frames
+        # 30 videos * 10 frames = 300 total, split 75/25
+        assert result['train_count'] + result['val_count'] == 300
+        assert result['val_count'] > 0
         assert result['test_count'] == 0
     
     def test_stratified_sampling(self, temp_dataset_dir):
@@ -89,7 +91,8 @@ class TestDatasetPreparation:
         # Each class should have roughly equal representation
         assert len(label_counts) == 3
         for count in label_counts.values():
-            assert count == 100
+            # 10 videos/class * 10 frames = 100/class total, ~75/class after 25% val split
+            assert 70 <= count <= 80
     
     def test_manifest_generation(self, temp_dataset_dir):
         """Test that manifests are generated correctly."""
