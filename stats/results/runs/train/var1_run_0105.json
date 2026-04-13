@@ -1,0 +1,49 @@
+{
+  "run_id": "var1_run_0105",
+  "run_type": "train",
+  "model_variant": "variant_1",
+  "status": "completed_gate_failed",
+  "best_metric": 0.9915090729483543,
+  "timestamp": "2026-04-12T00:05:54.899376+00:00",
+  "artifacts_root": "/media/rusty_admin/project_data/reachy_emotion/results/train/var1_run_0105",
+  "gate_a_metrics": {
+    "f1_macro": 0.9903957096667643,
+    "balanced_accuracy": 0.991386499036594,
+    "ece": 0.08671449642550849,
+    "brier": 0.035038347874423205,
+    "accuracy": 0.9905055615232683,
+    "precision_macro": 0.9895312809283298,
+    "recall_macro": 0.991386499036594,
+    "confusion_matrix": [
+      [
+        8831,
+        25,
+        55
+      ],
+      [
+        31,
+        11580,
+        153
+      ],
+      [
+        3,
+        7,
+        8174
+      ]
+    ],
+    "mce": 0.2623270184513652,
+    "f1_class_0": 0.9935868586858686,
+    "f1_happy": 0.9935868586858686,
+    "f1_class_1": 0.9907597535934292,
+    "f1_sad": 0.9907597535934292,
+    "f1_class_2": 0.9868405167209948,
+    "f1_neutral": 0.9868405167209948
+  },
+  "gate_a_gates": {
+    "macro_f1": true,
+    "balanced_accuracy": true,
+    "per_class_f1": true,
+    "ece": false,
+    "brier": true
+  }
+}

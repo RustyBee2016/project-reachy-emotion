@@ -176,7 +176,7 @@ class AffectNetIngester:
             metadata = data.get("meta-data", {})
             return AffectNetAnnotation(
                 image_id=annotation_path.stem,
-                human_label=int(data.get("human-label", -1)),
+                human_label=int(data["human-label"]) if data.get("human-label") is not None else -1,
                 soft_label=data.get("soft-label", []),
                 subset=int(data.get("subset", 2)),
                 age=metadata.get("age"),
@@ -269,7 +269,9 @@ class AffectNetIngester:
         sampled: Dict[str, List[AffectNetAnnotation]] = {}
 
         for label, anns in filtered.items():
-            if len(anns) < samples_per_class:
+            if samples_per_class <= 0:
+                sampled[label] = anns
+            elif len(anns) < samples_per_class:
                 logger.warning(
                     f"Only {len(anns)} samples available for {label} "
                     f"(requested {samples_per_class})"
@@ -350,19 +352,24 @@ class AffectNetIngester:
         sampled: Dict[str, List[AffectNetAnnotation]],
         images_dir: Path,
         run_id: str,
+        output_subdir: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Copy sampled images to test/run/<run_id>/ with unlabeled filenames.
+        Copy sampled images to test/<output_subdir>/<run_id>/ with unlabeled filenames.
 
         Args:
             sampled: Sampled annotations by emotion label
             images_dir: Source directory containing AffectNet images
             run_id: Run identifier for test dataset
+            output_subdir: Optional subdirectory under test/ (e.g., 'affectnet_test_dataset')
 
         Returns:
             Tuple of (db_records, ground_truth_records)
         """
-        test_dir = self.videos_root / "test" / run_id
+        if output_subdir:
+            test_dir = self.videos_root / "test" / output_subdir / run_id
+        else:
+            test_dir = self.videos_root / "test" / run_id
         test_dir.mkdir(parents=True, exist_ok=True)
 
         db_records: List[Dict[str, Any]] = []
@@ -377,7 +384,7 @@ class AffectNetIngester:
         rng = random.Random(42)  # Fixed seed for consistent ordering
         rng.shuffle(all_samples)
 
-        logger.info(f"Copying {len(all_samples)} images to test/affectnet_test_dataset/run{run_id}/...")
+        logger.info(f"Copying {len(all_samples)} images to {test_dir.relative_to(self.videos_root)}/...")
 
         for idx, (label, ann) in enumerate(all_samples):
             src_path = images_dir / f"{ann.image_id}.jpg"
@@ -388,7 +395,7 @@ class AffectNetIngester:
             # Unlabeled filename (no emotion prefix)
             dst_name = f"affectnet_{idx:05d}.jpg"
             dst_path = test_dir / dst_name
-            rel_path = f"test/{run_id}/{dst_name}"
+            rel_path = str(test_dir.relative_to(self.videos_root) / dst_name)
 
             # Copy image (not move - source files remain in AffectNet directory)
             shutil.copy2(src_path, dst_path)
@@ -712,17 +719,19 @@ class AffectNetIngester:
         max_subset: int = 2,
         source: str = "no_human",
         seed: Optional[int] = None,
+        output_subdir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create run-scoped test dataset from AffectNet.
 
         Args:
-            run_id: Run identifier (e.g., 'run_0001')
-            samples_per_class: Target samples per emotion class
+            run_id: Run identifier (e.g., 'test_dataset_01')
+            samples_per_class: Target samples per emotion class (0 = use all)
             min_confidence: Minimum soft-label confidence
             max_subset: Maximum subset difficulty
             source: 'no_human' or 'validation'
             seed: Random seed (defaults to 42 + run_number)
+            output_subdir: Optional subdirectory under test/ (e.g., 'affectnet_test_dataset')
 
         Returns:
             Summary statistics
@@ -767,11 +776,12 @@ class AffectNetIngester:
             seed=seed,
         )
 
-        # Copy to test/<run_id>/ with unlabeled filenames
+        # Copy to test/<output_subdir>/<run_id>/ with unlabeled filenames
         db_records, ground_truth = self._copy_images_to_test(
             sampled,
             images_dir,
             run_id,
+            output_subdir=output_subdir,
         )
 
         # Write DB ingestion manifest

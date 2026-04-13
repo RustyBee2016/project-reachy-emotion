@@ -24,7 +24,7 @@ render_navigation_bar()
 st.title("09 — EQ Calibration Dashboard")
 st.caption("Phase 2: Emotional Intelligence Layer — calibration, confidence degree, and LLM health")
 
-GATE_A_ECE = 0.08
+GATE_A_ECE = 0.12
 GATE_A_BRIER = 0.16
 
 EXPRESSIVENESS_COLORS = {

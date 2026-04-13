@@ -102,17 +102,19 @@ class TestDatasetManager:
         min_confidence: float = 0.5,
         max_subset: int = 2,
         seed: Optional[int] = None,
+        output_subdir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create new test dataset for a specific run.
 
         Args:
-            run_id: Run identifier (e.g., 'run_0001')
-            samples_per_class: Target samples per emotion class
+            run_id: Run identifier (e.g., 'test_dataset_01')
+            samples_per_class: Target samples per emotion class (0 = use all)
             source: 'no_human' or 'validation'
             min_confidence: Minimum soft-label confidence
             max_subset: Maximum subset difficulty
             seed: Random seed (auto-generated from run_id if None)
+            output_subdir: Optional subdirectory under test/ (e.g., 'affectnet_test_dataset')
 
         Returns:
             Summary statistics
@@ -122,10 +124,13 @@ class TestDatasetManager:
         logger.info("=" * 60)
         
         # Check if test dataset already exists
-        test_dir = self.test_path / run_id
-        if test_dir.exists():
+        if output_subdir:
+            test_dir = self.test_path / output_subdir / run_id
+        else:
+            test_dir = self.test_path / run_id
+        if test_dir.exists() and any(test_dir.iterdir()):
             raise ValueError(
-                f"Test dataset already exists for {run_id}. "
+                f"Test dataset already exists at {test_dir}. "
                 f"Archive it first with: manage_test_datasets archive --run-id {run_id}"
             )
         
@@ -143,6 +148,7 @@ class TestDatasetManager:
             max_subset=max_subset,
             source=source,
             seed=seed,
+            output_subdir=output_subdir,
         )
         
         logger.info("=" * 60)
@@ -330,6 +336,12 @@ def main():
         type=int,
         help="Random seed (auto-generated if omitted)"
     )
+    create_parser.add_argument(
+        "--output-subdir",
+        type=str,
+        default=None,
+        help="Subdirectory under test/ for output (e.g., 'affectnet_test_dataset')"
+    )
     
     # Archive test dataset
     archive_parser = subparsers.add_parser("archive", help="Archive test dataset")
@@ -395,6 +407,7 @@ def main():
                 min_confidence=args.min_confidence,
                 max_subset=args.max_subset,
                 seed=args.seed,
+                output_subdir=args.output_subdir,
             )
             print("\n" + json.dumps(result, indent=2))
             

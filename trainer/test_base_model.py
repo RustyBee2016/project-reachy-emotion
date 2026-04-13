@@ -261,12 +261,12 @@ def _save_results(
     gate_path.write_text(json.dumps(gate_report, indent=2))
     logger.info("Saved Gate A report: %s", gate_path)
 
-    dashboard_root = Path(dashboard_dir) / "base_model_test"
+    dashboard_root = Path(dashboard_dir) / "test"
     dashboard_root.mkdir(parents=True, exist_ok=True)
     dashboard_payload = {
-        "run_id": run_id,
-        "model_variant": "base_model",
-        "run_type": "base_model_test",
+        "run_id": f"base_test_{run_id}",
+        "model_variant": "base",
+        "run_type": "test",
         "gate_a_metrics": gate_report.get("metrics", {}),
         "gate_a_gates": gate_report.get("gates", {}),
         "overall_pass": bool(gate_report.get("overall_pass")),
@@ -275,7 +275,7 @@ def _save_results(
             "gate_a_report_json": str(gate_path),
         },
     }
-    dashboard_path = dashboard_root / f"{run_id}.json"
+    dashboard_path = dashboard_root / f"base_test_{run_id}.json"
     dashboard_path.write_text(json.dumps(dashboard_payload, indent=2))
     logger.info("Saved dashboard payload: %s", dashboard_path)
 

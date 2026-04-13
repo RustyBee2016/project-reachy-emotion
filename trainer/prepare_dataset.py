@@ -216,7 +216,7 @@ class DatasetPreparer:
         run_id: Optional[str] = None,
         val_fraction: float = 0.25,
         seed: Optional[int] = None,
-        face_crop: bool = False,
+        face_crop: bool = True,
         target_size: int = 224,
         face_confidence: float = 0.6,
         train_fraction: Optional[float] = None,  # deprecated — ignored, kept for backward compat
@@ -298,7 +298,7 @@ class DatasetPreparer:
         run_id: Optional[str] = None,
         val_fraction: float = 0.25,
         seed: Optional[int] = None,
-        face_crop: bool = False,
+        face_crop: bool = True,
         target_size: int = 224,
         face_confidence: float = 0.6,
         train_fraction: Optional[float] = None,  # deprecated — ignored, kept for backward compat
@@ -409,7 +409,7 @@ class DatasetPreparer:
         run_id: str,
         rng: random.Random,
         source_videos: Dict[str, List[Path]],
-        face_crop: bool = False,
+        face_crop: bool = True,
         target_size: int = 224,
         face_confidence: float = 0.6,
     ) -> List[Dict[str, Any]]:
@@ -524,7 +524,7 @@ class DatasetPreparer:
         output_dir: Path,
         label: str,
         rng: random.Random,
-        face_crop: bool = False,
+        face_crop: bool = True,
         target_size: int = 224,
         face_confidence: float = 0.6,
     ) -> List[Dict[str, Any]]:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Variant 1 training: HSEmotion EfficientNet-B0 with backbone frozen,
 training only a new 3-class head on run_XXXX synthetic data.
-Validated against a held-out split (25 %) of the same synthetic frames.
+Validated against a held-out 25 % split of the same face-cropped synthetic frames.
 
 The backbone weights are never modified — only the classification head
 (1280 → 3) learns from the synthetic data.  Backbone unfreezing is
@@ -9,10 +9,10 @@ reserved for Variant 2 fine-tuning via apps/web/pages/07_Fine_Tune.py.
 
 Dataset creation (handled automatically by DatasetPreparer):
     1. Extracts frames from videos/train/{happy,sad,neutral}/*.mp4
-    2. Splits extracted frames 75 % train / 25 % validation
-    3. Training frames  → videos/train/run/<run_id>/{happy,sad,neutral}/
-    4. Validation frames → videos/validation/run/<run_id>/{happy,sad,neutral}/
-    Both V1 and V2 share the same validation dataset for a given run_id.
+    2. Face detection + cropping (OpenCV DNN SSD) applied to every frame
+    3. Splits extracted face crops 75 % train / 25 % validation
+    4. Training frames  → videos/train/run/<run_id>/{happy,sad,neutral}/
+    5. Validation frames → videos/validation/run/<run_id>/{happy,sad,neutral}/
 
 Prerequisites:
     Source videos must exist in videos/train/{happy,sad,neutral}/.
@@ -85,7 +85,7 @@ def build_config(epochs: int, lr: float, checkpoint_dir: str, val_dir: str) -> T
         lr_scheduler="cosine",
         warmup_epochs=1,
         min_lr=1e-6,
-        label_smoothing=0.1,
+        label_smoothing=0.15,
         gradient_clip_norm=1.0,
         early_stopping_enabled=epochs > 10,
         patience=10,
@@ -99,7 +99,7 @@ def build_config(epochs: int, lr: float, checkpoint_dir: str, val_dir: str) -> T
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Variant 1 training — frozen backbone + AffectNet val")
+    parser = argparse.ArgumentParser(description="Variant 1 training — frozen backbone + synthetic 75/25 val")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs (default: 5 for smoke test)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate (default: 1e-4)")
     parser.add_argument(
@@ -112,11 +112,40 @@ def main() -> int:
         action="store_true",
         help="Skip dataset preparation (use existing extracted frames + manifest)",
     )
+    parser.add_argument(
+        "--val-dir",
+        default=None,
+        dest="val_dir",
+        help=(
+            "Override validation directory with class subdirs (happy/, sad/, neutral/). "
+            "Defaults to the run-scoped 25%% synthetic split at validation/run/<run_id>/."
+        ),
+    )
+    parser.add_argument(
+        "--no-face-crop",
+        action="store_true",
+        dest="no_face_crop",
+        help="Disable face detection and cropping during frame extraction (NOT recommended).",
+    )
+    parser.add_argument(
+        "--face-confidence",
+        type=float,
+        default=0.6,
+        dest="face_confidence",
+        help="Minimum face detection confidence (default: 0.6)",
+    )
+    parser.add_argument(
+        "--face-target-size",
+        type=int,
+        default=224,
+        dest="face_target_size",
+        help="Face crop output size in pixels (default: 224)",
+    )
     args = parser.parse_args()
 
     save_name = f"var1_{args.run_id}"
     checkpoint_dir = f"{BASE_CHECKPOINT_DIR}/variant_1/{save_name}"
-    val_dir = _resolve_val_dir(args.run_id)
+    val_dir = args.val_dir if args.val_dir else _resolve_val_dir(args.run_id)
 
     # ------------------------------------------------------------------
     # Dataset preparation: extract per-run frames from source videos
@@ -130,7 +159,12 @@ def main() -> int:
     if not args.skip_prepare:
         logger.info("Preparing per-run training dataset …")
         preparer = DatasetPreparer(base_path=TRAIN_DATA_ROOT)
-        prep_result = preparer.prepare_training_dataset(run_id=args.run_id)
+        prep_result = preparer.prepare_training_dataset(
+            run_id=args.run_id,
+            face_crop=not args.no_face_crop,
+            target_size=args.face_target_size,
+            face_confidence=args.face_confidence,
+        )
         logger.info(
             f"  Extracted {prep_result['train_count']} train + "
             f"{prep_result['val_count']} val frames from "

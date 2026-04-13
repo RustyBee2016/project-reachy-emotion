@@ -1,0 +1,50 @@
+{
+  "run_id": "base_test_run_0104",
+  "model_variant": "base",
+  "run_type": "test",
+  "gate_a_metrics": {
+    "accuracy": 0.9407158836689038,
+    "precision_macro": 0.918891872016872,
+    "recall_macro": 0.9402541517702687,
+    "f1_macro": 0.9264763014763014,
+    "balanced_accuracy": 0.9402541517702687,
+    "f1_class_0": 0.9195804195804196,
+    "f1_neutral": 0.9195804195804196,
+    "f1_class_1": 0.9791666666666666,
+    "f1_happy": 0.9791666666666666,
+    "f1_class_2": 0.8806818181818182,
+    "f1_sad": 0.8806818181818182,
+    "confusion_matrix": [
+      [
+        263,
+        5,
+        31
+      ],
+      [
+        6,
+        423,
+        6
+      ],
+      [
+        4,
+        1,
+        155
+      ]
+    ],
+    "ece": 0.06032137532762233,
+    "brier": 0.10277551765907993,
+    "mce": 0.38138580322265625
+  },
+  "gate_a_gates": {
+    "macro_f1": true,
+    "balanced_accuracy": true,
+    "per_class_f1": true,
+    "ece": true,
+    "brier": true
+  },
+  "overall_pass": true,
+  "artifacts": {
+    "predictions_npz": "/media/rusty_admin/project_data/reachy_emotion/results/test/run_0104/predictions.npz",
+    "gate_a_report_json": "/media/rusty_admin/project_data/reachy_emotion/results/test/run_0104/gate_a.json"
+  }
+}

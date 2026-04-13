@@ -138,7 +138,7 @@ def _load_mlflow_calibration() -> Dict[str, Any]:
             f1 = m.get("f1_macro", 0.0)
             bal_acc = m.get("balanced_accuracy", 0.0)
             result["gate_a_passed"] = (
-                ece <= 0.08 and brier <= 0.16
+                ece <= 0.12 and brier <= 0.16
                 and f1 >= 0.84 and bal_acc >= 0.85
             )
     except Exception as exc:

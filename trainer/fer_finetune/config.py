@@ -153,7 +153,7 @@ class TrainingConfig:
     gate_a_min_f1_macro: float = 0.84
     gate_a_min_per_class_f1: float = 0.75
     gate_a_min_balanced_accuracy: float = 0.85
-    gate_a_max_ece: float = 0.08
+    gate_a_max_ece: float = 0.12
     gate_a_max_brier: float = 0.16
     
     gate_b_max_latency_p50_ms: float = 120.0

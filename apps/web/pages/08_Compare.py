@@ -20,8 +20,17 @@ st.caption(
 # ---------------------------------------------------------------------------
 
 DASHBOARD_RESULTS_ROOT = (
-    Path(__file__).resolve().parents[3] / "stats" / "results" / "dashboard_runs"
+    Path(__file__).resolve().parents[3] / "stats" / "results" / "runs"
 )
+
+# Variant slug → filename prefix used in test result JSONs.
+# Files follow the pattern: <prefix>test_<run_id>.json
+# e.g. base_test_run_0104.json, var1_test_run_0104.json
+_VARIANT_PREFIX: Dict[str, str] = {
+    "base": "base_test_",
+    "variant_1": "var1_test_",
+    "variant_2": "var2_test_",
+}
 
 # Key metrics used for comparison (the only metrics that matter for ranking).
 KEY_METRICS = ["f1_macro", "balanced_accuracy"]
@@ -149,10 +158,11 @@ FALLBACK_PAYLOADS: Dict[str, Dict[str, Any]] = {
 
 def _load_latest_test_result(variant: str) -> Tuple[Dict[str, Any], Optional[Path]]:
     """Load the most recent test-run JSON for *variant*, falling back to placeholder."""
-    run_dir = DASHBOARD_RESULTS_ROOT / variant / "test"
+    prefix = _VARIANT_PREFIX.get(variant, f"{variant}_")
+    run_dir = DASHBOARD_RESULTS_ROOT / "test"
     if run_dir.exists():
         candidates = sorted(
-            run_dir.glob("*.json"),
+            [p for p in run_dir.glob("*.json") if p.name.startswith(prefix)],
             key=lambda p: (p.stat().st_mtime, p.name),
             reverse=True,
         )
@@ -174,11 +184,12 @@ def _load_latest_test_result(variant: str) -> Tuple[Dict[str, Any], Optional[Pat
 
 def _all_test_results(variant: str) -> List[Dict[str, Any]]:
     """Return every test-run JSON for *variant*, newest first."""
-    run_dir = DASHBOARD_RESULTS_ROOT / variant / "test"
+    prefix = _VARIANT_PREFIX.get(variant, f"{variant}_")
+    run_dir = DASHBOARD_RESULTS_ROOT / "test"
     results: List[Dict[str, Any]] = []
     if run_dir.exists():
         for path in sorted(
-            run_dir.glob("*.json"),
+            [p for p in run_dir.glob("*.json") if p.name.startswith(prefix)],
             key=lambda p: (p.stat().st_mtime, p.name),
             reverse=True,
         ):
@@ -504,31 +515,28 @@ with st.expander("How Comparison Works", expanded=False):
     st.markdown(
         """
 **Data Source:**
-Results are loaded from `stats/results/dashboard_runs/<variant>/test/<run_id>.json`.
+Results are loaded from `stats/results/runs/test/<prefix>_test_<run_id>.json`.
 
-**Folder Structure:**
+**Naming Convention:**
 ```
-stats/results/dashboard_runs/
-├── base/
-│   └── test/
-│       └── base_test_001.json
-├── variant_1/
-│   └── test/
-│       └── run_0003.json
-└── variant_2/
-    └── test/
-        └── run_1003.json
+stats/results/runs/test/
+├── base_test_run_0104.json      # Base model test
+├── var1_test_run_0104.json      # Variant 1 test
+└── var2_test_run_0104.json      # Variant 2 test
 ```
+
+Prefix mapping: `base_test_` = Base Model, `var1_test_` = Variant 1, `var2_test_` = Variant 2.
 
 **Ranking Logic:**
-1. For each variant (`variant_1`, `variant_2`), the page scans all test-run JSONs.
+1. For each variant (`variant_1`, `variant_2`), the page scans all test-run JSONs matching its prefix.
 2. A variant test result **qualifies** only if it beats the base model on **every** key metric:
    F1 (Macro), Balanced Accuracy, F1 Happy, F1 Sad, F1 Neutral.
 3. Qualifying results are ranked by a composite score (average of F1 Macro, Balanced Accuracy, and mean per-class F1).
 4. The top-scoring result goes to **Section 2**; the runner-up goes to **Section 3**.
 
 **After each test run**, the training pipeline writes a dashboard JSON payload to the
-appropriate `<variant>/test/` folder. This page automatically picks up the latest results.
+`stats/results/runs/test/` folder with the appropriate variant prefix.
+This page automatically picks up the latest results.
         """
     )
 

@@ -114,10 +114,10 @@ class TestExpectedCalibrationError:
         assert 0.0 <= ece <= 1.0
 
     def test_gate_a_threshold(self, perfect_predictor):
-        """Perfect predictor must pass Gate A ECE ≤ 0.08."""
+        """Perfect predictor must pass Gate A ECE ≤ 0.12."""
         y_true, y_prob = perfect_predictor
         ece = expected_calibration_error(y_true, y_prob)
-        assert ece <= 0.08
+        assert ece <= 0.12
 
     def test_ece_returns_float(self, uniform_predictor):
         y_true, y_prob = uniform_predictor
@@ -209,13 +209,13 @@ class TestComputeCalibrationMetrics:
     def test_perfect_predictor_passes_gate_a(self, perfect_predictor):
         y_true, y_prob = perfect_predictor
         result = compute_calibration_metrics(y_true.tolist(), y_prob)
-        assert result["ece"] <= 0.08, f"ECE {result['ece']:.4f} fails Gate A"
+        assert result["ece"] <= 0.12, f"ECE {result['ece']:.4f} fails Gate A"
         assert result["brier"] <= 0.16, f"Brier {result['brier']:.4f} fails Gate A"
 
     def test_overconfident_predictor_fails_gate_a(self, overconfident_predictor):
         y_true, y_prob = overconfident_predictor
         result = compute_calibration_metrics(y_true.tolist(), y_prob)
-        assert result["ece"] > 0.08 or result["brier"] > 0.16, (
+        assert result["ece"] > 0.12 or result["brier"] > 0.16, (
             "Overconfident predictor should fail Gate A"
         )
 

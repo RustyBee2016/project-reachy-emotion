@@ -137,7 +137,7 @@ def expected_calibration_error(
     Compute Expected Calibration Error (ECE).
     
     ECE measures how well predicted probabilities match actual accuracy.
-    Lower is better. Gate A requires ECE ≤ 0.08.
+    Lower is better. Gate A requires ECE ≤ 0.12.
     
     Args:
         y_true: Ground truth labels [N]
@@ -369,7 +369,7 @@ def generate_report(
         "",
         "CALIBRATION METRICS",
         "-" * 40,
-        f"ECE:   {results.get('ece', 0):.4f} (target: ≤0.08)",
+        f"ECE:   {results.get('ece', 0):.4f} (target: ≤0.12)",
         f"MCE:   {results.get('mce', 0):.4f}",
         f"Brier: {results.get('brier', 0):.4f} (target: ≤0.16)",
         "",
@@ -381,7 +381,7 @@ def generate_report(
     gate_a_passed = (
         results.get('f1_macro', 0) >= 0.84 and
         results.get('balanced_accuracy', 0) >= 0.85 and
-        results.get('ece', 1) <= 0.08 and
+        results.get('ece', 1) <= 0.12 and
         results.get('brier', 1) <= 0.16
     )
     

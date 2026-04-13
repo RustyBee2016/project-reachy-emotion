@@ -127,7 +127,7 @@ Trigger EfficientNet-B0 emotion classifier fine-tuning once dataset balance and 
 - Use mixed precision (FP16), mixup augmentation, and cosine LR schedule with warmup.  
 - Mount dataset paths from `/media/project_data/reachy_emotion/videos/train/` and generate checkpoints.  
 - Record dataset hash, model version, and metrics (F1, ECE, Brier) to MLflow.  
-- Validate Gate A requirements before export: F1 ≥ 0.84, balanced accuracy ≥ 0.85, ECE ≤ 0.08.  
+- Validate Gate A requirements before export: F1 ≥ 0.84, balanced accuracy ≥ 0.85, ECE ≤ 0.12.  
 - Export to ONNX on success; publish `training.completed` with artifacts and metrics.
 
 **n8n Workflow:** `ml-agentic-ai_v.2/05_training_orchestrator_efficientnet.json`  

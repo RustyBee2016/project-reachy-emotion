@@ -42,6 +42,15 @@ _RUN_TYPE_TO_DIR: Dict[str, str] = {
     "test": "test",
 }
 
+# Variant slug → filename prefix for test result JSONs.
+# Consumed by 06_Dashboard.py and 08_Compare.py.
+_VARIANT_TO_TEST_PREFIX: Dict[str, str] = {
+    "variant_1": "var1",
+    "variant_2": "var2",
+    "base": "base",
+    "base_model": "base",
+}
+
 
 # ===========================================================================
 # Gateway Contract Client
@@ -256,28 +265,52 @@ def _collect_predictions(
     frames_per_video: int = 1,
     val_dir: Optional[str] = None,
     val_dataset_type: str = "emotion",
+    ground_truth_manifest: Optional[str] = None,
 ) -> Dict[str, Any]:
     import numpy as np
     import torch
+    from torch.utils.data import DataLoader
 
-    from trainer.fer_finetune.dataset import create_dataloaders
     from trainer.fer_finetune.model_efficientnet import load_pretrained_model
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = load_pretrained_model(str(checkpoint_path), num_classes=len(class_names), device=device)
-    _, val_loader = create_dataloaders(
-        data_dir=data_root,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        input_size=input_size,
-        class_names=class_names,
-        frame_sampling_train="random",
-        frame_sampling_val="middle",
-        run_id=run_id,
-        frames_per_video=frames_per_video,
-        val_dir=val_dir,
-        val_dataset_type=val_dataset_type,
-    )
+
+    if ground_truth_manifest:
+        from trainer.fer_finetune.dataset import EmotionDataset, get_val_transforms
+
+        val_dataset = EmotionDataset(
+            data_dir=data_root,
+            split="",
+            transform=get_val_transforms(input_size),
+            class_names=class_names,
+            frame_sampling="middle",
+            frames_per_video=frames_per_video,
+            manifest_path=ground_truth_manifest,
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size * 2,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+        )
+    else:
+        from trainer.fer_finetune.dataset import create_dataloaders
+
+        _, val_loader = create_dataloaders(
+            data_dir=data_root,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            input_size=input_size,
+            class_names=class_names,
+            frame_sampling_train="random",
+            frame_sampling_val="middle",
+            run_id=run_id,
+            frames_per_video=frames_per_video,
+            val_dir=val_dir,
+            val_dataset_type=val_dataset_type,
+        )
 
     y_true: List[int] = []
     y_pred: List[int] = []
@@ -362,9 +395,18 @@ def _write_dashboard_run_payload(
     run_type_dir = _RUN_TYPE_TO_DIR.get(run_type, run_type)
     dashboard_root = Path(dashboard_dir) / run_type_dir
     dashboard_root.mkdir(parents=True, exist_ok=True)
-    dashboard_payload_path = dashboard_root / f"{run_id}.json"
+
+    # For test runs, prefix the filename with the variant slug + _test_
+    # e.g. var1_test_run_0104.json, var2_test_run_0104.json
+    if run_type == "test":
+        prefix = _VARIANT_TO_TEST_PREFIX.get(variant, variant)
+        prefixed_id = f"{prefix}_test_{run_id}"
+    else:
+        prefixed_id = run_id
+
+    dashboard_payload_path = dashboard_root / f"{prefixed_id}.json"
     dashboard_payload = {
-        "run_id": run_id,
+        "run_id": prefixed_id,
         "model_variant": variant,
         "run_type": run_type,
         "gate_a_metrics": gate_report.get("metrics", {}),
@@ -445,6 +487,12 @@ def main() -> int:
         "--skip-prepare",
         action="store_true",
         help="Skip per-run dataset preparation (use existing extracted frames)",
+    )
+    parser.add_argument(
+        "--ground-truth-manifest",
+        default=None,
+        help="Path to JSONL ground-truth labels manifest for test evaluation "
+             "(used with --skip-train to evaluate on unlabeled test datasets)",
     )
     args = parser.parse_args()
     args.variant = _normalize_variant(args.variant)
@@ -585,6 +633,7 @@ def main() -> int:
             frames_per_video=max(1, int(config.data.frames_per_video)),
             val_dir=getattr(config.data, 'val_dir', None),
             val_dataset_type=getattr(config.data, 'val_dataset_type', 'emotion'),
+            ground_truth_manifest=getattr(args, 'ground_truth_manifest', None),
         )
 
         output_dir = _resolve_artifact_dir(

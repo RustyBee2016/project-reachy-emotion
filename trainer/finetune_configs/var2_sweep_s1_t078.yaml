@@ -1,0 +1,36 @@
+run_id: var2_sweep_s1_t078
+train_run_id: run_0107
+checkpoint: /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_1/var1_run_0107/best_model.pth
+created: '2026-04-13T16:51:07.101853+00:00'
+model:
+  backbone: efficientnet_b0
+  pretrained_weights: enet_b0_8_best_vgaf
+  num_classes: 3
+  input_size: 224
+  dropout_rate: 0.6
+  freeze_backbone_epochs: 5
+  unfreeze_layers:
+  - blocks.5
+  - blocks.6
+  - conv_head
+data:
+  batch_size: 32
+  num_workers: 4
+  frame_sampling: random
+  mixup_alpha: 0.4
+  mixup_probability: 0.3
+num_epochs: 8
+learning_rate: 0.0001
+weight_decay: 0.0001
+lr_scheduler: cosine
+warmup_epochs: 2
+min_lr: 1.0e-06
+label_smoothing: 0.25
+gradient_clip_norm: 1.0
+early_stopping_enabled: false
+patience: 10
+min_delta: 0.001
+monitor_metric: val_f1_macro
+mixed_precision: true
+seed: 42
+deterministic: true

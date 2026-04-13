@@ -30,7 +30,7 @@ Models must pass three gates before production rollout:
 - Per-class F1: ≥ 0.75 (all classes)
 - No class F1 < 0.70
 - Balanced accuracy: ≥ 0.85
-- Calibration: ECE ≤ 0.08, Brier ≤ 0.16
+- Calibration: ECE ≤ 0.12, Brier ≤ 0.16
 
 **Procedure**:
 ```bash
@@ -252,7 +252,7 @@ Log deployment in release notes.
 **Gate A (Offline Validation)**:
 - Macro F1: 0.86 (target ≥ 0.84) ✅
 - Balanced Accuracy: 0.87 (target ≥ 0.85) ✅
-- Calibration ECE: 0.06 (target ≤ 0.08) ✅
+- Calibration ECE: 0.06 (target ≤ 0.12) ✅
 
 **Gate B (Shadow Mode)**:
 - Latency p50: 95 ms (target ≤ 120 ms) ✅

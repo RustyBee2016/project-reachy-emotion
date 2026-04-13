@@ -1,0 +1,48 @@
+# Variant 2 Fine-Tuning Configuration — var2_run_0106
+# Generated: 2026-04-12
+# Source checkpoint: variant_1/var1_run_0106/best_model.pth
+# Training data: run_0106 (face-cropped synthetic frames, 75/25 split)
+#
+# Results: F1=0.9995, Balanced Acc=0.9995, ECE=0.1166, Brier=0.0224
+# Gate A: FAILED (ECE > 0.08)
+
+run_id: var2_run_0106
+train_run_id: run_0106
+checkpoint: /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_1/var1_run_0106/best_model.pth
+
+model:
+  backbone: efficientnet_b0
+  pretrained_weights: enet_b0_8_best_vgaf
+  num_classes: 3
+  input_size: 224
+  dropout_rate: 0.3
+  freeze_backbone_epochs: 5
+  unfreeze_layers:
+    - blocks.5
+    - blocks.6
+    - conv_head
+
+data:
+  batch_size: 32
+  num_workers: 4
+  frame_sampling: random
+  mixup_alpha: 0.2
+  mixup_probability: 0.3
+
+num_epochs: 30
+learning_rate: 3.0e-4
+weight_decay: 1.0e-4
+lr_scheduler: cosine
+warmup_epochs: 2
+min_lr: 1.0e-6
+label_smoothing: 0.15
+gradient_clip_norm: 1.0
+
+early_stopping_enabled: true
+patience: 10
+min_delta: 0.001
+monitor_metric: val_f1_macro
+
+mixed_precision: true
+seed: 42
+deterministic: true

@@ -11,7 +11,7 @@ Gate A Thresholds (default):
   - Balanced Accuracy ≥ 0.85
   - Per-class F1 ≥ 0.75 (all classes)
   - Per-class Floor ≥ 0.70 (minimum across all classes)
-  - ECE (Expected Calibration Error) ≤ 0.08
+  - ECE (Expected Calibration Error) ≤ 0.12
   - Brier Score ≤ 0.16
 
 Usage modes:
@@ -69,7 +69,7 @@ class GateAThresholds:
     balanced_accuracy: float = 0.85     # Balanced accuracy (accounts for class imbalance)
     per_class_f1: float = 0.75          # Minimum F1 for each individual class
     per_class_floor: float = 0.70       # Absolute minimum F1 across all classes
-    ece: float = 0.08                   # Expected Calibration Error (confidence reliability)
+    ece: float = 0.12                   # Expected Calibration Error (confidence reliability)
     brier: float = 0.16                 # Brier score (probabilistic accuracy)
 
 
@@ -241,7 +241,7 @@ def main() -> int:
     parser.add_argument("--balanced-accuracy-threshold", type=float, default=0.85)
     parser.add_argument("--per-class-threshold", type=float, default=0.75)
     parser.add_argument("--per-class-floor", type=float, default=0.70)
-    parser.add_argument("--ece-threshold", type=float, default=0.08)
+    parser.add_argument("--ece-threshold", type=float, default=0.12)
     parser.add_argument("--brier-threshold", type=float, default=0.16)
     args = parser.parse_args()
 

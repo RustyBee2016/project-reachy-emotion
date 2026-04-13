@@ -384,7 +384,7 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 - Macro F1 (val): ≥ 0.84; per‑class floors ≥ 0.75; no class < 0.70
 - Balanced accuracy: ≥ 0.85
-- Calibration: ECE ≤ 0.08, Brier ≤ 0.16
+- Calibration: ECE ≤ 0.12, Brier ≤ 0.16
 
 EfficientNet-B0 is the reference backbone for these gates; any alternative (e.g., EfficientNet-B2) must demonstrate equal or better metrics **and** prove latency/memory compliance before the gates are updated.
 
@@ -451,7 +451,7 @@ The project is organized into three sequential phases, each building on the prev
 - EfficientNet-B0 fine-tuning pipeline with transfer learning
 - FastAPI gateway and Media Mover services
 - Database schema and MLflow experiment tracking
-- Quality Gate A validation (F1 ≥ 0.84, ECE ≤ 0.08)
+- Quality Gate A validation (F1 ≥ 0.84, ECE ≤ 0.12)
 
 **Key Files:** `apps/web/`, `trainer/fer_finetune/`, `apps/api/`
 

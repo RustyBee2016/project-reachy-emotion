@@ -123,7 +123,7 @@ class EmotionDataset(Dataset):
                 label_name = str(entry.get("label", "")).strip().lower()
                 if label_name not in self.class_to_idx:
                     continue
-                raw_path = Path(str(entry.get("path", "")))
+                raw_path = Path(str(entry.get("path") or entry.get("file_path", "")))
                 path = raw_path if raw_path.is_absolute() else (self.data_dir / raw_path)
                 if not path.exists() or not path.is_file():
                     continue
