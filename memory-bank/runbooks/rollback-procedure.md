@@ -180,7 +180,7 @@ curl -X POST http://ubuntu1:8081/api/evaluate \
 **Expected Metrics**:
 - Macro F1 ≥ 0.84
 - Per-class F1 ≥ 0.75
-- Calibration ECE ≤ 0.08
+- Calibration ECE ≤ 0.12
 
 ### 8. Document Incident
 Log rollback in incident tracker.

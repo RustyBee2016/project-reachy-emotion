@@ -169,7 +169,7 @@ For each agent, Claude:
 ### Agent 5: Training Orchestrator
 **Purpose**: Trigger TAO fine-tuning when dataset is ready; track in MLflow; validate Gate A
 
-**Benefit**: Automates the train loop while enforcing quality gates (F1 ≥ 0.84, ECE ≤ 0.08); records lineage
+**Benefit**: Automates the train loop while enforcing quality gates (Gate A-val: F1 ≥ 0.84, ECE ≤ 0.12; Gate A-deploy: F1 ≥ 0.75); records lineage
 
 **Key Nodes**:
 - Webhook trigger (`POST /agent/training/start`)

@@ -664,7 +664,7 @@ def main() -> int:
         # ---------------------------------------------------------------
         # Conditional ONNX Export
         # ---------------------------------------------------------------
-        # If Gate A validation passed (F1 ≥ 0.84, ECE ≤ 0.08, etc.),
+        # If Gate A validation passed (F1 ≥ 0.84, ECE ≤ 0.12, etc.),
         # export the checkpoint to ONNX format.  The ONNX file is later
         # converted to TensorRT by Agent 7 (Deployment Agent) on Jetson.
         # ---------------------------------------------------------------

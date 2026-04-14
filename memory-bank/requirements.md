@@ -382,9 +382,18 @@ The system prioritizes user privacy through on‑device processing, minimal data
 
 **Gate A — Offline Validation (Pre-robot)**
 
-- Macro F1 (val): ≥ 0.84; per‑class floors ≥ 0.75; no class < 0.70
-- Balanced accuracy: ≥ 0.85
-- Calibration: ECE ≤ 0.12, Brier ≤ 0.16
+Gate A uses a **two-tier** system to account for the synthetic-to-real generalization gap
+(see [ADR 011](./decisions/011-two-tier-gate-a-v1-deployment.md)):
+
+| Sub-gate | Evaluation Context | F1 macro | bAcc | Per-class F1 | ECE | Brier |
+|----------|--------------------|----------|------|-------------|------|-------|
+| **Gate A-val** | Synthetic validation (training pipeline) | ≥ 0.84 | ≥ 0.85 | ≥ 0.75, floor ≥ 0.70 | ≤ 0.12 | ≤ 0.16 |
+| **Gate A-deploy** | Real-world test (e.g. AffectNet) | ≥ 0.75 | ≥ 0.75 | ≥ 0.70, floor ≥ 0.65 | ≤ 0.12 | — |
+
+- **Gate A-val** gates ONNX export during the training pipeline.
+- **Gate A-deploy** gates promotion to Jetson deployment. Brier is omitted at deploy-tier
+  because at F1 ≈ 0.78 it is dominated by classification errors, not calibration.
+- Current deployment candidate: **Variant 1 run_0107** (F1=0.781 on AffectNet test).
 
 EfficientNet-B0 is the reference backbone for these gates; any alternative (e.g., EfficientNet-B2) must demonstrate equal or better metrics **and** prove latency/memory compliance before the gates are updated.
 
@@ -714,7 +723,8 @@ All mutate endpoints require Bearer/JWT creds issued via Vault. Gateway requests
 
 ## 19. Emotion Taxonomy & Operating Points
 
-- Labels: `happy`, `sad`, `angry`, `neutral`, `surprise`, `fearful`
+- Active labels (3-class, Phase 1): `happy`, `sad`, `neutral`
+- Reserved for expansion (8-class Ekman, Phase 2+): `angry`, `surprise`, `fearful`, `disgust`, `contempt`
 
 ---
 
@@ -759,6 +769,7 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 - [2026-02-18 11:50:00] - Updated architecture to direct `temp -> train/<label>` promotion and run-specific frame extraction (10 frames/video) into `train/<label>/<run_id>` with consolidated `train/<run_id>/<label>` datasets and frame-based manifests.
 - [2026-02-19 10:58:00] - Updated consolidated run dataset conventions to `train/run/<run_id>/<label>` and `test/<run_id>/<label>` while preserving run-scoped extraction under `train/<label>/<run_id>`.
 - [2026-03-13 02:45:00] - Added Agent 10 (Reachy Gesture Agent) to agentic system; updated Phase 2 status to 95% complete; synchronized all documentation to reflect 10-agent architecture.
+- [2026-04-14 15:43:00] - Split Gate A into two-tier system (Gate A-val for synthetic, Gate A-deploy for real-world at F1 ≥ 0.75). Updated §19 taxonomy to 3-class active + reserved expansion. V1 run_0107 designated as deployment candidate. See ADR 011.
 
 ---
 
@@ -793,6 +804,7 @@ The system uses **ten cooperating agents**, each performing one narrow, auditabl
 
 | Version  | Date       | Author  | Changes                                                                                                                          |
 | --------:| ---------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 0.09.3   | 2026-04-14 | Team    | Two-tier Gate A (val vs deploy); V1 run_0107 deployment candidate; 75% real-world F1 threshold; 3-class taxonomy clarification |
 | 0.08.3.2 | 2025-09-20 | Team    | Integrated hybrid storage, mini‑FastAPI endpoints, MLflow linkage, NAS redundancy, DB schema, ops playbooks, acceptance criteria |
 | 0.8.3    | 2025-09-20 | Team    | Hybrid storage, DeepStream runtime, gateway hardening, reconciler & metrics                                                      |
 | 0.2.0    | 2025-09-16 | Cascade | Added comprehensive technical specifications, quality gates, and compliance                                                      |

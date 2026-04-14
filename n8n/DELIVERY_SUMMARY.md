@@ -90,7 +90,7 @@ I identified and implemented:
 
 ### 4. Quality Gates Implementation
 I embedded your Gate A/B/C requirements:
-- **Gate A** (Training): F1 ≥ 0.84, ECE ≤ 0.08, Balanced Accuracy ≥ 0.85
+- **Gate A-val** (Training): F1 ≥ 0.84, ECE ≤ 0.12, Balanced Accuracy ≥ 0.85; **Gate A-deploy** (Real-world): F1 ≥ 0.75
 - **Gate B** (Evaluation): On-device latency p95 ≤ 250ms, F1 ≥ 0.80
 - **Gate C** (Deployment): Canary soak 30min, health checks, rollback on failure
 

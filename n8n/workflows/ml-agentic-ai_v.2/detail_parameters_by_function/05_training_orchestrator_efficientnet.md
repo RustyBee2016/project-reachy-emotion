@@ -408,7 +408,7 @@ return [{
 |--------|-----------|
 | F1 (macro) | ≥ 0.84 |
 | Balanced Accuracy | ≥ 0.85 |
-| ECE | ≤ 0.08 |
+| ECE | ≤ 0.12 |
 | Brier Score | ≤ 0.16 |
 
 #### Outputs

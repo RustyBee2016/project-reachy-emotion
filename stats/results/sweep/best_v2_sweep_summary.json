@@ -1,0 +1,44 @@
+{
+  "summary": "Best Variant 2 sweep model (synthetic validation metrics)",
+  "best_run_id": "var2_sweep_s2_t004",
+  "stage": 2,
+  "promoted_from": "var2_sweep_s1_t003",
+  "timestamp": "2026-04-14T00:06:50.932092+00:00",
+  "config": {
+    "dropout": 0.3,
+    "freeze_epochs": 5,
+    "label_smoothing": 0.1,
+    "lr": 0.0003,
+    "mixup_alpha": 0.2
+  },
+  "synthetic_validation_metrics": {
+    "f1_macro": 0.9996,
+    "balanced_accuracy": 0.9996,
+    "ece": 0.0755,
+    "brier": 0.0097,
+    "accuracy": 0.9997,
+    "f1_happy": 0.9994,
+    "f1_sad": 0.9998,
+    "f1_neutral": 0.9996
+  },
+  "composite_score": 0.921355,
+  "gate_a_val_passed": true,
+  "real_world_test": {
+    "note": "V2 run_0107 (same hyperparams) tested on AffectNet test_dataset_01 (894 images)",
+    "test_result_file": "stats/results/runs/test/var2_test_run_0107.json",
+    "f1_macro": 0.780,
+    "balanced_accuracy": 0.812,
+    "ece": 0.096,
+    "gate_a_deploy_passed": true,
+    "beats_base_model": false
+  },
+  "dashboard_access": {
+    "training_result": "stats/results/runs/train/var2_sweep_s2_t004.json",
+    "leaderboard": "stats/results/sweep/leaderboard.json"
+  },
+  "total_sweep_trials": {
+    "stage_1": "~85 trials",
+    "stage_2": "5 promoted trials",
+    "total_runtime_hours": "~26"
+  }
+}

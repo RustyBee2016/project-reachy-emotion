@@ -1,19 +1,20 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-03-06 (Variant propagation audit — 6 gaps fixed)
+**Last Updated**: 2026-04-14 (Two-tier Gate A, V1 deployment candidate, V2 sweep results)
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
 ---
 
 ## Core Specifications
-- **[requirements.md](./requirements.md)** — Comprehensive project requirements (v0.08.3.2): architecture, data flow, API contracts, deployment gates, storage, observability, and acceptance criteria.
+- **[requirements.md](./requirements.md)** — Comprehensive project requirements (v0.09.3): architecture, data flow, API contracts, deployment gates, storage, observability, and acceptance criteria.
 - **[AGENTS.md](../AGENTS.md)** — Agent roles, contracts, orchestration policy, approval rules, security guardrails, and observability SLOs.
 - **[MODEL_SPEC.md](../MODEL_SPEC.md)** *(if exists)* — Model architecture, training config, hyperparameters, and deployment gates.
 
 ---
 
 ## Key Design Decisions
+- **[Decision: Two-Tier Gate A & V1 Deployment](./decisions/011-two-tier-gate-a-v1-deployment.md)** — Split Gate A into val/deploy tiers; V1 run_0107 deployment candidate at 75% F1 (2026-04-14).
 - **[Decision: Variant Propagation Audit](./decisions/010-variant-propagation-audit.md)** — 6 gaps fixed: response schema, placeholders, dashboard display, contract events, log filenames, 3-class matrices (2026-03-06).
 - **[Decision: Fine-Tune Webpage Variant 2](./decisions/009-fine-tune-webpage-variant2.md)** — 07_Fine_Tune.py with 25+ tuneable hyperparameters, config_overrides backend support, and AffectNet test button (2026-03-06).
 - **[Decision: Promotion Pipeline Audit & Fixes](./decisions/008-promotion-pipeline-audit-fixes.md)** — 14 fixes across media.py, gateway, training control, DatasetPreparer, DB models (2026-02-28).
@@ -34,6 +35,7 @@ This index provides curated entry points to project context, decisions, and refe
 - **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, engine export, DeepStream config update.
 
 ## Operational Analyses
+- **[Run 0107 Analysis (2026-04-14)](../stats/results/runs/analysis_run_0107.md)** — V1 vs V2 evaluation on AffectNet, ECE resolution, V1 deployment recommendation, V2 sweep results.
 - **[Video Pipeline Analysis (2026-02-18)](../video_pipeline_01.md)** — End-to-end pipeline walkthrough, promotion-gap analysis, DB readiness review, and remediation summary.
 
 ---

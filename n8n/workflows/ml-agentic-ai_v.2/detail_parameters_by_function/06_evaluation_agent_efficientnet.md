@@ -232,7 +232,7 @@ try {
 const gateA = {
   f1_macro: results.f1_macro >= 0.84,
   balanced_accuracy: results.balanced_accuracy >= 0.85,
-  ece: results.ece <= 0.08,
+  ece: results.ece <= 0.12,
   brier: results.brier <= 0.16,
   passed: false
 };
@@ -253,7 +253,7 @@ return [{
 |--------|-----------|-------------|
 | `f1_macro` | ≥ 0.84 | Macro F1 score |
 | `balanced_accuracy` | ≥ 0.85 | Balanced accuracy |
-| `ece` | ≤ 0.08 | Expected Calibration Error |
+| `ece` | ≤ 0.12 | Expected Calibration Error |
 | `brier` | ≤ 0.16 | Brier score |
 
 #### Output Schema

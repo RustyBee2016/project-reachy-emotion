@@ -131,10 +131,11 @@ Triggers TAO fine-tuning when dataset is ready, tracks lineage in MLflow, valida
 - Poll for `summary.json` every 5 minutes using Wait node
 - Parse metrics: macro_f1, balanced_accuracy, ECE, Brier score, per-class F1
 - Log params/metrics/artifacts to MLflow
-- Validate **Gate A** thresholds:
+- Validate **Gate A-val** thresholds (synthetic validation):
   - Macro F1 ≥ 0.84
   - Balanced accuracy ≥ 0.85
-  - ECE ≤ 0.08, Brier ≤ 0.16
+  - ECE ≤ 0.12, Brier ≤ 0.16
+- **Gate A-deploy** (real-world test): F1 ≥ 0.75, ECE ≤ 0.12 (see ADR 011)
 - If pass: export to TensorRT FP16, log .engine artifact
 - If fail: mark run as failed, emit `training.failed` event
 - Emit `training.completed` with engine_path for Evaluation Agent

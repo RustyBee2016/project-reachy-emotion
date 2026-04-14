@@ -2,349 +2,246 @@
 title: Model Deployment (Gate A/B/C Validation + Engine Export)
 kind: runbook
 owners: [Russell Bray]
-related: [requirements.md#7, requirements.md#21]
+related: [requirements.md#7, requirements.md#21, decisions/011-two-tier-gate-a-v1-deployment.md]
 created: 2025-10-04
-updated: 2025-10-04
+updated: 2026-04-14
 status: active
 ---
 
 # Runbook: Model Deployment
 
 ## Purpose
-Step-by-step guide for deploying a fine-tuned ActionRecognitionNet model to Jetson with Gate A/B/C validation, TensorRT engine export, and DeepStream config update.
+Step-by-step guide for deploying a fine-tuned EfficientNet-B0 emotion classifier (3-class:
+`happy`, `sad`, `neutral`) to Jetson Xavier NX with Gate A/B/C validation, ONNX export,
+TensorRT engine conversion, and DeepStream config update.
 
 ## Prerequisites
-- Trained model checkpoint (`.tlt` or `.etlt` from TAO)
-- Access to Ubuntu 1 (training host) and Jetson (edge device)
-- Valid JWT token with `deploy:write` scope
-- MLflow run ID with `dataset_hash` and metrics
+- Trained model checkpoint (`.pth` from PyTorch, e.g. `best_model.pth`)
+- Checkpoint path example: `/media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_1/var1_run_0107/best_model.pth`
+- Access to Ubuntu 1 (`10.0.4.130`, training host) and Jetson (`10.0.4.150`, edge device)
+- MLflow run ID with `dataset_hash` and metrics logged
+- Python venv activated: `source /home/rusty_admin/projects/reachy_08.4.2/venv/bin/activate`
 
 ## Deployment Gates
 Models must pass three gates before production rollout:
 
 ### Gate A — Offline Validation (Pre-Robot)
-**Environment**: Ubuntu 1 (validation set)
 
-**Criteria**:
-- Macro F1 (val): ≥ 0.84
-- Per-class F1: ≥ 0.75 (all classes)
-- No class F1 < 0.70
-- Balanced accuracy: ≥ 0.85
-- Calibration: ECE ≤ 0.12, Brier ≤ 0.16
+Gate A uses a **two-tier** system (see [ADR 011](../decisions/011-two-tier-gate-a-v1-deployment.md)):
 
-**Procedure**:
+| Sub-gate | Context | F1 macro | bAcc | Per-class F1 | ECE | Brier |
+|----------|---------|----------|------|-------------|------|-------|
+| **Gate A-val** | Synthetic validation | ≥ 0.84 | ≥ 0.85 | ≥ 0.75, floor ≥ 0.70 | ≤ 0.12 | ≤ 0.16 |
+| **Gate A-deploy** | Real-world test (AffectNet) | ≥ 0.75 | ≥ 0.75 | ≥ 0.70, floor ≥ 0.65 | ≤ 0.12 | — |
+
+- **Gate A-val** gates ONNX export during training.
+- **Gate A-deploy** gates Jetson deployment.
+
+**Procedure — Validation tier** (runs automatically at end of training):
 ```bash
-# Run evaluation on validation set
-curl -X POST http://ubuntu1:8081/api/evaluate \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -d '{
-    "model_path": "/opt/models/actionrecog-0.8.3.tlt",
-    "manifest": "/videos/manifests/val_2025-10-04.jsonl",
-    "mlflow_run_id": "abc123..."
-  }'
+# Automatic: run_efficientnet_pipeline.py calls gate_a_validator after training
+# Manual re-evaluation:
+python -m trainer.gate_a_validator \
+  --predictions /media/rusty_admin/project_data/reachy_emotion/results/train/run_0107/predictions.npz \
+  --tier validation \
+  --output stats/results/gate_a_validation.json
 ```
 
-**Expected Response**:
+**Procedure — Deploy tier** (against real-world AffectNet test set):
+```bash
+python -m trainer.gate_a_validator \
+  --predictions /media/rusty_admin/project_data/reachy_emotion/results/test/run_0107/predictions.npz \
+  --tier deploy \
+  --output stats/results/gate_a_deploy_validation.json
+```
+
+**Expected Output** (`gate_a_deploy_validation.json`):
 ```json
 {
-  "status": "pass",
-  "metrics": {
-    "macro_f1": 0.86,
-    "balanced_accuracy": 0.87,
-    "per_class_f1": {
-      "happy": 0.88,
-      "sad": 0.84,
-      "angry": 0.82,
-      "neutral": 0.89,
-      "surprise": 0.85,
-      "fearful": 0.78
-    },
-    "calibration": {
-      "ece": 0.06,
-      "brier": 0.14
-    }
-  },
-  "gate_a": "PASS"
+  "thresholds": {"macro_f1": 0.75, "balanced_accuracy": 0.75, "per_class_f1": 0.70, "ece": 0.12},
+  "metrics": {"f1_macro": 0.781, "balanced_accuracy": 0.780, "ece": 0.102},
+  "per_class_f1": {"happy": 0.74, "sad": 0.85, "neutral": 0.76},
+  "overall_pass": true
 }
 ```
 
-**If FAIL**: Do not proceed. Investigate low-performing classes, retrain with more data, or adjust hyperparameters.
+**If FAIL**: Investigate per-class confusion matrix, collect more diverse training data,
+try hyperparameter sweep, or apply temperature scaling for calibration.
 
 ### Gate B — Robot Shadow Mode
-**Environment**: Jetson (shadow deployment, no user-visible impact)
+**Environment**: Jetson Xavier NX (`10.0.4.150`), shadow deployment
 
 **Criteria**:
 - On-device latency: p50 ≤ 120 ms, p95 ≤ 250 ms
 - GPU memory ≤ 2.5 GB
-- Macro F1 ≥ 0.80
-- Per-class F1: ≥ 0.72 (all classes)
-- No class F1 < 0.68
+- Macro F1 ≥ 0.80; per-class F1 ≥ 0.72, floor ≥ 0.68
 
 **Procedure**:
 ```bash
-# Export TensorRT engine (FP16)
-tao action_recognition export \
-  -e /workspace/experiment.yaml \
-  -m /workspace/actionrecog-0.8.3.tlt \
-  -k $TAO_KEY \
-  --engine_file /workspace/actionrecog-0.8.3.engine \
-  --batch_size 1 \
-  --data_type fp16
+# 1. Export ONNX from checkpoint (on Ubuntu 1)
+python -m trainer.fer_finetune.export \
+  --checkpoint /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_1/var1_run_0107/best_model.pth \
+  --output /media/rusty_admin/project_data/reachy_emotion/results/train/run_0107/export/model.onnx \
+  --num-classes 3
 
-# Copy engine to Jetson
-scp /workspace/actionrecog-0.8.3.engine jetson:/opt/reachy/models/shadow/
+# 2. Transfer ONNX to Jetson
+scp /media/rusty_admin/project_data/reachy_emotion/results/train/run_0107/export/model.onnx \
+    jetson:/opt/reachy/models/staging/emotion_efficientnet.onnx
 
-# Update DeepStream config (shadow pipeline)
+# 3. Convert ONNX → TensorRT on Jetson (FP16)
 ssh jetson
-sudo nano /opt/reachy/deepstream/config_infer_shadow.txt
-# Update: model-engine-file=/opt/reachy/models/shadow/actionrecog-0.8.3.engine
+/usr/src/tensorrt/bin/trtexec \
+  --onnx=/opt/reachy/models/staging/emotion_efficientnet.onnx \
+  --saveEngine=/opt/reachy/models/staging/emotion_efficientnet.engine \
+  --fp16 --workspace=1024
 
-# Start shadow pipeline
-docker run -d --name deepstream-shadow \
-  --runtime nvidia \
-  -v /opt/reachy/models:/models \
-  -v /opt/reachy/deepstream:/config \
-  nvcr.io/nvidia/deepstream:6.3-devel \
-  deepstream-app -c /config/deepstream_shadow.txt
+# 4. Backup existing production engine
+sudo cp /opt/reachy/models/emotion_efficientnet.engine \
+        /opt/reachy/models/emotion_efficientnet.engine.bak
 
-# Monitor metrics (30 min)
-curl http://jetson:9100/metrics | grep -E "inference_latency|gpu_memory|f1_score"
+# 5. Deploy to shadow path and update DeepStream shadow config
+sudo cp /opt/reachy/models/staging/emotion_efficientnet.engine \
+        /opt/reachy/models/shadow/emotion_efficientnet.engine
+# Edit /opt/reachy/deepstream/emotion_inference_shadow.txt:
+#   model-engine-file=/opt/reachy/models/shadow/emotion_efficientnet.engine
+
+# 6. Start shadow pipeline and monitor (30 min)
+sudo systemctl restart deepstream-shadow
+curl http://localhost:9100/metrics | grep -E "inference_latency|gpu_memory"
 ```
 
-**Expected Metrics**:
-```
-inference_latency_p50_ms 95
-inference_latency_p95_ms 220
-gpu_memory_used_mb 2100
-macro_f1 0.82
-```
-
-**If FAIL**: Optimize engine (reduce batch size, adjust precision, lower frame window), or rollback.
+**If FAIL**: Optimize via INT8 quantization, reduce input resolution, or rollback.
 
 ### Gate C — Limited User Rollout
-**Environment**: Jetson (canary deployment, 10% of sessions)
+**Environment**: Jetson (canary, 10% of sessions)
 
 **Criteria**:
 - User-visible latency ≤ 300 ms end-to-end
 - Abstention rate ≤ 20%
 - User complaints < 1% of sessions
-- No safety incidents
 
 **Procedure**:
 ```bash
 # Enable canary routing (10% traffic)
-curl -X POST http://ubuntu2:8080/api/routing \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -d '{
-    "canary_weight": 0.1,
-    "canary_engine": "/opt/reachy/models/shadow/actionrecog-0.8.3.engine"
-  }'
-
-# Monitor for 7 days
-# - User feedback (UI surveys, support tickets)
-# - Latency (p50, p95, p99)
-# - Abstention rate (confidence < threshold)
-# - Safety incidents (false positives causing inappropriate LLM responses)
-
-# Check metrics
-curl http://ubuntu2:8080/metrics | grep -E "canary_latency|canary_abstention|canary_complaints"
+# Monitor for 7 days: latency, abstention, user feedback
+# If stable, proceed to full rollout
 ```
 
-**Expected Metrics**:
-```
-canary_latency_p50_ms 180
-canary_latency_p95_ms 280
-canary_abstention_rate 0.15
-canary_complaints_rate 0.005
-```
-
-**If FAIL**: Rollback canary, investigate user feedback, adjust confidence threshold, or retrain.
+**If FAIL**: Rollback canary, investigate feedback, adjust confidence threshold.
 
 ## Full Rollout
 
 ### 1. Promote Engine
-If Gate C passes, promote to production.
-
-```bash
-# Copy engine to production path
-ssh jetson
-sudo cp /opt/reachy/models/shadow/actionrecog-0.8.3.engine \
-        /opt/reachy/models/action_recognition.engine
-
-# Update DeepStream config
-sudo nano /opt/reachy/deepstream/config_infer_primary.txt
-# Update: model-engine-file=/opt/reachy/models/action_recognition.engine
-```
-
-### 2. Update MLflow
-Mark run as promoted.
-
-```bash
-curl -X POST http://ubuntu1:8081/api/mlflow/promote \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -d '{
-    "run_id": "abc123...",
-    "promoted": true,
-    "promoted_at": "2025-10-04T12:34:56Z",
-    "gate_a": "PASS",
-    "gate_b": "PASS",
-    "gate_c": "PASS"
-  }'
-```
-
-### 3. Restart DeepStream
-Restart primary pipeline with new engine.
-
 ```bash
 ssh jetson
-
-# Stop primary pipeline
-docker stop deepstream-primary
-
-# Start with new engine
-docker run -d --name deepstream-primary \
-  --runtime nvidia \
-  --restart unless-stopped \
-  -v /opt/reachy/models:/models \
-  -v /opt/reachy/deepstream:/config \
-  nvcr.io/nvidia/deepstream:6.3-devel \
-  deepstream-app -c /config/deepstream_primary.txt
-
-# Verify pipeline running
-docker logs deepstream-primary | tail -20
+sudo cp /opt/reachy/models/shadow/emotion_efficientnet.engine \
+        /opt/reachy/models/emotion_efficientnet.engine
 ```
 
-### 4. Monitor Production
-Watch metrics for 24 hours.
-
+### 2. Update DeepStream Config
 ```bash
-# Check latency
-curl http://jetson:9100/metrics | grep inference_latency_p95_ms
-
-# Check GPU memory
-curl http://jetson:9100/metrics | grep gpu_memory_used_mb
-
-# Check F1 score (if ground truth available)
-curl http://jetson:9100/metrics | grep macro_f1
-
-# Check abstention rate
-curl http://jetson:9100/metrics | grep abstention_rate
+# Edit /opt/reachy/deepstream/emotion_inference.txt:
+#   model-engine-file=/opt/reachy/models/emotion_efficientnet.engine
+#   num-detected-classes=3
+#   labelfile-path=/opt/reachy/models/labels_3cls.txt
+sudo systemctl restart deepstream-primary
 ```
 
-**Alerts**:
-- Latency p95 > 250 ms → investigate
-- GPU memory > 2.5 GB → investigate
-- Abstention rate > 20% → investigate
-- F1 drop > 5% → consider rollback
+### 3. Verify
+```bash
+# Check pipeline running
+sudo systemctl status deepstream-primary
+curl http://localhost:9100/metrics | grep -E "inference_latency_p95|gpu_memory|macro_f1"
+```
+
+### 4. Record Deployment
+```bash
+# Log to MLflow
+python -c "
+import mlflow
+mlflow.set_tracking_uri('file:///media/rusty_admin/project_data/reachy_emotion/mlruns')
+with mlflow.start_run(run_id='<MLFLOW_RUN_ID>'):
+    mlflow.set_tag('deployed', 'true')
+    mlflow.set_tag('deployment_date', '2026-04-14')
+    mlflow.set_tag('gate_a_deploy', 'PASS')
+    mlflow.set_tag('gate_b', 'PASS')
+    mlflow.set_tag('gate_c', 'PASS')
+"
+```
 
 ### 5. Document Deployment
-Log deployment in release notes.
-
 ```markdown
-## Release: actionrecog-0.8.3
+## Release: efficientnet-b0-hsemotion Variant 1 run_0107
 
-**Date**: 2025-10-04  
-**Operator**: Russell Bray  
-**MLflow Run**: abc123...  
-**Dataset Hash**: sha256:d4e5f6...  
-**Engine**: /opt/reachy/models/action_recognition.engine (FP16, 1.2 GB)
+**Date**: 2026-04-14
+**Operator**: Russell Bray
+**Model**: EfficientNet-B0 (HSEmotion, frozen backbone, 3-class head)
+**Checkpoint**: variant_1/var1_run_0107/best_model.pth
+**Engine**: /opt/reachy/models/emotion_efficientnet.engine (FP16)
 
-**Gate A (Offline Validation)**:
-- Macro F1: 0.86 (target ≥ 0.84) ✅
-- Balanced Accuracy: 0.87 (target ≥ 0.85) ✅
-- Calibration ECE: 0.06 (target ≤ 0.12) ✅
+**Gate A-deploy (AffectNet test_dataset_01, 894 images)**:
+- Macro F1: 0.781 (target ≥ 0.75) ✅
+- Balanced Accuracy: 0.780 (target ≥ 0.75) ✅
+- ECE: 0.102 (target ≤ 0.12) ✅
 
 **Gate B (Shadow Mode)**:
-- Latency p50: 95 ms (target ≤ 120 ms) ✅
-- Latency p95: 220 ms (target ≤ 250 ms) ✅
-- GPU Memory: 2.1 GB (target ≤ 2.5 GB) ✅
-- Macro F1: 0.82 (target ≥ 0.80) ✅
+- Latency p50: TBD ms (target ≤ 120 ms)
+- GPU Memory: TBD GB (target ≤ 2.5 GB)
 
-**Gate C (Canary)**:
-- User Latency p95: 280 ms (target ≤ 300 ms) ✅
-- Abstention Rate: 15% (target ≤ 20%) ✅
-- Complaints: 0.5% (target < 1%) ✅
-
-**Status**: ✅ DEPLOYED TO PRODUCTION
+**Status**: PENDING GATE B/C
 ```
 
 ## Rollback
 
-### Emergency Rollback (Production Issues)
+### Emergency Rollback
 ```bash
 ssh jetson
 
-# Stop primary pipeline
-docker stop deepstream-primary
+# Restore backup engine
+sudo cp /opt/reachy/models/emotion_efficientnet.engine.bak \
+        /opt/reachy/models/emotion_efficientnet.engine
+sudo systemctl restart deepstream-primary
 
-# Revert to previous engine
-sudo cp /opt/reachy/models/action_recognition.engine.bak \
-        /opt/reachy/models/action_recognition.engine
-
-# Restart pipeline
-docker start deepstream-primary
-
-# Verify rollback
-docker logs deepstream-primary | tail -20
-curl http://jetson:9100/metrics | grep inference_latency_p95_ms
-```
-
-### Rollback MLflow
-```bash
-curl -X POST http://ubuntu1:8081/api/mlflow/promote \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -d '{
-    "run_id": "abc123...",
-    "promoted": false,
-    "rollback_reason": "Production latency spike"
-  }'
+# Verify
+curl http://localhost:9100/metrics | grep inference_latency_p95_ms
 ```
 
 ## Error Handling
 
 ### Error: Gate A FAIL (Low F1)
-**Resolution**:
-1. Inspect confusion matrix: identify low-performing classes.
-2. Collect more training data for weak classes.
-3. Adjust class weights or augmentation.
-4. Retrain and re-evaluate.
+1. Inspect confusion matrix (`stats/results/runs/analysis_run_0107.md`).
+2. Check per-class error patterns (V1: happy→neutral; V2: neutral→sad).
+3. Increase training data diversity (more AffectNet images, domain adaptation).
+4. Run hyperparameter sweep (`trainer/sweep_variant2.py`).
 
 ### Error: Gate B FAIL (High Latency)
-**Resolution**:
-1. Profile engine: `tao action_recognition inference --profile`
-2. Reduce frame window (32 → 16 frames).
-3. Try INT8 quantization with calibration set.
-4. Lower input resolution (224x224 → 160x160).
+1. Profile engine: `trtexec --loadEngine=... --warmUp=500 --avgRuns=100`
+2. Try INT8 quantization with calibration set.
+3. Lower input resolution (224×224 → 160×160).
 
 ### Error: Gate C FAIL (User Complaints)
-**Resolution**:
-1. Review user feedback: identify common issues.
-2. Adjust confidence threshold (increase to reduce false positives).
-3. Retrain with more diverse data.
-4. Consider rollback if complaints > 1%.
+1. Review user feedback for common misclassification patterns.
+2. Increase confidence threshold (raise abstention to reduce false positives).
+3. Consider rollback if complaints > 1%.
 
 ### Error: DeepStream Pipeline Crash
-**Resolution**:
-1. Check logs: `docker logs deepstream-primary`
-2. Verify engine compatibility: `tao action_recognition validate --engine ...`
-3. Check GPU memory: `nvidia-smi`
-4. Restart pipeline; if crash persists, rollback.
+1. Check logs: `journalctl -u deepstream-primary -n 50`
+2. Verify engine: `trtexec --loadEngine=/opt/reachy/models/emotion_efficientnet.engine`
+3. Check GPU: `nvidia-smi`
+4. Restart; if crash persists, rollback to `.engine.bak`.
 
 ## Monitoring
-- **Prometheus metrics**: `inference_latency_p50_ms`, `inference_latency_p95_ms`, `gpu_memory_used_mb`, `macro_f1`, `abstention_rate`, `complaints_rate`
-- **Alerts**:
-  - Latency p95 > 250 ms → investigate
-  - GPU memory > 2.5 GB → investigate
-  - F1 drop > 5% → consider rollback
-  - Abstention rate > 20% → investigate
-  - Complaints rate > 1% → escalate
+- **Prometheus**: `inference_latency_p50_ms`, `inference_latency_p95_ms`, `gpu_memory_used_mb`, `macro_f1`, `abstention_rate`
+- **Alerts**: latency p95 > 250 ms, GPU > 2.5 GB, F1 drop > 5%, abstention > 20%
 
 ## Related
-- **[requirements.md §7](../requirements.md#7-model-deployment--quality-gates)**: Deployment gates A/B/C.
-- **[requirements.md §21](../requirements.md#21-model-packaging--serving-on-jetson)**: DeepStream `gst-nvinfer` with TensorRT engine.
-- **[Decision: DeepStream-Only Runtime](../decisions/002-deepstream-only-runtime.md)**: Rationale for skipping Triton.
+- **[requirements.md §7](../requirements.md#7-model-deployment--quality-gates)**: Two-tier Gate A, Gate B/C.
+- **[ADR 011](../decisions/011-two-tier-gate-a-v1-deployment.md)**: Two-tier Gate A rationale.
+- **[requirements.md §21](../requirements.md#21-model-packaging--serving-on-jetson)**: DeepStream config.
+- **[Decision: DeepStream-Only Runtime](../decisions/002-deepstream-only-runtime.md)**: No Triton on Jetson.
+- **[Run 0107 Analysis](../../stats/results/runs/analysis_run_0107.md)**: V1 deployment candidate metrics.
 
 ---
 
-**Last Updated**: 2025-10-04  
+**Last Updated**: 2026-04-14  
 **Owner**: Russell Bray

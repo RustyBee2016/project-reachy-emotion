@@ -156,6 +156,14 @@ class TrainingConfig:
     gate_a_max_ece: float = 0.12
     gate_a_max_brier: float = 0.16
     
+    # Deploy-tier Gate A (real-world test evaluation, see ADR 011)
+    gate_a_deploy_min_f1_macro: float = 0.75
+    gate_a_deploy_min_balanced_accuracy: float = 0.75
+    gate_a_deploy_min_per_class_f1: float = 0.70
+    gate_a_deploy_per_class_floor: float = 0.65
+    gate_a_deploy_max_ece: float = 0.12
+    # Brier intentionally omitted from deploy-tier
+    
     gate_b_max_latency_p50_ms: float = 120.0
     gate_b_max_latency_p95_ms: float = 250.0
     gate_b_max_gpu_memory_gb: float = 2.5

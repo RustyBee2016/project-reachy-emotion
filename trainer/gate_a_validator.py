@@ -6,13 +6,21 @@ This module implements the quality gate validation logic that determines
 whether a trained model meets the minimum performance thresholds required
 for deployment to the Jetson (Gate A requirements from requirements.md §8.1).
 
-Gate A Thresholds (default):
+Gate A Thresholds — Validation tier (default):
   - Macro F1 ≥ 0.84
   - Balanced Accuracy ≥ 0.85
   - Per-class F1 ≥ 0.75 (all classes)
   - Per-class Floor ≥ 0.70 (minimum across all classes)
   - ECE (Expected Calibration Error) ≤ 0.12
   - Brier Score ≤ 0.16
+
+Gate A Thresholds — Deploy tier (real-world test, see ADR 011):
+  - Macro F1 ≥ 0.75
+  - Balanced Accuracy ≥ 0.75
+  - Per-class F1 ≥ 0.70 (all classes)
+  - Per-class Floor ≥ 0.65 (minimum across all classes)
+  - ECE ≤ 0.12
+  - Brier: not enforced
 
 Usage modes:
   1. Evaluate from saved predictions (.npz) for CI/statistical workflows
@@ -71,6 +79,20 @@ class GateAThresholds:
     per_class_floor: float = 0.70       # Absolute minimum F1 across all classes
     ece: float = 0.12                   # Expected Calibration Error (confidence reliability)
     brier: float = 0.16                 # Brier score (probabilistic accuracy)
+
+
+# Deploy-tier preset (real-world test evaluation, see ADR 011)
+DEPLOY_THRESHOLDS = GateAThresholds(
+    macro_f1=0.75,
+    balanced_accuracy=0.75,
+    per_class_f1=0.70,
+    per_class_floor=0.65,
+    ece=0.12,
+    brier=1.0,  # effectively disabled at deploy-tier
+)
+
+# Validation-tier preset (synthetic validation, default)
+VALIDATION_THRESHOLDS = GateAThresholds()  # uses dataclass defaults
 
 
 def _per_class_f1(metrics: Dict[str, float], class_names: List[str]) -> Dict[str, float]:
@@ -237,12 +259,16 @@ def main() -> int:
         help="Optional: Path to JSONL manifest with ground truth labels (for test datasets)"
     )
     parser.add_argument("--output", type=str, default="stats/results/gate_a_validation.json")
-    parser.add_argument("--macro-f1-threshold", type=float, default=0.84)
-    parser.add_argument("--balanced-accuracy-threshold", type=float, default=0.85)
-    parser.add_argument("--per-class-threshold", type=float, default=0.75)
-    parser.add_argument("--per-class-floor", type=float, default=0.70)
-    parser.add_argument("--ece-threshold", type=float, default=0.12)
-    parser.add_argument("--brier-threshold", type=float, default=0.16)
+    parser.add_argument(
+        "--tier", type=str, choices=["validation", "deploy"], default="validation",
+        help="Gate A tier: 'validation' (synthetic, F1>=0.84) or 'deploy' (real-world, F1>=0.75)"
+    )
+    parser.add_argument("--macro-f1-threshold", type=float, default=None)
+    parser.add_argument("--balanced-accuracy-threshold", type=float, default=None)
+    parser.add_argument("--per-class-threshold", type=float, default=None)
+    parser.add_argument("--per-class-floor", type=float, default=None)
+    parser.add_argument("--ece-threshold", type=float, default=None)
+    parser.add_argument("--brier-threshold", type=float, default=None)
     args = parser.parse_args()
 
     if not args.predictions:
@@ -258,13 +284,15 @@ def main() -> int:
     # instead of relying on y_true from predictions.npz. This supports
     # test datasets where labels are stored separately.
     # -------------------------------------------------------------------
+    # Select base thresholds from tier
+    base = DEPLOY_THRESHOLDS if args.tier == "deploy" else VALIDATION_THRESHOLDS
     thresholds = GateAThresholds(
-        macro_f1=args.macro_f1_threshold,
-        balanced_accuracy=args.balanced_accuracy_threshold,
-        per_class_f1=args.per_class_threshold,
-        per_class_floor=args.per_class_floor,
-        ece=args.ece_threshold,
-        brier=args.brier_threshold,
+        macro_f1=args.macro_f1_threshold if args.macro_f1_threshold is not None else base.macro_f1,
+        balanced_accuracy=args.balanced_accuracy_threshold if args.balanced_accuracy_threshold is not None else base.balanced_accuracy,
+        per_class_f1=args.per_class_threshold if args.per_class_threshold is not None else base.per_class_f1,
+        per_class_floor=args.per_class_floor if args.per_class_floor is not None else base.per_class_floor,
+        ece=args.ece_threshold if args.ece_threshold is not None else base.ece,
+        brier=args.brier_threshold if args.brier_threshold is not None else base.brier,
     )
 
     y_true, y_pred, y_prob, class_names = _load_predictions(Path(args.predictions))

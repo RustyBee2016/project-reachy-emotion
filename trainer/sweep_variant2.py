@@ -117,7 +117,7 @@ GATE_A_THRESHOLDS = {
     "f1_macro": 0.84,
     "balanced_accuracy": 0.85,
     "per_class_f1": 0.75,
-    "ece": 0.08,
+    "ece": 0.12,
     "brier": 0.16,
 }
 

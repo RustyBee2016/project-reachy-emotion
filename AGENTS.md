@@ -127,8 +127,9 @@ Trigger EfficientNet-B0 emotion classifier fine-tuning once dataset balance and 
 - Use mixed precision (FP16), mixup augmentation, and cosine LR schedule with warmup.  
 - Mount dataset paths from `/media/project_data/reachy_emotion/videos/train/` and generate checkpoints.  
 - Record dataset hash, model version, and metrics (F1, ECE, Brier) to MLflow.  
-- Validate Gate A requirements before export: F1 ≥ 0.84, balanced accuracy ≥ 0.85, ECE ≤ 0.12.  
-- Export to ONNX on success; publish `training.completed` with artifacts and metrics.
+- Validate **Gate A-val** requirements before export: F1 ≥ 0.84, balanced accuracy ≥ 0.85, ECE ≤ 0.12 (synthetic validation tier).  
+- Export to ONNX on success; publish `training.completed` with artifacts and metrics.  
+- Note: Gate A-val gates ONNX export only; real-world deployment uses the separate **Gate A-deploy** tier (F1 ≥ 0.75). See [ADR 011](memory-bank/decisions/011-two-tier-gate-a-v1-deployment.md).
 
 **n8n Workflow:** `ml-agentic-ai_v.2/05_training_orchestrator_efficientnet.json`  
 
@@ -144,6 +145,8 @@ Run validation jobs once the test set is balanced.
 - Compute comprehensive metrics: accuracy, F1 (macro + per-class), balanced accuracy.  
 - Compute calibration metrics: ECE (Expected Calibration Error), Brier score.  
 - Validate Gate A requirements and emit pass/fail status.  
+- Support **two evaluation tiers**: Gate A-val (synthetic, F1 ≥ 0.84) and Gate A-deploy (real-world, F1 ≥ 0.75).  
+- Report both tier results when real-world test data is available.  
 - Generate evaluation report with confusion matrix.  
 - Reference test videos by file path only; never attach or infer labels internally.
 
@@ -156,6 +159,7 @@ Run validation jobs once the test set is balanced.
 Promote validated engines from `shadow → canary → rollout` with explicit approval gates.
 
 **Updated Responsibilities (v08.4.2 ML):**  
+- Accept models passing **Gate A-deploy** (F1 ≥ 0.75 on real-world test). Current deployment candidate: **Variant 1 run_0107**.  
 - Transfer ONNX model to Jetson via SCP.  
 - Convert ONNX → TensorRT engine on Jetson using `trtexec` with FP16 precision.  
 - Backup existing engine before deployment.  
