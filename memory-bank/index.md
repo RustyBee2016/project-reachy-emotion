@@ -35,7 +35,8 @@ This index provides curated entry points to project context, decisions, and refe
 - **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, engine export, DeepStream config update.
 
 ## Operational Analyses
-- **[Deployment Recommendation: V1 vs V2 (2026-04-14)](../stats/results/runs/deployment_recommendation_v1_vs_v2.md)** — Formal decision report with graduate-level statistical analysis: Wilson CIs, Cohen's κ, NMI, CV equity analysis, generalization gap, UX risk assessment. Recommends V1 (6/6 gates, CV=4.2%).
+- **[Executive Summary: V1 Model Selection (2026-04-14)](../stats/results/runs/executive_summary_v1_selection.md)** — 1–2 page PM/DM summary of model selection rationale, key statistics in plain language, and next steps.
+- **[Deployment Recommendation: V1 vs V2 (2026-04-14)](../stats/results/runs/deployment_recommendation_v1_vs_v2.md)** — Full decision report with graduate-level statistical analysis: Wilson CIs, Cohen's κ, NMI, CV equity analysis, generalization gap, UX risk assessment. Recommends V1 (6/6 gates, CV=4.2%).
 - **[Run 0107 Analysis (2026-04-14)](../stats/results/runs/analysis_run_0107.md)** — V1 vs V2 evaluation on AffectNet, ECE resolution, V1 deployment recommendation, V2 sweep results.
 - **[Video Pipeline Analysis (2026-02-18)](../video_pipeline_01.md)** — End-to-end pipeline walkthrough, promotion-gap analysis, DB readiness review, and remediation summary.
 
