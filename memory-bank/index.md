@@ -33,10 +33,10 @@ This index provides curated entry points to project context, decisions, and refe
 - **[Runbook: Promote Video Flow](./runbooks/promote-video-flow.md)** — Step-by-step guide for promoting videos from `temp/` to `train/test/`.
 - **[Runbook: Rollback Procedure](./runbooks/rollback-procedure.md)** — ZFS snapshot rollback and manifest rebuild.
 - **[Runbook: NAS Backup & Restore](./runbooks/nas-backup-restore.md)** — Nightly rsync, quarterly restore test, hash verification.
-- **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, engine export, DeepStream config update.
+- **[Runbook: Model Deployment](./runbooks/model-deployment.md)** — Gate A/B/C validation, ONNX export, temperature scaling config transfer, TensorRT conversion, DeepStream config update. Current candidate: V2 mixed+T.
 
 ## Operational Analyses
-- **[Executive Summary: V1 Model Selection (2026-04-14)](../stats/results/runs/executive_summary_v1_selection.md)** — 1–2 page PM/DM summary of model selection rationale, key statistics in plain language, and next steps.
+- **[Executive Summary: Model Selection — V2 Mixed+T (2026-04-20)](../stats/results/runs/executive_summary_v1_selection.md)** — 1–2 page PM/DM summary: iterative journey from synthetic-only V1 to V2 mixed-domain + temperature scaling; V2 mixed+T is the current deployment candidate.
 - **[Deployment Recommendation: V1 vs V2 (2026-04-14)](../stats/results/runs/deployment_recommendation_v1_vs_v2.md)** — Synthetic-only decision report with statistical analysis. *(Superseded by ADR 012: V2 mixed+T now recommended.)*
 - **[Run 0107 Analysis (2026-04-14)](../stats/results/runs/analysis_run_0107.md)** — V1 vs V2 evaluation on AffectNet, ECE resolution, V1 deployment recommendation, V2 sweep results.
 - **[Video Pipeline Analysis (2026-02-18)](../video_pipeline_01.md)** — End-to-end pipeline walkthrough, promotion-gap analysis, DB readiness review, and remediation summary.
@@ -137,4 +137,4 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 **Maintained by**: Russell Bray (rustybee255@gmail.com)  
-**Next Review**: 2026-01-04
+**Next Review**: 2026-07-01

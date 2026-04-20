@@ -159,11 +159,11 @@ Run validation jobs once the test set is balanced.
 Promote validated engines from `shadow → canary → rollout` with explicit approval gates.
 
 **Updated Responsibilities (v08.4.2 ML):**  
-- Accept models passing **Gate A-deploy** (F1 ≥ 0.75 on real-world test). Current deployment candidate: **Variant 1 run_0107**.  
-- Transfer ONNX model to Jetson via SCP.  
+- Accept models passing **Gate A-deploy** (F1 ≥ 0.75 on real-world test). Current deployment candidate: **Variant 2 mixed+T (`var2_run_0107_mixed_calibrated`)** per [ADR 012](memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md).  
+- Transfer ONNX model and `temperature_scaling.json` to Jetson via SCP.  
 - Convert ONNX → TensorRT engine on Jetson using `trtexec` with FP16 precision.  
 - Backup existing engine before deployment.  
-- Copy exported `.engine` to the Jetson NX at `/opt/reachy/models/emotion_efficientnet.engine`.  
+- Copy exported `.engine` and temperature config to the Jetson NX at `/opt/reachy/models/emotion_efficientnet.engine`.  
 - Update DeepStream pipeline configuration (`emotion_inference.txt`) and restart service.  
 - Verify Gate B requirements: FPS ≥ 25, latency p50 ≤ 120 ms, GPU memory ≤ 2.5 GB.  
 - Support automatic rollback to prior engine on Gate B failure.  

@@ -391,9 +391,8 @@ Gate A uses a **two-tier** system to account for the synthetic-to-real generaliz
 | **Gate A-deploy** | Real-world test (e.g. AffectNet) | ≥ 0.75 | ≥ 0.75 | ≥ 0.70, floor ≥ 0.65 | ≤ 0.12 | — |
 
 - **Gate A-val** gates ONNX export during the training pipeline.
-- **Gate A-deploy** gates promotion to Jetson deployment. Brier is omitted at deploy-tier
-  because at F1 ≈ 0.78 it is dominated by classification errors, not calibration.
-- Current deployment candidate: **Variant 1 run_0107** (F1=0.781 on AffectNet test).
+- **Gate A-deploy** gates promotion to Jetson deployment.
+- Current deployment candidate: **Variant 2 mixed+T (`var2_run_0107_mixed_calibrated`)** (F1=0.916, ECE=0.036, 7/7 gates passed). See [ADR 012](./decisions/012-mixed-domain-temperature-scaling-v2-deployment.md).
 
 EfficientNet-B0 is the reference backbone for these gates; any alternative (e.g., EfficientNet-B2) must demonstrate equal or better metrics **and** prove latency/memory compliance before the gates are updated.
 

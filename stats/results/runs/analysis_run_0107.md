@@ -1,7 +1,10 @@
 # Run 0107 Analysis Report
+
+> **⚠️ SUPERSEDED (2026-04-20):** This report's deployment recommendation (V1 run_0107) has been superseded. Mixed-domain training + temperature scaling produced **V2 mixed+T (`var2_run_0107_mixed_calibrated`)** with F1=0.916, ECE=0.036, 7/7 gates passed. See [ADR 012](../../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md) and the [updated executive summary](executive_summary_v1_selection.md). This report is retained as historical context for the synthetic-only evaluation phase.
+
 **Date:** 2026-04-12  
 **Analyst:** Cascade AI  
-**Scope:** Variant 1 & 2 training + AffectNet test evaluation (run_0107)
+**Scope:** Variant 1 & 2 training + AffectNet test evaluation (run_0107) — **synthetic-only training regime**
 
 ---
 

@@ -1,5 +1,7 @@
 # Reachy Emotion Classification System: A Privacy-First Emotion Recognition System
 
+> **⚠️ NOTE (2026-04-20):** This concise paper covers the **synthetic-only training phase**. The full paper ([Reachy_Emotion_Classification_Research_Paper.md](Reachy_Emotion_Classification_Research_Paper.md)) has been updated with mixed-domain training (§5.3.5, §6.9), temperature scaling (§5.3.6, §6.10), and the revised deployment recommendation: **V2 mixed+T (`var2_run_0107_mixed_calibrated`)**, F1=0.916, ECE=0.036, 7/7 gates passed. See [ADR 012](../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md).
+
 ---
 
 **A Research Paper**
