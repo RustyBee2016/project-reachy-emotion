@@ -491,11 +491,15 @@ class AffectNetDataset(Dataset):
         transform: Optional[Callable] = None,
         class_names: Optional[List[str]] = None,
         target_codes: Optional[Dict[int, str]] = None,
+        max_samples_per_class: int = 0,
+        seed: int = 42,
+        exclude_ids: Optional[set] = None,
     ):
         self.data_dir = Path(data_dir)
         self.images_dir = self.data_dir / "images"
         self.annotations_dir = self.data_dir / "annotations"
         self.transform = transform
+        self.exclude_ids = exclude_ids or set()
 
         if class_names is None:
             class_names = ["happy", "sad", "neutral"]
@@ -508,7 +512,12 @@ class AffectNetDataset(Dataset):
 
         self.samples = self._collect_samples()
 
+        if max_samples_per_class > 0:
+            self.samples = self._balanced_subsample(max_samples_per_class, seed)
+
         logger.info(f"AffectNetDataset: {len(self.samples)} samples from {self.data_dir}")
+        if self.exclude_ids:
+            logger.info(f"  Excluded {len(self.exclude_ids)} IDs (test-set leakage prevention)")
         counts = {}
         for s in self.samples:
             counts[s["class_name"]] = counts.get(s["class_name"], 0) + 1
@@ -518,7 +527,12 @@ class AffectNetDataset(Dataset):
         import json as _json
 
         samples: List[Dict] = []
+        skipped_excluded = 0
         for ann_path in sorted(self.annotations_dir.glob("*.json")):
+            affectnet_id = ann_path.stem
+            if affectnet_id in self.exclude_ids:
+                skipped_excluded += 1
+                continue
             with open(ann_path) as f:
                 data = _json.load(f)
             code = data.get("human-label")
@@ -527,7 +541,7 @@ class AffectNetDataset(Dataset):
             class_name = self.target_codes[code]
             if class_name not in self.class_to_idx:
                 continue
-            img_path = self.images_dir / f"{ann_path.stem}.jpg"
+            img_path = self.images_dir / f"{affectnet_id}.jpg"
             if not img_path.exists():
                 continue
             samples.append({
@@ -535,7 +549,30 @@ class AffectNetDataset(Dataset):
                 "label": self.class_to_idx[class_name],
                 "class_name": class_name,
             })
+        if skipped_excluded:
+            logger.info(f"  Skipped {skipped_excluded} images matching exclude_ids")
         return samples
+
+    def _balanced_subsample(
+        self, max_per_class: int, seed: int = 42
+    ) -> List[Dict]:
+        """Return a balanced subset with at most max_per_class per emotion."""
+        import random as _random
+
+        rng = _random.Random(seed)
+        by_class: Dict[str, List[Dict]] = {}
+        for s in self.samples:
+            by_class.setdefault(s["class_name"], []).append(s)
+
+        subsampled: List[Dict] = []
+        for class_name, items in by_class.items():
+            n = min(max_per_class, len(items))
+            subsampled.extend(rng.sample(items, n))
+            logger.info(
+                f"  AffectNet subsample {class_name}: {n}/{len(items)} images"
+            )
+        rng.shuffle(subsampled)
+        return subsampled
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -709,6 +746,39 @@ def get_val_transforms(
         ])
 
 
+def load_test_exclude_ids(manifest_path: str) -> set:
+    """Load AffectNet IDs from a test manifest to exclude from training.
+
+    Prevents data leakage when test images originate from the same
+    AffectNet pool used for mixed-domain training.
+
+    Args:
+        manifest_path: Path to a JSONL test-labels manifest containing
+            ``affectnet_id`` fields.
+
+    Returns:
+        Set of string AffectNet IDs to exclude.
+    """
+    import json as _json
+
+    exclude: set = set()
+    path = Path(manifest_path)
+    if not path.exists():
+        logger.warning(f"Test manifest not found, no IDs excluded: {manifest_path}")
+        return exclude
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entry = _json.loads(line)
+            aid = entry.get("affectnet_id")
+            if aid is not None:
+                exclude.add(str(aid))
+    logger.info(f"Loaded {len(exclude)} exclude IDs from {path.name}")
+    return exclude
+
+
 def create_dataloaders(
     data_dir: str,
     batch_size: int = 32,
@@ -721,6 +791,9 @@ def create_dataloaders(
     frames_per_video: int = 1,
     val_dir: Optional[str] = None,
     val_dataset_type: str = "emotion",
+    affectnet_train_dir: str = "",
+    real_samples_per_class: int = 5000,
+    exclude_ids: Optional[set] = None,
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation data loaders.
@@ -737,6 +810,10 @@ def create_dataloaders(
         frames_per_video: Number of frames sampled per source video when using multi mode
         val_dir: Optional explicit validation directory (e.g. AffectNet path)
         val_dataset_type: Type of validation dataset ("emotion" or "affectnet")
+        affectnet_train_dir: Path to AffectNet training set for mixed-domain training.
+            When non-empty, a MixedDataset combining synthetic + real images is created.
+        real_samples_per_class: Max AffectNet images per class for mixed-domain training.
+        exclude_ids: AffectNet image IDs to exclude from training (leakage prevention).
 
     Returns:
         Tuple of (train_loader, val_loader)
@@ -794,7 +871,7 @@ def create_dataloaders(
         train_data_dir = data_dir
         train_split = "train"
 
-    train_dataset = EmotionDataset(
+    synthetic_dataset = EmotionDataset(
         data_dir=train_data_dir,
         split=train_split,
         transform=get_train_transforms(input_size),
@@ -803,6 +880,33 @@ def create_dataloaders(
         frames_per_video=frames_per_video,
         manifest_path=train_manifest_path,
     )
+
+    # --- Mixed-domain training: combine synthetic + real AffectNet images ---
+    if affectnet_train_dir and Path(affectnet_train_dir).exists():
+        logger.info(f"Mixed-domain training enabled: adding AffectNet from {affectnet_train_dir}")
+        real_dataset = AffectNetDataset(
+            data_dir=affectnet_train_dir,
+            transform=get_train_transforms(input_size),
+            class_names=class_names,
+            max_samples_per_class=real_samples_per_class,
+            exclude_ids=exclude_ids,
+        )
+        if len(real_dataset) > 0:
+            train_dataset: Dataset = MixedDataset(
+                datasets=[synthetic_dataset, real_dataset],
+            )
+            logger.info(
+                f"  Mixed dataset: {len(synthetic_dataset)} synthetic + "
+                f"{len(real_dataset)} real = {len(train_dataset)} total"
+            )
+        else:
+            logger.warning("AffectNet train dataset is empty, falling back to synthetic only")
+            train_dataset = synthetic_dataset
+    elif affectnet_train_dir:
+        logger.warning(f"affectnet_train_dir does not exist: {affectnet_train_dir}")
+        train_dataset = synthetic_dataset
+    else:
+        train_dataset = synthetic_dataset
 
     if use_affectnet_val:
         val_dataset: Dataset = AffectNetDataset(
@@ -888,19 +992,21 @@ def create_dataloaders(
 
 class MixedDataset(Dataset):
     """
-    Dataset combining multiple sources (AffectNet + RAF-DB + synthetic).
+    Dataset combining multiple sources (e.g. synthetic + AffectNet real).
     
-    Supports weighted sampling from different datasets.
+    Used for mixed-domain head training: the classification head sees both
+    synthetic and real images during training, calibrating its decision
+    boundaries for real-world feature distributions.
     """
     
     def __init__(
         self,
-        datasets: List[EmotionDataset],
+        datasets: List[Dataset],
         weights: Optional[List[float]] = None,
     ):
         """
         Args:
-            datasets: List of EmotionDataset instances
+            datasets: List of Dataset instances (EmotionDataset, AffectNetDataset, etc.)
             weights: Sampling weights for each dataset (default: equal)
         """
         self.datasets = datasets
@@ -910,16 +1016,52 @@ class MixedDataset(Dataset):
         self.weights = weights
         
         # Build combined sample list with dataset indices
-        self.samples = []
+        self._index_map: List[Tuple[int, int]] = []
         for ds_idx, ds in enumerate(datasets):
             for sample_idx in range(len(ds)):
-                self.samples.append((ds_idx, sample_idx))
+                self._index_map.append((ds_idx, sample_idx))
         
-        logger.info(f"MixedDataset: {len(datasets)} datasets, {len(self.samples)} total samples")
+        # Expose combined samples for dataset hash and class weight computation
+        self.samples: List[Dict] = []
+        for ds in datasets:
+            if hasattr(ds, 'samples'):
+                self.samples.extend(ds.samples)
+        
+        # Log per-source stats
+        for ds_idx, ds in enumerate(datasets):
+            ds_name = type(ds).__name__
+            logger.info(f"MixedDataset source {ds_idx} ({ds_name}): {len(ds)} samples")
+        logger.info(f"MixedDataset total: {len(self._index_map)} samples")
     
     def __len__(self) -> int:
-        return len(self.samples)
+        return len(self._index_map)
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
-        ds_idx, sample_idx = self.samples[idx]
+        ds_idx, sample_idx = self._index_map[idx]
         return self.datasets[ds_idx][sample_idx]
+
+    def get_class_weights(self) -> Optional[torch.Tensor]:
+        """Compute class weights from the combined dataset."""
+        if not self.samples:
+            return None
+        # Gather all class names across component datasets
+        all_class_names: List[str] = []
+        for ds in self.datasets:
+            if hasattr(ds, 'class_names'):
+                all_class_names = ds.class_names
+                break
+        if not all_class_names:
+            return None
+
+        class_counts = torch.zeros(len(all_class_names))
+        for sample in self.samples:
+            label = sample.get("label", -1)
+            if 0 <= label < len(all_class_names):
+                class_counts[label] += 1
+
+        if (class_counts == 0).any():
+            return None
+        total = class_counts.sum()
+        weights = total / (len(all_class_names) * class_counts)
+        weights = weights / weights.sum() * len(all_class_names)
+        return weights

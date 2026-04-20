@@ -81,6 +81,14 @@ class DataConfig:
     mixup_alpha: float = 0.2
     mixup_probability: float = 0.3
     
+    # Mixed-domain training: combine synthetic + real AffectNet images
+    # Set affectnet_train_dir to enable; real_samples_per_class controls balance
+    affectnet_train_dir: str = ""
+    real_samples_per_class: int = 5000
+    # Path to test-labels manifest for excluding test images from training
+    # (prevents data leakage when test set originates from AffectNet train pool)
+    test_manifest_path: str = ""
+    
     # Normalization (ImageNet stats - used by AffectNet pretrained models)
     image_mean: List[float] = field(default_factory=lambda: [0.485, 0.456, 0.406])
     image_std: List[float] = field(default_factory=lambda: [0.229, 0.224, 0.225])
@@ -106,6 +114,8 @@ class DataConfig:
             "frame_sampling": self.frame_sampling,
             "augmentation_enabled": self.augmentation_enabled,
             "mixup_alpha": self.mixup_alpha,
+            "affectnet_train_dir": self.affectnet_train_dir,
+            "real_samples_per_class": self.real_samples_per_class,
         }
 
 

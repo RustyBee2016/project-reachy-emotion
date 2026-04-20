@@ -69,6 +69,17 @@ VALIDATION_ROOT = "/media/rusty_admin/project_data/reachy_emotion/videos/validat
 BASE_CHECKPOINT_DIR = "/media/rusty_admin/project_data/reachy_emotion/checkpoints"
 DEFAULT_UNFREEZE_LAYERS = ["blocks.5", "blocks.6", "conv_head"]
 
+# Default AffectNet training set path (human-annotated, ~414K images)
+AFFECTNET_TRAIN_DIR = (
+    "/media/rusty_admin/project_data/reachy_emotion/affectnet/"
+    "consolidated/AffectNet+/human_annotated/train_set"
+)
+# Default test-labels manifest (for excluding test images from training)
+DEFAULT_TEST_MANIFEST = (
+    "/media/rusty_admin/project_data/reachy_emotion/videos/"
+    "manifests/test_dataset_01_test_labels.jsonl"
+)
+
 
 CONFIG_DIR = Path(__file__).resolve().parent / "finetune_configs"
 
@@ -140,6 +151,9 @@ def build_config(
     unfreeze_layers: list[str],
     checkpoint_dir: str,
     val_dir: str,
+    affectnet_train_dir: str = "",
+    real_samples_per_class: int = 5000,
+    test_manifest_path: str = "",
 ) -> TrainingConfig:
     return TrainingConfig(
         model=ModelConfig(
@@ -162,6 +176,9 @@ def build_config(
             mixup_alpha=0.2,
             mixup_probability=0.3,
             pin_memory=False,
+            affectnet_train_dir=affectnet_train_dir,
+            real_samples_per_class=real_samples_per_class,
+            test_manifest_path=test_manifest_path,
         ),
         num_epochs=epochs,
         learning_rate=lr,
@@ -282,6 +299,31 @@ def main() -> int:
         "--no-save-config", action="store_true", dest="no_save_config",
         help="Skip auto-saving the config YAML for this run.",
     )
+
+    # --- Mixed-domain training ------------------------------------------------
+    parser.add_argument(
+        "--mix-real", action="store_true", dest="mix_real",
+        help="Combine synthetic frames with real AffectNet images during training.",
+    )
+    parser.add_argument(
+        "--real-samples-per-class", type=int, default=5000,
+        dest="real_samples_per_class",
+        help="Number of real AffectNet images per class (default: 5000).",
+    )
+    parser.add_argument(
+        "--affectnet-train-dir", default=AFFECTNET_TRAIN_DIR,
+        dest="affectnet_train_dir",
+        help="Path to AffectNet human-annotated training set.",
+    )
+    parser.add_argument(
+        "--test-manifest", default="", dest="test_manifest",
+        help=(
+            "Path to test-labels JSONL manifest. AffectNet IDs in this file "
+            "are excluded from mixed-domain training to prevent data leakage. "
+            "Auto-resolved to the default test_dataset_01 manifest when "
+            "--mix-real is set and this flag is omitted."
+        ),
+    )
     args = parser.parse_args()
 
     # --- Merge: config YAML → defaults → CLI overrides ----------------------
@@ -343,6 +385,22 @@ def main() -> int:
     save_dir = f"{BASE_CHECKPOINT_DIR}/variant_2/{run_id}"
     val_dir = args.val_dir if args.val_dir else _resolve_val_dir(train_run_id)
 
+    # Resolve mixed-domain training settings
+    affectnet_dir = args.affectnet_train_dir if args.mix_real else ""
+    real_per_class = args.real_samples_per_class if args.mix_real else 0
+
+    # Auto-resolve test manifest for leakage prevention when --mix-real is used
+    test_manifest = args.test_manifest
+    if args.mix_real and not test_manifest:
+        if Path(DEFAULT_TEST_MANIFEST).exists():
+            test_manifest = DEFAULT_TEST_MANIFEST
+            logger.info(f"Auto-resolved test manifest for leakage prevention: {test_manifest}")
+        else:
+            logger.warning(
+                "No --test-manifest provided and default not found. "
+                "Training may include test images — results would be invalid!"
+            )
+
     config = build_config(
         epochs=epochs,
         lr=lr,
@@ -350,6 +408,9 @@ def main() -> int:
         unfreeze_layers=unfreeze_layers,
         checkpoint_dir=save_dir,
         val_dir=val_dir,
+        affectnet_train_dir=affectnet_dir,
+        real_samples_per_class=real_per_class,
+        test_manifest_path=test_manifest,
     )
     # Apply CLI-overrideable hyperparams not covered by build_config args
     config.label_smoothing = label_smoothing
@@ -371,13 +432,20 @@ def main() -> int:
         _save_run_config(run_id, args, config)
 
     logger.info("=" * 60)
-    logger.info("Variant 2 Fine-Tuning")
+    if args.mix_real:
+        logger.info("Variant 2 Fine-Tuning — MIXED-DOMAIN (synthetic + real)")
+    else:
+        logger.info("Variant 2 Fine-Tuning")
     logger.info(f"  Source checkpoint:  {checkpoint_path}")
     logger.info(f"  Run ID:             {run_id}")
     logger.info(f"  Train run ID:       {train_run_id}")
     logger.info(f"  Epochs: {epochs}  LR: {lr}")
     logger.info(f"  Freeze epochs: {freeze_epochs}  →  Unfreeze: {unfreeze_layers}")
     logger.info(f"  Label smoothing: {label_smoothing}  Dropout: {dropout}")
+    if args.mix_real:
+        logger.info(f"  + Real data: {affectnet_dir} ({real_per_class}/class)")
+        if test_manifest:
+            logger.info(f"  Exclude:     {Path(test_manifest).name} (leakage prevention)")
     logger.info(f"  Val data:    {val_dir}")
     logger.info(f"  Checkpoint:  {save_dir}")
     if args.config:

@@ -315,6 +315,7 @@ def _collect_predictions(
     y_true: List[int] = []
     y_pred: List[int] = []
     y_prob: List[np.ndarray] = []
+    y_logits: List[np.ndarray] = []
 
     model.eval()
     with torch.no_grad():
@@ -327,11 +328,13 @@ def _collect_predictions(
             y_true.extend(labels.cpu().numpy().tolist())
             y_pred.extend(preds.cpu().numpy().tolist())
             y_prob.extend(probs.cpu().numpy())
+            y_logits.extend(logits.cpu().numpy())
 
     return {
         "y_true": np.array(y_true, dtype=np.int64),
         "y_pred": np.array(y_pred, dtype=np.int64),
         "y_prob": np.array(y_prob, dtype=np.float32),
+        "y_logits": np.array(y_logits, dtype=np.float32),
     }
 
 
@@ -494,6 +497,21 @@ def main() -> int:
         help="Path to JSONL ground-truth labels manifest for test evaluation "
              "(used with --skip-train to evaluate on unlabeled test datasets)",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Pre-learned temperature scalar for post-hoc calibration. "
+             "Divides logits by T before softmax. Use --calibration-manifest "
+             "to learn T automatically instead.",
+    )
+    parser.add_argument(
+        "--calibration-manifest",
+        default=None,
+        help="Path to JSONL manifest for learning temperature T on-the-fly. "
+             "The learned T is then applied to test predictions. "
+             "Mutually exclusive with --temperature.",
+    )
     args = parser.parse_args()
     args.variant = _normalize_variant(args.variant)
     args.run_type = _normalize_run_type(args.run_type)
@@ -636,6 +654,65 @@ def main() -> int:
             ground_truth_manifest=getattr(args, 'ground_truth_manifest', None),
         )
 
+        # ---------------------------------------------------------------
+        # Temperature Scaling (post-hoc calibration)
+        # ---------------------------------------------------------------
+        # If --calibration-manifest is set, learn T from that calibration
+        # dataset.  If --temperature is set, use the provided T directly.
+        # Temperature scaling divides logits by T before softmax, which
+        # adjusts confidence scores without changing predicted classes.
+        # ---------------------------------------------------------------
+        import logging as _ts_logging
+        _ts_logger = _ts_logging.getLogger("run_efficientnet_pipeline.tempscale")
+        temperature_value: Optional[float] = None
+
+        if args.calibration_manifest and args.temperature:
+            raise SystemExit(
+                "--temperature and --calibration-manifest are mutually exclusive"
+            )
+
+        if args.calibration_manifest:
+            from trainer.fer_finetune.temperature_scaling import (
+                collect_logits,
+                learn_temperature,
+            )
+            import torch as _ts_torch
+
+            _ts_logger.info(
+                "Learning temperature from calibration manifest: %s",
+                args.calibration_manifest,
+            )
+            cal_logits, cal_labels, _ = collect_logits(
+                checkpoint_path=str(checkpoint_path),
+                data_root=config.data.data_root,
+                class_names=config.data.class_names,
+                input_size=config.model.input_size,
+                batch_size=config.data.batch_size,
+                num_workers=0,
+                ground_truth_manifest=args.calibration_manifest,
+            )
+            cal_logits_t = _ts_torch.from_numpy(cal_logits)
+            cal_labels_t = _ts_torch.from_numpy(cal_labels)
+            if _ts_torch.cuda.is_available():
+                cal_logits_t = cal_logits_t.cuda()
+                cal_labels_t = cal_labels_t.cuda()
+            temperature_value = learn_temperature(cal_logits_t, cal_labels_t)
+
+        elif args.temperature:
+            temperature_value = args.temperature
+            _ts_logger.info("Using provided temperature T = %.6f", temperature_value)
+
+        if temperature_value is not None:
+            from trainer.fer_finetune.temperature_scaling import apply_temperature
+
+            _ts_logger.info(
+                "Applying temperature scaling (T=%.4f) to %d predictions",
+                temperature_value,
+                len(preds["y_logits"]),
+            )
+            preds["y_prob"] = apply_temperature(preds["y_logits"], temperature_value)
+            preds["y_pred"] = np.argmax(preds["y_prob"], axis=1)
+
         output_dir = _resolve_artifact_dir(
             output_dir=args.output_dir,
             run_type=args.run_type,
@@ -648,7 +725,9 @@ def main() -> int:
             y_true=preds["y_true"],
             y_pred=preds["y_pred"],
             y_prob=preds["y_prob"],
+            y_logits=preds["y_logits"],
             class_names=np.array(config.data.class_names),
+            **({"temperature": np.array([temperature_value])} if temperature_value else {}),
         )
 
         gate_report = evaluate_predictions(
@@ -658,6 +737,8 @@ def main() -> int:
             config.data.class_names,
             GateAThresholds(),
         )
+        if temperature_value is not None:
+            gate_report["temperature"] = temperature_value
         gate_path = output_dir / "gate_a.json"
         gate_path.write_text(json.dumps(gate_report, indent=2))
 
@@ -670,17 +751,23 @@ def main() -> int:
         # ---------------------------------------------------------------
         onnx_path: Optional[str] = None
         if gate_report["overall_pass"]:
-            from trainer.fer_finetune.export import export_efficientnet_for_deployment
+            try:
+                from trainer.fer_finetune.export import export_efficientnet_for_deployment
 
-            export_dir = output_dir / "export"
-            export_result = export_efficientnet_for_deployment(
-                checkpoint_path=str(checkpoint_path),
-                output_dir=str(export_dir),
-                num_classes=len(config.data.class_names),
-                input_size=config.model.input_size,
-            )
-            onnx_path = export_result.get("onnx_path")
-            print(json.dumps({"onnx_export": export_result}, indent=2))
+                export_dir = output_dir / "export"
+                export_result = export_efficientnet_for_deployment(
+                    checkpoint_path=str(checkpoint_path),
+                    output_dir=str(export_dir),
+                    num_classes=len(config.data.class_names),
+                    input_size=config.model.input_size,
+                )
+                onnx_path = export_result.get("onnx_path")
+                print(json.dumps({"onnx_export": export_result}, indent=2))
+            except Exception as onnx_exc:  # noqa: BLE001
+                print(json.dumps({
+                    "onnx_export": "skipped",
+                    "reason": str(onnx_exc),
+                }, indent=2))
 
         dashboard_payload_path = _write_dashboard_run_payload(
             dashboard_dir=args.dashboard_dir,

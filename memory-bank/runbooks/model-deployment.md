@@ -2,9 +2,9 @@
 title: Model Deployment (Gate A/B/C Validation + Engine Export)
 kind: runbook
 owners: [Russell Bray]
-related: [requirements.md#7, requirements.md#21, decisions/011-two-tier-gate-a-v1-deployment.md]
+related: [requirements.md#7, requirements.md#21, decisions/011-two-tier-gate-a-v1-deployment.md, decisions/012-mixed-domain-temperature-scaling-v2-deployment.md]
 created: 2025-10-04
-updated: 2026-04-14
+updated: 2026-04-20
 status: active
 ---
 
@@ -15,9 +15,25 @@ Step-by-step guide for deploying a fine-tuned EfficientNet-B0 emotion classifier
 `happy`, `sad`, `neutral`) to Jetson Xavier NX with Gate A/B/C validation, ONNX export,
 TensorRT engine conversion, and DeepStream config update.
 
+## Current Deployment Candidate
+
+**Variant 2 mixed-domain + temperature scaling** (`var2_run_0107_mixed_calibrated`)  
+See [ADR 012](../decisions/012-mixed-domain-temperature-scaling-v2-deployment.md) for the full decision record.
+
+| Metric | Value | Threshold |
+|--------|-------|-----------|
+| F1 Macro | 0.916 | ≥ 0.75 |
+| Balanced Accuracy | 0.921 | ≥ 0.75 |
+| ECE | 0.036 | ≤ 0.12 |
+| Brier | 0.130 | ≤ 0.16 |
+| Gate A-deploy | **7/7 PASS** | All pass |
+
+**Temperature:** T = 0.59 (apply to logits before softmax at inference time)
+
 ## Prerequisites
 - Trained model checkpoint (`.pth` from PyTorch, e.g. `best_model.pth`)
-- Checkpoint path example: `/media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_1/var1_run_0107/best_model.pth`
+- Checkpoint path: `/media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_2/var2_run_0107_mixed/best_model.pth`
+- Temperature scaling config: `temperature_scaling.json` (contains learned T value)
 - Access to Ubuntu 1 (`10.0.4.130`, training host) and Jetson (`10.0.4.150`, edge device)
 - MLflow run ID with `dataset_hash` and metrics logged
 - Python venv activated: `source /home/rusty_admin/projects/reachy_08.4.2/venv/bin/activate`
@@ -27,7 +43,7 @@ Models must pass three gates before production rollout:
 
 ### Gate A — Offline Validation (Pre-Robot)
 
-Gate A uses a **two-tier** system (see [ADR 011](../decisions/011-two-tier-gate-a-v1-deployment.md)):
+Gate A uses a **two-tier** system (see [ADR 011](../decisions/011-two-tier-gate-a-v1-deployment.md), [ADR 012](../decisions/012-mixed-domain-temperature-scaling-v2-deployment.md)):
 
 | Sub-gate | Context | F1 macro | bAcc | Per-class F1 | ECE | Brier |
 |----------|---------|----------|------|-------------|------|-------|
@@ -42,25 +58,35 @@ Gate A uses a **two-tier** system (see [ADR 011](../decisions/011-two-tier-gate-
 # Automatic: run_efficientnet_pipeline.py calls gate_a_validator after training
 # Manual re-evaluation:
 python -m trainer.gate_a_validator \
-  --predictions /media/rusty_admin/project_data/reachy_emotion/results/train/run_0107/predictions.npz \
+  --predictions /media/rusty_admin/project_data/reachy_emotion/results/train/var2_run_0107_mixed/predictions.npz \
   --tier validation \
   --output stats/results/gate_a_validation.json
 ```
 
-**Procedure — Deploy tier** (against real-world AffectNet test set):
+**Procedure — Deploy tier with temperature scaling** (against real-world AffectNet test set):
 ```bash
-python -m trainer.gate_a_validator \
-  --predictions /media/rusty_admin/project_data/reachy_emotion/results/test/run_0107/predictions.npz \
-  --tier deploy \
-  --output stats/results/gate_a_deploy_validation.json
+# Run pipeline evaluation with pre-learned temperature T=0.59
+python -m trainer.run_efficientnet_pipeline \
+  --checkpoint /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_2/var2_run_0107_mixed/best_model.pth \
+  --run-type test \
+  --run-id var2_run_0107_mixed_calibrated \
+  --temperature 0.59
+
+# Or learn T from a calibration manifest on-the-fly:
+python -m trainer.run_efficientnet_pipeline \
+  --checkpoint /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_2/var2_run_0107_mixed/best_model.pth \
+  --run-type test \
+  --run-id var2_run_0107_mixed_calibrated \
+  --calibration-manifest /path/to/calibration_manifest.jsonl
 ```
 
-**Expected Output** (`gate_a_deploy_validation.json`):
+**Expected Output** (V2 mixed+T, `gate_a_deploy_validation.json`):
 ```json
 {
-  "thresholds": {"macro_f1": 0.75, "balanced_accuracy": 0.75, "per_class_f1": 0.70, "ece": 0.12},
-  "metrics": {"f1_macro": 0.781, "balanced_accuracy": 0.780, "ece": 0.102},
-  "per_class_f1": {"happy": 0.74, "sad": 0.85, "neutral": 0.76},
+  "thresholds": {"macro_f1": 0.75, "balanced_accuracy": 0.75, "per_class_f1": 0.70, "ece": 0.12, "brier": 0.16},
+  "metrics": {"f1_macro": 0.916, "balanced_accuracy": 0.921, "ece": 0.036, "brier": 0.130},
+  "per_class_f1": {"happy": 0.962, "sad": 0.888, "neutral": 0.899},
+  "temperature": 0.59,
   "overall_pass": true
 }
 ```
@@ -80,13 +106,15 @@ try hyperparameter sweep, or apply temperature scaling for calibration.
 ```bash
 # 1. Export ONNX from checkpoint (on Ubuntu 1)
 python -m trainer.fer_finetune.export \
-  --checkpoint /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_1/var1_run_0107/best_model.pth \
-  --output /media/rusty_admin/project_data/reachy_emotion/results/train/run_0107/export/model.onnx \
+  --checkpoint /media/rusty_admin/project_data/reachy_emotion/checkpoints/variant_2/var2_run_0107_mixed/best_model.pth \
+  --output /media/rusty_admin/project_data/reachy_emotion/results/train/var2_run_0107_mixed/export/model.onnx \
   --num-classes 3
 
-# 2. Transfer ONNX to Jetson
-scp /media/rusty_admin/project_data/reachy_emotion/results/train/run_0107/export/model.onnx \
+# 2. Transfer ONNX + temperature config to Jetson
+scp /media/rusty_admin/project_data/reachy_emotion/results/train/var2_run_0107_mixed/export/model.onnx \
     jetson:/opt/reachy/models/staging/emotion_efficientnet.onnx
+scp /media/rusty_admin/project_data/reachy_emotion/results/test/var2_run_0107_mixed_calibrated/temperature_scaling.json \
+    jetson:/opt/reachy/models/staging/temperature_scaling.json
 
 # 3. Convert ONNX → TensorRT on Jetson (FP16)
 ssh jetson
@@ -102,8 +130,12 @@ sudo cp /opt/reachy/models/emotion_efficientnet.engine \
 # 5. Deploy to shadow path and update DeepStream shadow config
 sudo cp /opt/reachy/models/staging/emotion_efficientnet.engine \
         /opt/reachy/models/shadow/emotion_efficientnet.engine
+sudo cp /opt/reachy/models/staging/temperature_scaling.json \
+        /opt/reachy/models/shadow/temperature_scaling.json
 # Edit /opt/reachy/deepstream/emotion_inference_shadow.txt:
 #   model-engine-file=/opt/reachy/models/shadow/emotion_efficientnet.engine
+# Ensure the inference wrapper reads temperature_scaling.json and applies T=0.59
+# to logits before softmax (single scalar division, negligible compute cost)
 
 # 6. Start shadow pipeline and monitor (30 min)
 sudo systemctl restart deepstream-shadow
@@ -131,11 +163,13 @@ curl http://localhost:9100/metrics | grep -E "inference_latency|gpu_memory"
 
 ## Full Rollout
 
-### 1. Promote Engine
+### 1. Promote Engine + Temperature Config
 ```bash
 ssh jetson
 sudo cp /opt/reachy/models/shadow/emotion_efficientnet.engine \
         /opt/reachy/models/emotion_efficientnet.engine
+sudo cp /opt/reachy/models/shadow/temperature_scaling.json \
+        /opt/reachy/models/temperature_scaling.json
 ```
 
 ### 2. Update DeepStream Config
@@ -171,24 +205,29 @@ with mlflow.start_run(run_id='<MLFLOW_RUN_ID>'):
 
 ### 5. Document Deployment
 ```markdown
-## Release: efficientnet-b0-hsemotion Variant 1 run_0107
+## Release: efficientnet-b0-hsemotion Variant 2 Mixed+T var2_run_0107_mixed_calibrated
 
-**Date**: 2026-04-14
+**Date**: 2026-04-20
 **Operator**: Russell Bray
-**Model**: EfficientNet-B0 (HSEmotion, frozen backbone, 3-class head)
-**Checkpoint**: variant_1/var1_run_0107/best_model.pth
+**Model**: EfficientNet-B0 (HSEmotion, fine-tuned backbone, 3-class head, mixed-domain)
+**Checkpoint**: variant_2/var2_run_0107_mixed/best_model.pth
+**Temperature**: T = 0.59 (post-hoc scaling, ADR 012)
 **Engine**: /opt/reachy/models/emotion_efficientnet.engine (FP16)
+**ADR**: 012-mixed-domain-temperature-scaling-v2-deployment.md
 
 **Gate A-deploy (AffectNet test_dataset_01, 894 images)**:
-- Macro F1: 0.781 (target ≥ 0.75) ✅
-- Balanced Accuracy: 0.780 (target ≥ 0.75) ✅
-- ECE: 0.102 (target ≤ 0.12) ✅
+- Macro F1: 0.916 (target ≥ 0.75) ✅
+- Balanced Accuracy: 0.921 (target ≥ 0.75) ✅
+- ECE: 0.036 (target ≤ 0.12) ✅
+- Brier: 0.130 (target ≤ 0.16) ✅
+- Per-class F1: happy=0.962, sad=0.888, neutral=0.899 (target ≥ 0.70) ✅
 
 **Gate B (Shadow Mode)**:
 - Latency p50: TBD ms (target ≤ 120 ms)
 - GPU Memory: TBD GB (target ≤ 2.5 GB)
 
 **Status**: PENDING GATE B/C
+**Rollback**: V1 run_0107 engine available as fallback
 ```
 
 ## Rollback
@@ -237,11 +276,14 @@ curl http://localhost:9100/metrics | grep inference_latency_p95_ms
 ## Related
 - **[requirements.md §7](../requirements.md#7-model-deployment--quality-gates)**: Two-tier Gate A, Gate B/C.
 - **[ADR 011](../decisions/011-two-tier-gate-a-v1-deployment.md)**: Two-tier Gate A rationale.
+- **[ADR 012](../decisions/012-mixed-domain-temperature-scaling-v2-deployment.md)**: Mixed-domain + temperature scaling → V2 deployment.
 - **[requirements.md §21](../requirements.md#21-model-packaging--serving-on-jetson)**: DeepStream config.
 - **[Decision: DeepStream-Only Runtime](../decisions/002-deepstream-only-runtime.md)**: No Triton on Jetson.
-- **[Run 0107 Analysis](../../stats/results/runs/analysis_run_0107.md)**: V1 deployment candidate metrics.
+- **[Run 0107 Analysis](../../stats/results/runs/analysis_run_0107.md)**: V1 synthetic-only metrics (historical).
+- **[Executive Summary](../../stats/results/runs/executive_summary_v1_selection.md)**: Updated deployment recommendation.
+- **Temperature Scaling Module**: `trainer/fer_finetune/temperature_scaling.py`
 
 ---
 
-**Last Updated**: 2026-04-14  
+**Last Updated**: 2026-04-20  
 **Owner**: Russell Bray

@@ -14,6 +14,13 @@ Dataset creation (handled automatically by DatasetPreparer):
     4. Training frames  → videos/train/run/<run_id>/{happy,sad,neutral}/
     5. Validation frames → videos/validation/run/<run_id>/{happy,sad,neutral}/
 
+Mixed-domain training (--mix-real):
+    Adds real AffectNet images to the training set to close the
+    synthetic-to-real domain gap.  The head sees both synthetic frames
+    and real face images, calibrating decision boundaries for real-world
+    feature distributions.  Use --real-samples-per-class to control how
+    many real images per class are mixed in.
+
 Prerequisites:
     Source videos must exist in videos/train/{happy,sad,neutral}/.
 
@@ -23,6 +30,9 @@ Usage:
 
     # Full training
     python -m trainer.train_variant1 --epochs 50
+
+    # Mixed-domain training (recommended for closing synthetic-to-real gap)
+    python -m trainer.train_variant1 --epochs 30 --mix-real --real-samples-per-class 5000
 
     # Custom learning rate
     python -m trainer.train_variant1 --epochs 20 --lr 5e-5
@@ -56,7 +66,27 @@ def _resolve_val_dir(run_id: str) -> str:
     return f"{VALIDATION_ROOT}/{run_id}"
 
 
-def build_config(epochs: int, lr: float, checkpoint_dir: str, val_dir: str) -> TrainingConfig:
+# Default AffectNet training set path (human-annotated, ~414K images)
+AFFECTNET_TRAIN_DIR = (
+    "/media/rusty_admin/project_data/reachy_emotion/affectnet/"
+    "consolidated/AffectNet+/human_annotated/train_set"
+)
+# Default test-labels manifest (for excluding test images from training)
+DEFAULT_TEST_MANIFEST = (
+    "/media/rusty_admin/project_data/reachy_emotion/videos/"
+    "manifests/test_dataset_01_test_labels.jsonl"
+)
+
+
+def build_config(
+    epochs: int,
+    lr: float,
+    checkpoint_dir: str,
+    val_dir: str,
+    affectnet_train_dir: str = "",
+    real_samples_per_class: int = 5000,
+    test_manifest_path: str = "",
+) -> TrainingConfig:
     return TrainingConfig(
         model=ModelConfig(
             backbone="efficientnet_b0",
@@ -78,6 +108,9 @@ def build_config(epochs: int, lr: float, checkpoint_dir: str, val_dir: str) -> T
             mixup_alpha=0.2,
             mixup_probability=0.3,
             pin_memory=False,
+            affectnet_train_dir=affectnet_train_dir,
+            real_samples_per_class=real_samples_per_class,
+            test_manifest_path=test_manifest_path,
         ),
         num_epochs=epochs,
         learning_rate=lr,
@@ -141,6 +174,47 @@ def main() -> int:
         dest="face_target_size",
         help="Face crop output size in pixels (default: 224)",
     )
+    parser.add_argument(
+        "--mix-real",
+        action="store_true",
+        dest="mix_real",
+        help=(
+            "Enable mixed-domain training: combine synthetic frames with real "
+            "AffectNet images to calibrate the head's decision boundaries for "
+            "real-world data. This is the primary strategy for closing the "
+            "synthetic-to-real domain gap."
+        ),
+    )
+    parser.add_argument(
+        "--real-samples-per-class",
+        type=int,
+        default=5000,
+        dest="real_samples_per_class",
+        help=(
+            "Max real AffectNet images per class for mixed-domain training "
+            "(default: 5000). Only used when --mix-real is set."
+        ),
+    )
+    parser.add_argument(
+        "--affectnet-train-dir",
+        default=AFFECTNET_TRAIN_DIR,
+        dest="affectnet_train_dir",
+        help=(
+            "Path to AffectNet human-annotated training set with images/ and "
+            "annotations/ subdirectories. Only used when --mix-real is set."
+        ),
+    )
+    parser.add_argument(
+        "--test-manifest",
+        default="",
+        dest="test_manifest",
+        help=(
+            "Path to test-labels JSONL manifest. AffectNet IDs in this file "
+            "are excluded from mixed-domain training to prevent data leakage. "
+            "Auto-resolved to the default test_dataset_01 manifest when "
+            "--mix-real is set and this flag is omitted."
+        ),
+    )
     args = parser.parse_args()
 
     save_name = f"var1_{args.run_id}"
@@ -180,13 +254,44 @@ def main() -> int:
             return 1
         logger.info(f"Skipping dataset preparation — using existing {run_train_dir}")
 
-    config = build_config(epochs=args.epochs, lr=args.lr, checkpoint_dir=checkpoint_dir, val_dir=val_dir)
+    # Resolve mixed-domain training settings
+    affectnet_dir = args.affectnet_train_dir if args.mix_real else ""
+    real_per_class = args.real_samples_per_class if args.mix_real else 0
+
+    # Auto-resolve test manifest for leakage prevention when --mix-real is used
+    test_manifest = args.test_manifest
+    if args.mix_real and not test_manifest:
+        if Path(DEFAULT_TEST_MANIFEST).exists():
+            test_manifest = DEFAULT_TEST_MANIFEST
+            logger.info(f"Auto-resolved test manifest for leakage prevention: {test_manifest}")
+        else:
+            logger.warning(
+                "No --test-manifest provided and default not found. "
+                "Training may include test images — results would be invalid!"
+            )
+
+    config = build_config(
+        epochs=args.epochs,
+        lr=args.lr,
+        checkpoint_dir=checkpoint_dir,
+        val_dir=val_dir,
+        affectnet_train_dir=affectnet_dir,
+        real_samples_per_class=real_per_class,
+        test_manifest_path=test_manifest,
+    )
 
     logger.info("=" * 60)
-    logger.info("Variant 1 Training — frozen backbone + run-scoped validation")
+    if args.mix_real:
+        logger.info("Variant 1 Training — frozen backbone + MIXED-DOMAIN (synthetic + real)")
+    else:
+        logger.info("Variant 1 Training — frozen backbone + run-scoped validation")
     logger.info(f"  Run ID:      {args.run_id}  →  saves as {save_name}")
     logger.info(f"  Epochs: {args.epochs}  LR: {args.lr}")
     logger.info(f"  Train data:  {run_train_dir}")
+    if args.mix_real:
+        logger.info(f"  + Real data: {affectnet_dir} ({real_per_class}/class)")
+        if test_manifest:
+            logger.info(f"  Exclude:     {Path(test_manifest).name} (leakage prevention)")
     logger.info(f"  Val data:    {val_dir}")
     logger.info(f"  Checkpoint:  {checkpoint_dir}")
     logger.info("=" * 60)

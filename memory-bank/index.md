@@ -1,6 +1,6 @@
 # Memory Bank Index
 
-**Last Updated**: 2026-04-14 (Two-tier Gate A, V1 deployment candidate, V2 sweep results)
+**Last Updated**: 2026-04-20 (ADR 012: Mixed-domain + temperature scaling → V2 mixed+T deployment candidate)
 
 This index provides curated entry points to project context, decisions, and references. Start here to discover what's known and where to find it.
 
@@ -14,7 +14,8 @@ This index provides curated entry points to project context, decisions, and refe
 ---
 
 ## Key Design Decisions
-- **[Decision: Two-Tier Gate A & V1 Deployment](./decisions/011-two-tier-gate-a-v1-deployment.md)** — Split Gate A into val/deploy tiers; V1 run_0107 deployment candidate at 75% F1 (2026-04-14).
+- **[Decision: Mixed-Domain + Temperature Scaling → V2 Deployment](./decisions/012-mixed-domain-temperature-scaling-v2-deployment.md)** — Mixed-domain training + post-hoc temperature scaling; V2 mixed+T deployment candidate (F1=0.916, ECE=0.036, 7/7 gates). Supersedes ADR 011 deployment recommendation (2026-04-20).
+- **[Decision: Two-Tier Gate A & V1 Deployment](./decisions/011-two-tier-gate-a-v1-deployment.md)** — Split Gate A into val/deploy tiers; V1 run_0107 was initial deployment candidate (2026-04-14). Deployment recommendation superseded by ADR 012.
 - **[Decision: Variant Propagation Audit](./decisions/010-variant-propagation-audit.md)** — 6 gaps fixed: response schema, placeholders, dashboard display, contract events, log filenames, 3-class matrices (2026-03-06).
 - **[Decision: Fine-Tune Webpage Variant 2](./decisions/009-fine-tune-webpage-variant2.md)** — 07_Fine_Tune.py with 25+ tuneable hyperparameters, config_overrides backend support, and AffectNet test button (2026-03-06).
 - **[Decision: Promotion Pipeline Audit & Fixes](./decisions/008-promotion-pipeline-audit-fixes.md)** — 14 fixes across media.py, gateway, training control, DatasetPreparer, DB models (2026-02-28).
@@ -36,7 +37,7 @@ This index provides curated entry points to project context, decisions, and refe
 
 ## Operational Analyses
 - **[Executive Summary: V1 Model Selection (2026-04-14)](../stats/results/runs/executive_summary_v1_selection.md)** — 1–2 page PM/DM summary of model selection rationale, key statistics in plain language, and next steps.
-- **[Deployment Recommendation: V1 vs V2 (2026-04-14)](../stats/results/runs/deployment_recommendation_v1_vs_v2.md)** — Full decision report with graduate-level statistical analysis: Wilson CIs, Cohen's κ, NMI, CV equity analysis, generalization gap, UX risk assessment. Recommends V1 (6/6 gates, CV=4.2%).
+- **[Deployment Recommendation: V1 vs V2 (2026-04-14)](../stats/results/runs/deployment_recommendation_v1_vs_v2.md)** — Synthetic-only decision report with statistical analysis. *(Superseded by ADR 012: V2 mixed+T now recommended.)*
 - **[Run 0107 Analysis (2026-04-14)](../stats/results/runs/analysis_run_0107.md)** — V1 vs V2 evaluation on AffectNet, ECE resolution, V1 deployment recommendation, V2 sweep results.
 - **[Video Pipeline Analysis (2026-02-18)](../video_pipeline_01.md)** — End-to-end pipeline walkthrough, promotion-gap analysis, DB readiness review, and remediation summary.
 
@@ -46,7 +47,9 @@ This index provides curated entry points to project context, decisions, and refe
 - **Model**: EfficientNet-B0 pre-trained on VGGFace2 + AffectNet (HSEmotion `enet_b0_8_best_vgaf`)
 - **Classes**: `happy`, `sad`, `neutral` (3-class)
 - **Storage**: `/media/rusty_admin/project_data/ml_models/efficientnet_b0`
-- **Training Code**: `trainer/fer_finetune/` module, `trainer/train_efficientnet.py`
+- **Training Code**: `trainer/fer_finetune/` module, `trainer/train_efficientnet.py`, `trainer/train_variant2.py`
+- **Temperature Scaling**: `trainer/fer_finetune/temperature_scaling.py` (T=0.59 for V2 mixed)
+- **Deployment Candidate**: V2 mixed+T (`var2_run_0107_mixed_calibrated`), F1=0.916, ECE=0.036
 - **Config**: `trainer/fer_finetune/specs/efficientnet_b0_emotion_3cls.yaml`
 - **Data Root**: `/media/rusty_admin/project_data/reachy_emotion/videos`
 - **Run-Scoped Datasets**: `videos/train/run/run_XXXX/` with `train_ds_run_XXXX/` and `valid_ds_run_XXXX/` subdirs

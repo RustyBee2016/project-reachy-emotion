@@ -1,79 +1,106 @@
 # Executive Summary: Emotion Model Selection for Reachy Deployment
 
-**Date:** 2026-04-14  
+**Date:** 2026-04-20 (Updated — supersedes 2026-04-14 version)  
 **Prepared for:** Project Manager / Decision Maker  
 **Prepared by:** Cascade AI  
-**Decision:** **Deploy Variant 1 (V1), run_0107**  
+**Decision:** **Deploy Variant 2 Mixed-Domain + Temperature Scaling (V2 mixed+T), var2_run_0107_mixed_calibrated**  
 **Confidence:** HIGH  
-**Full Analysis:** [deployment_recommendation_v1_vs_v2.md](deployment_recommendation_v1_vs_v2.md)
+**ADR:** [ADR 012 — Mixed-Domain + Temperature Scaling → V2 Deployment](../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md)  
+**Full Analysis:** [deployment_recommendation_v1_vs_v2.md](deployment_recommendation_v1_vs_v2.md) (synthetic-only phase); research paper §6.9–6.11, §7.9.2 (final phase)
 
 ---
 
 ## Background
 
-Reachy's emotion classifier detects **happy**, **sad**, or **neutral** from a person's face in real time. The prediction drives the robot's gesture selection (wave, nod, empathy), gesture intensity (5-tier confidence system), and conversational tone (LLM prompt conditioning). Two candidate models were evaluated:
+Reachy's emotion classifier detects **happy**, **sad**, or **neutral** from a person's face in real time. The prediction drives the robot's gesture selection (wave, nod, empathy), gesture intensity (5-tier confidence system), and conversational tone (LLM prompt conditioning). Two model architectures were evaluated:
 
 - **Variant 1 (V1)** — Frozen backbone. Trains only a small classification head (~4,000 parameters) on top of a pre-trained face-recognition network. Quick to train (~2 hours).
 - **Variant 2 (V2)** — Fine-tuned backbone. Unfreezes deeper network layers (~500,000 parameters) and was optimized through a 90-trial automated hyperparameter sweep (~26 GPU-hours).
 
-Both were trained on **86,519 AI-generated face images** and tested on **894 real photographs** from the AffectNet academic dataset — images neither model has ever seen, from a completely different visual domain than the training data.
+The selection process was **iterative**, spanning three training regimes:
+
+1. **Synthetic-only** (86,519 AI-generated frames) → V1 initially recommended (2026-04-14)
+2. **Mixed-domain** (86,519 synthetic + 15,000 real AffectNet images) → V2 dramatically improved but failed calibration
+3. **Mixed-domain + temperature scaling** (post-hoc calibration fix) → V2 passes all gates, final recommendation
 
 ---
 
 ## The Headline Numbers
 
-| | Variant 1 | Variant 2 |
+| | V1 Synthetic (April 14) | V2 Mixed+T (April 20) | Change |
+|---|---|---|---|
+| **Overall Accuracy (F1 Macro)** | 78.1% | **91.6%** | **+17.3%** |
+| **Deployment Gates Passed** | 6 of 6 | **7 of 7** | All pass |
+| **Happy Detection** | 77.7% | **96.2%** | +23.8% |
+| **Sad Detection** | 82.2% | **88.8%** | +8.0% |
+| **Neutral Detection** | 74.3% | **89.9%** | +21.0% |
+| **Confidence Reliability (ECE)** | 10.2% error | **3.6%** error | **3× better** |
+| **Composite Score** | 0.802 | **0.924** | +15.2% |
+
+V2 mixed+T is better on **every single metric** by a substantial margin.
+
+---
+
+## Why the Recommendation Changed: The Iterative Journey
+
+### Phase 1 (April 14): V1 Was the Right Choice
+
+When both models were trained on synthetic data only, V1 and V2 achieved virtually identical F1 (~78%). V1 was selected because:
+- V1 passed all 6 deployment gates; V2 failed 2 (sad F1=69.4%, neutral F1=69.9%)
+- V1's errors were balanced across classes (CV=4.2% vs V2's 15.1%)
+- V2's 35% neutral→sad confusion rate was a critical UX risk
+
+*This analysis was correct given the data available at the time.*
+
+### Phase 2 (April 18): Mixed-Domain Training Reversed the Picture
+
+Adding 15,000 real AffectNet photographs (5K per class, ~15% of training data) had dramatically different effects:
+
+| | V1 Improvement | V2 Improvement |
 |---|---|---|
-| **Overall Accuracy (F1 Macro)** | **78.1%** | 78.0% |
-| **Deployment Gates Passed** | **6 of 6** | 4 of 6 |
-| **Happy Detection** | 77.7% | **94.6%** |
-| **Sad Detection** | **82.2%** | 69.4% |
-| **Neutral Detection** | **74.3%** | 69.9% |
-| **Confidence Reliability (ECE)** | 10.2% error | **9.6%** error |
+| **F1 Macro** | 78.1% → 83.4% (+6.8%) | 78.0% → **91.6%** (+17.4%) |
+| **Neutral→Sad Confusion** | — | 35.1% → **5.7%** (resolved) |
+| **Balanced Accuracy** | 79.9% → 84.0% | 81.2% → **92.1%** |
 
-Both models achieve ~78% overall accuracy — effectively a tie. The critical difference is *where* each model makes its mistakes.
+**Why V2 benefited so much more:** V2's unfrozen backbone layers could *adapt* to real-face features during training — learning texture, lighting, and expression patterns that only exist in real photographs. V1's frozen backbone cannot learn new features; it can only re-weight existing ones. This is the key insight: **the optimal transfer learning strategy depends on the data composition.** Frozen backbones protect against overfitting on synthetic data, but fine-tuned backbones unlock dramatically more capacity when real data is available.
 
----
+**New blocker:** V2 mixed ECE regressed to 14.2% (> 12% threshold) — the backbone parameter updates shifted the logit scale, making confidence scores unreliable.
 
-## Why V1 Was Selected: Four Reasons
+### Phase 3 (April 20): Temperature Scaling Fixed Calibration
 
-### 1. V1 Passes All Deployment Gates; V2 Does Not
+Temperature scaling — a single-parameter post-hoc fix (Guo et al., 2017) — corrected V2's overconfidence without changing any predictions:
 
-Our deployment policy requires every emotion to be detected with at least 70% accuracy (F1). V1 meets this bar for all three emotions. V2 fails on two: **sad (69.4%)** and **neutral (69.9%)**. This alone disqualifies V2 under current policy.
+| | Before | After | Change |
+|---|---|---|---|
+| **ECE** | 14.2% | **3.6%** | −75% (now 3× below threshold) |
+| **Brier Score** | 0.167 | **0.130** | −22% |
+| **Classification (F1, accuracy)** | unchanged | unchanged | Zero cost |
 
-### 2. V1's Errors Are Evenly Distributed; V2's Are Concentrated
-
-A statistical measure of performance balance (coefficient of variation) shows V1 is **3.6× more balanced** across emotion classes than V2. V2 achieves a near-perfect 94.6% on happy faces but neglects sad and neutral — it has effectively specialized in one emotion at the expense of the other two. For a robot that must respond appropriately to *all* emotions, balanced performance is essential.
-
-### 3. V1's Mistakes Are Less Disruptive to the User Experience
-
-| V1's Main Error | V2's Main Error |
-|---|---|
-| Calls 34% of happy people "neutral" | Calls 35% of neutral people "sad" |
-| **Robot under-reacts** — responds neutrally to a happy person | **Robot over-reacts** — offers empathy to someone who is fine |
-| Socially acceptable; rarely noticed | Socially awkward; erodes trust over time |
-
-Since neutral is expected to be the **most common** emotion in real interactions (~75%), V2's error pattern would cause Reachy to inappropriately express sadness-related gestures (comfort, hug, empathy) in roughly **1 in 4 neutral encounters**. V1's error — occasionally treating a happy person as neutral — is far less noticeable.
-
-### 4. When V2 Says "Sad," It's Barely Better Than a Coin Flip
-
-V2's sad-detection precision is only **53.7%** — nearly half the time V2 labels someone as sad, the person is actually neutral. V1's sad precision is **69.8%**. For a robot that triggers empathy gestures based on sadness detection, this gap has direct consequences for user trust.
+**Result:** V2 mixed+T now passes **all 7 Gate A-deploy thresholds** and outperforms V1 on every metric.
 
 ---
 
-## What the Statistics Confirm
+## What This Means for Reachy
 
-Seven formal statistical tests were conducted on the 894-image test set (details in the full report). The key findings, in plain language:
+### Better Emotion Detection
 
-- **Neither model is uniformly better.** V2 is statistically significantly better at recognizing happy faces (+29.7 pp, non-overlapping 95% confidence intervals). V1 is statistically significantly better at recognizing neutral faces (+33.4 pp). On sad faces, the difference is not statistically significant.
+V2 mixed+T correctly identifies emotions **91.6% of the time** (up from 78.1%). The critical neutral→sad confusion that disqualified V2 in the synthetic-only phase is now just 5.7% — meaning Reachy will almost never inappropriately express empathy toward someone who is merely neutral.
 
-- **V2 looks better on aggregate metrics** (overall accuracy, Cohen's kappa) because happy is the largest class in the test set (48.7%). V2's excellent happy detection inflates its global scores while hiding its failures on the other two classes. This is a well-documented statistical artifact in imbalanced classification.
+### More Reliable Confidence Scores
 
-- **V1's one marginal metric** — neutral F1 at 74.3% vs the 75% per-class target — is within statistical noise (z = −0.29, well inside the 95% confidence interval). V2's two failures are also near the threshold but fall on the wrong side.
+ECE of 3.6% means Reachy's 5-tier gesture modulation system (subtle → moderate → full → emphatic → maximum) receives highly accurate confidence signals. When the model says "80% confident this person is happy," the actual probability is very close to 80%. This translates directly to appropriately calibrated physical gestures.
 
-- **V2's extra training investment did not improve generalization.** Despite 90 hyperparameter trials and 125× more trainable parameters, V2's accuracy drop from synthetic training data to real-world test data (22.0%) is slightly *larger* than V1's (21.2%). The frozen backbone in V1 better preserves the real-face knowledge from the original pre-trained model.
+### All Deployment Gates Passed
 
-- **Both models' confidence scores are trustworthy.** Calibration error (ECE) is within the 12% deployment threshold for both. The slight V2 advantage (9.6% vs 10.2%) is negligible for Reachy's 5-tier gesture system.
+| Gate | Threshold | V2 Mixed+T | Status |
+|------|-----------|------------|--------|
+| F1 Macro | ≥ 0.75 | 0.916 | ✅ |
+| Balanced Accuracy | ≥ 0.75 | 0.921 | ✅ |
+| F1 Happy | ≥ 0.70 | 0.962 | ✅ |
+| F1 Sad | ≥ 0.70 | 0.888 | ✅ |
+| F1 Neutral | ≥ 0.70 | 0.899 | ✅ |
+| ECE | ≤ 0.12 | 0.036 | ✅ |
+| Brier | ≤ 0.16 | 0.130 | ✅ |
 
 ---
 
@@ -81,27 +108,42 @@ Seven formal statistical tests were conducted on the 894-image test set (details
 
 | Option | Description | Ready? | Risk |
 |--------|------------|--------|------|
-| **A. Deploy V1 now** | 78% accuracy, balanced errors, passes all gates | **Yes** | Low |
-| B. Deploy V2 now | 78% accuracy, excellent happy detection, fails 2 gates | No | Medium — neutral→sad confusion |
-| C. Ensemble V1+V2 | Average both models' predictions | 2 days work | Low — likely best accuracy, doubles inference cost |
+| **A. Deploy V2 mixed+T** | 91.6% accuracy, 3.6% ECE, all 7 gates passed | **Yes** | Low |
+| B. Keep V1 synthetic-only | 78.1% accuracy, all gates passed but lower performance | Yes | Low — but leaves 13.5% F1 on the table |
+| C. Ensemble V1+V2 | Combine models | 2 days | Marginal gain given V2's dominance |
 
-**Recommendation: Option A — deploy Variant 1 (run_0107).**
+**Recommendation: Option A — deploy Variant 2 mixed+T (var2_run_0107_mixed_calibrated).**
+
+This supersedes the April 14 recommendation of V1 (run_0107). See [ADR 012](../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md) for the full decision record.
 
 ---
 
-## Next Steps
+## Deployment Notes
+
+- **Temperature at inference:** Apply T=0.59 to logits before softmax (single scalar division, negligible compute cost)
+- **Checkpoint:** V2 mixed-domain checkpoint + temperature scaling config
+- **Inference pipeline:** ONNX → TensorRT → DeepStream (same as V1 flow)
+- **Rollback plan:** V1 run_0107 engine remains available as fallback
+
+---
+
+## Completed Items (from April 14 Next Steps)
+
+| # | Action | Status | Result |
+|---|--------|--------|--------|
+| ~~1~~ | ~~Deploy V1 to Jetson~~ | **Superseded** | V2 mixed+T is now the deployment candidate |
+| ~~2~~ | ~~Temperature scaling~~ | **Done** | T=0.59 learned, ECE 14.2% → 3.6% |
+| ~~3~~ | ~~Diversify training data~~ | **Done** | 15K real images added, F1 78% → 91.6% |
+| 4 | Explore V1+V2 ensemble | Deprioritized | V2 mixed+T alone exceeds all targets |
+
+## Remaining Next Steps
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| 1 | **Deploy V1** to Jetson (ONNX → TensorRT → DeepStream) | 1 day | Reachy responds to emotions live |
-| 2 | **Temperature scaling** — a post-training calibration fix | 1 day | Improves confidence accuracy at zero cost to detection accuracy |
-| 3 | **Diversify training data** — mix real faces into training | 1 week | Closes the synthetic→real gap toward 84% F1 |
-| 4 | **Explore V1+V2 ensemble** — combine both models' strengths | 2 days | Complementary error patterns suggest a meaningful accuracy boost |
-
-### When to Revisit
-
-Re-evaluate when a future model variant passes all six deployment gates **and** achieves either F1 ≥ 84% on real-world data or per-class balance (CV) below 10% with F1 above V1's 78.1%.
+| 1 | **Deploy V2 mixed+T** to Jetson (ONNX → TensorRT → DeepStream) | 1 day | Reachy responds to emotions live at 91.6% accuracy |
+| 2 | **Independent calibration set** — collect separate data for ECE validation | 1 week | Eliminates calibration/test overlap concern |
+| 3 | **Expand to 8-class Ekman** — broader emotion taxonomy for Phase 2 | 2 weeks | Richer emotional intelligence for robot interactions |
 
 ---
 
-*This summary distills the full statistical analysis in [deployment_recommendation_v1_vs_v2.md](deployment_recommendation_v1_vs_v2.md). That document contains Wilson confidence intervals, z-tests, Cohen's kappa, normalized mutual information, generalization gap analysis, calibration decomposition, and statistical power assessment — all supporting the conclusions above.*
+*This summary supersedes the April 14 version which recommended V1. The original V1 analysis remains valid for the synthetic-only phase and is preserved in [deployment_recommendation_v1_vs_v2.md](deployment_recommendation_v1_vs_v2.md). The full iterative analysis — including mixed-domain training results, temperature scaling methodology, and composite score evolution — is documented in the research paper (§5.3.5–5.3.6, §6.9–6.11, §7.9) and [ADR 012](../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md).*

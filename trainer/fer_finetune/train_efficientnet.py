@@ -184,6 +184,13 @@ class EfficientNetTrainer:
     
     def _create_dataloaders(self, run_id: Optional[str] = None):
         """Create train and validation data loaders."""
+        # Load test-set exclusion IDs to prevent data leakage
+        _test_manifest = getattr(self.config.data, 'test_manifest_path', '')
+        _exclude_ids: Optional[set] = None
+        if _test_manifest:
+            from trainer.fer_finetune.dataset import load_test_exclude_ids
+            _exclude_ids = load_test_exclude_ids(_test_manifest)
+
         self.train_loader, self.val_loader = create_dataloaders(
             data_dir=self.config.data.data_root,
             batch_size=self.config.data.batch_size,
@@ -196,6 +203,9 @@ class EfficientNetTrainer:
             frames_per_video=max(1, int(self.config.data.frames_per_video)),
             val_dir=getattr(self.config.data, 'val_dir', None),
             val_dataset_type=getattr(self.config.data, 'val_dataset_type', 'emotion'),
+            affectnet_train_dir=getattr(self.config.data, 'affectnet_train_dir', ''),
+            real_samples_per_class=getattr(self.config.data, 'real_samples_per_class', 5000),
+            exclude_ids=_exclude_ids,
         )
         
         logger.info(f"Data loaders created: {len(self.train_loader)} train batches, "

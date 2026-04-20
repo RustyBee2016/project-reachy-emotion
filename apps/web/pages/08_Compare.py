@@ -545,6 +545,20 @@ else:
     )
     st.info(rationale)
 
+    # Temperature scaling notices
+    v1_temp = _safe_float(v1_payload.get("gate_a_metrics", {}).get("temperature", 0))
+    v2_temp = _safe_float(v2_payload.get("gate_a_metrics", {}).get("temperature", 0))
+    if v1_temp > 0 or v2_temp > 0:
+        parts = []
+        if v1_temp > 0:
+            parts.append(f"V1 T={v1_temp:.4f}")
+        if v2_temp > 0:
+            parts.append(f"V2 T={v2_temp:.4f}")
+        st.caption(
+            f"Temperature scaling applied: {', '.join(parts)}. "
+            "Calibration-adjusted confidence scores (classification unchanged)."
+        )
+
     # Gate A-deploy status side by side
     g1, g2 = st.columns(2)
     with g1:
@@ -677,6 +691,15 @@ Results are loaded from `stats/results/runs/test/var1_test_<run_id>.json` and
 - Balanced Accuracy >= 0.75
 - Per-Class F1 >= 0.70
 - ECE <= 0.12
+
+**Temperature Scaling (Post-Hoc Calibration):**
+Results may include temperature-scaled predictions. Temperature scaling
+(Guo et al., 2017) divides logits by a learned scalar T before softmax.
+T is learned by minimizing NLL on a held-out 30% stratified calibration
+split of the real-world test data, then applied to the remaining 70%
+evaluation split (or the full test set for final reporting). Temperature
+scaling adjusts confidence scores without changing predicted classes
+(argmax is preserved). T < 1 sharpens, T > 1 softens.
 
 **Note:** The base model (8-class HSEmotion head) is excluded from this comparison.
 Only Variant 1 and Variant 2 (3-class heads trained on project data) are evaluated

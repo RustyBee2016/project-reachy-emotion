@@ -1,10 +1,13 @@
 # Deployment Recommendation: Variant 1 vs Variant 2
-**Date:** 2026-04-14  
+
+> **⚠️ SUPERSEDED (2026-04-20):** This document's deployment recommendation (V1 run_0107) has been superseded by [ADR 012](../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md). The current deployment candidate is **Variant 2 mixed-domain + temperature scaling** (`var2_run_0107_mixed_calibrated`, F1=0.916, ECE=0.036, 7/7 gates passed). This document is retained as historical context for the **synthetic-only evaluation phase**. See the [updated executive summary](executive_summary_v1_selection.md) for the current recommendation.
+
+**Date:** 2026-04-14 (synthetic-only phase analysis; superseded 2026-04-20)  
 **Analyst:** Cascade AI  
 **Document Type:** Deployment Decision Report with Statistical Analysis  
 **Audience:** Project Manager / Decision Maker  
-**Scope:** Head-to-head comparison of best Variant 1 (V1) and Variant 2 (V2) models on real-world test data  
-**Recommendation:** **Deploy Variant 1 (run_0107)**
+**Scope:** Head-to-head comparison of best Variant 1 (V1) and Variant 2 (V2) models on real-world test data — **synthetic-only training regime**  
+**Recommendation:** ~~Deploy Variant 1 (run_0107)~~ → **Superseded: Deploy V2 mixed+T (var2_run_0107_mixed_calibrated)**
 
 ---
 
@@ -471,4 +474,51 @@ We use the Landis & Koch (1977) scale: <0 Poor, 0–0.20 Slight, 0.21–0.40 Fai
 
 ---
 
-*Report generated 2026-04-14. Data sources: `stats/results/runs/test/var1_test_run_0107.json`, `stats/results/runs/test/var2_test_run_0107.json`, `stats/results/sweep/best_v2_sweep_summary.json`, `stats/results/runs/train/var1_run_0107.json`.*
+*Report generated 2026-04-14 (synthetic-only phase). Data sources: `stats/results/runs/test/var1_test_run_0107.json`, `stats/results/runs/test/var2_test_run_0107.json`, `stats/results/sweep/best_v2_sweep_summary.json`, `stats/results/runs/train/var1_run_0107.json`.*
+
+---
+
+## Addendum: Recommendation Superseded (2026-04-20)
+
+The analysis above was conducted on models trained exclusively on synthetic data. Two subsequent interventions fundamentally changed the model comparison:
+
+### Mixed-Domain Training (Phase 2)
+
+Augmenting the synthetic training set with 15,000 real AffectNet photographs (5K per class, ~15% of total) produced dramatically asymmetric improvements:
+
+| | V1 Mixed | V2 Mixed |
+|---|---|---|
+| **F1 Macro** | 0.834 (+6.8%) | **0.916 (+17.4%)** |
+| **Balanced Accuracy** | 0.840 | **0.921** |
+| **F1 Sad** | 0.832 | **0.888** |
+| **F1 Neutral** | 0.815 | **0.899** |
+| **Neutral→Sad Confusion** | — | **5.7%** (was 35.1%) |
+
+V2's unfrozen backbone adapted to real-face features during training; V1's frozen backbone could only re-weight existing features. The key finding in §6 above — that frozen backbones generalize better — is **data-composition-dependent**: frozen backbones protect against synthetic overfitting, but fine-tuned backbones unlock dramatically more capacity when real data is present.
+
+### Post-Hoc Temperature Scaling (Phase 3)
+
+V2 mixed's ECE regressed to 0.142 (> 0.12 threshold) due to logit scale shift from backbone updates. Temperature scaling (T=0.59, Guo et al., 2017) corrected this without changing predictions:
+
+| | V2 Mixed (pre-T) | V2 Mixed+T (post-T) |
+|---|---|---|
+| **ECE** | 0.142 | **0.036** (−75%) |
+| **Brier** | 0.167 | **0.130** (−22%) |
+| **F1 Macro** | 0.916 | 0.916 (unchanged) |
+| **Gate A-deploy** | 5/7 FAIL | **7/7 PASS** |
+
+### Updated Recommendation
+
+**Deploy Variant 2 mixed-domain + temperature scaling (`var2_run_0107_mixed_calibrated`).**
+
+| Metric | V1 Synth (this report) | V2 Mixed+T (final) | Change |
+|--------|----------------------|---------------------|--------|
+| F1 Macro | 0.781 | **0.916** | +17.3% |
+| Balanced Accuracy | 0.799 | **0.921** | +15.3% |
+| ECE | 0.102 | **0.036** | −64.7% |
+| Composite Score | 0.802 | **0.924** | +15.2% |
+| Gate A-deploy | 6/6 PASS | **7/7 PASS** | — |
+
+All statistical concerns raised in §6–§8 above (per-class imbalance, neutral→sad UX risk, sad precision) have been resolved by mixed-domain training. The full analysis is in the research paper (§6.9–6.11, §7.9.2) and [ADR 012](../../memory-bank/decisions/012-mixed-domain-temperature-scaling-v2-deployment.md).
+
+*Addendum added 2026-04-20.*
